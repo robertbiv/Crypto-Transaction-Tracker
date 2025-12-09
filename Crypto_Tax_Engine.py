@@ -9,8 +9,10 @@ import os
 import random
 import requests
 import yfinance as yf
+import gzip
 from datetime import datetime, timedelta
 from pathlib import Path
+import logging
 
 # ==========================================
 # CONFIGURATION
@@ -29,13 +31,137 @@ CONFIG_FILE = BASE_DIR / 'config.json'
 for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
     if not d.exists(): d.mkdir(parents=True)
 
+# Logger setup
+logger = logging.getLogger("crypto_tax_engine")
+logger.setLevel(logging.INFO)
+
+# Run context: 'imported' (default), 'direct' when run as the engine, 'autorunner' when run by Auto_Runner
+RUN_CONTEXT = 'imported'
+
+class RunContextFilter(logging.Filter):
+    def filter(self, record):
+        try:
+            record.run_context = RUN_CONTEXT
+        except Exception:
+            record.run_context = 'unknown'
+        return True
+
+def set_run_context(context: str):
+    """Set the active run context and (re)configure the file handler to include it in the filename.
+
+    This creates/rotates a handler writing to `engine.<context>.log` inside `outputs/logs`.
+    """
+    global RUN_CONTEXT
+    RUN_CONTEXT = context
+
+    # Remove any existing file handlers that we previously added
+    for h in list(logger.handlers):
+        try:
+            if isinstance(h, logging.handlers.RotatingFileHandler):
+                logger.removeHandler(h)
+        except Exception:
+            pass
+
+    try:
+        from logging.handlers import RotatingFileHandler
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        # New pattern: timestamp first, then context. Example: 2025-12-09_12-00-00.autorunner.log
+        fname = LOG_DIR / f"{timestamp}.{context}.log"
+        # If file doesn't exist yet, write a small header so it's clear how this log was produced
+        try:
+            if not fname.exists() or fname.stat().st_size == 0:
+                with open(fname, 'a', encoding='utf-8') as hf:
+                    hf.write(f"# Crypto Tax Engine log\n")
+                    hf.write(f"# Run Context: {context}\n")
+                    hf.write(f"# Start Time: {timestamp}\n")
+                    hf.write(f"# Command: {' '.join(sys.argv)}\n")
+                    hf.write(f"# Working Dir: {BASE_DIR}\n\n")
+        except Exception:
+            # if header write fails, continue — handler will still be created
+            pass
+
+        fh = RotatingFileHandler(str(fname), maxBytes=5_000_000, backupCount=5, encoding='utf-8')
+        fh.setLevel(logging.INFO)
+        fmt = logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s")
+        fh.setFormatter(fmt)
+        fh.addFilter(RunContextFilter())
+        logger.addHandler(fh)
+        # Note: we do not prune timestamped run log files here so all runs are retained.
+    except Exception:
+        # If file handler can't be created, keep going (stream handler may still exist)
+        pass
+
+    # Ensure a stream handler exists and has the filter/format
+    has_stream = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
+    if not has_stream:
+        try:
+            sh = logging.StreamHandler(sys.stdout)
+            sh.setLevel(logging.INFO)
+            sh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s"))
+            sh.addFilter(RunContextFilter())
+            logger.addHandler(sh)
+        except Exception:
+            pass
+
+    # Compress old log files older than configured days (default 30)
+    try:
+        days = int(GLOBAL_CONFIG.get('logging', {}).get('compress_older_than_days', 30))
+        def _compress_old_logs(older_than_days):
+            cutoff = time.time() - (older_than_days * 86400)
+            archive_dir = LOG_DIR / 'archive'
+            try:
+                if not archive_dir.exists():
+                    archive_dir.mkdir(parents=True)
+            except Exception:
+                pass
+
+            for p in LOG_DIR.iterdir():
+                try:
+                    if not p.is_file():
+                        continue
+                    if p.suffix == '.gz':
+                        continue
+                    # target files include the context as a dot-separated segment, e.g. 2025-12-09_12-00-00.autorunner.log
+                    if f".{context}." not in p.name:
+                        continue
+                    mtime = p.stat().st_mtime
+                    if mtime < cutoff:
+                        # destination in archive folder
+                        gz_name = p.name + '.gz'
+                        gz_path = archive_dir / gz_name
+                        # avoid overwriting existing archive: append timestamp if exists
+                        if gz_path.exists():
+                            alt_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                            gz_path = archive_dir / f"{p.name}.{alt_ts}.gz"
+                        with open(p, 'rb') as rf, gzip.open(str(gz_path), 'wb') as wf:
+                            shutil.copyfileobj(rf, wf)
+                        try:
+                            p.unlink()
+                            logger.info(f"Archived and compressed old log: {p.name} -> archive/{gz_path.name}")
+                        except Exception:
+                            logger.warning(f"Failed to remove original log after compression: {p.name}")
+                except Exception:
+                    pass
+        _compress_old_logs(days)
+    except Exception:
+        pass
+
+# Initialize default context (imported)
+set_run_context(RUN_CONTEXT)
+
+
+# Custom exception for auth/address failures so callers can handle them
+class ApiAuthError(Exception):
+    pass
+
 # ==========================================
 # 0. CONFIG LOADER
 # ==========================================
 def load_config():
     defaults = {
         "general": {"run_audit": True, "create_db_backups": True},
-        "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}
+        "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30},
+        "logging": {"compress_older_than_days": 30}
     }
     if not CONFIG_FILE.exists(): return defaults
     try:
@@ -65,19 +191,9 @@ class NetworkRetry:
                 if i == retries - 1: raise TimeoutError(f"{context} failed: {e}")
                 time.sleep(delay * (backoff ** i))
 
-class DualLogger(object):
-    def __init__(self, filename):
-        self.terminal = sys.stdout
-        self.log = open(filename, "a", encoding='utf-8')
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
-    def flush(self): self.terminal.flush()
 
 # ==========================================
 # 1. DATABASE CORE
-# ==========================================
 class DatabaseManager:
     def __init__(self):
         self._ensure_integrity()
@@ -100,7 +216,7 @@ class DatabaseManager:
                 shutil.copy(DB_BACKUP, DB_FILE)
                 self.conn = sqlite3.connect(str(DB_FILE))
                 self.cursor = self.conn.cursor()
-                print("   [SAFE] Restored database backup.")
+                logger.info("[SAFE] Restored database backup.")
             except: pass
 
     def remove_safety_backup(self): pass 
@@ -116,7 +232,7 @@ class DatabaseManager:
     def _recover_db(self):
         ts = datetime.now().strftime("%Y%m%d")
         shutil.move(str(DB_FILE), str(BASE_DIR / f"CORRUPT_{ts}.db"))
-        print("   [!] Database corrupted. Created fresh DB.")
+        logger.error("[!] Database corrupted. Created fresh DB.")
 
     def _init_tables(self):
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (id TEXT PRIMARY KEY, date TEXT, source TEXT, action TEXT, coin TEXT, amount REAL, price_usd REAL, fee REAL, batch_id TEXT)''')
@@ -145,16 +261,16 @@ class Ingestor:
         self.fetcher = PriceFetcher()
 
     def run_csv_scan(self):
-        print("\n--- 1. SCANNING INPUTS ---")
+        logger.info("--- 1. SCANNING INPUTS ---")
         self.db.create_safety_backup()
         try:
             found = False
             for fp in INPUT_DIR.glob('*.csv'):
-                print(f"-> Processing: {fp.name}")
+                logger.info(f"-> Processing: {fp.name}")
                 found = True
                 self._proc_csv(fp, f"CSV_{fp.name}_{datetime.now().strftime('%Y%m%d')}")
                 self._archive(fp)
-            if not found: print("   No new CSV files.")
+            if not found: logger.info("   No new CSV files.")
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
@@ -182,7 +298,7 @@ class Ingestor:
         except: pass
 
     def run_api_sync(self):
-        print("\n--- 2. SYNCING APIS ---")
+        logger.info("--- 2. SYNCING APIS ---")
         if not KEYS_FILE.exists(): return
         with open(KEYS_FILE) as f: keys = json.load(f)
         self.db.create_safety_backup()
@@ -194,12 +310,38 @@ class Ingestor:
                 if not hasattr(ccxt, name): continue
                 
                 def init(): return getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit':True, 'timeout': timeout * 1000})
-                ex = NetworkRetry.run(init)
+                try:
+                    ex = NetworkRetry.run(init)
+                except Exception as e:
+                    # If exchange init fails due to auth, log and skip this exchange
+                    if isinstance(e, getattr(ccxt, 'AuthenticationError', Exception)) or isinstance(e, getattr(ccxt, 'PermissionDenied', Exception)):
+                        logger.error(f"[AUTH ERROR] {name.upper()}: {e}")
+                        logger.warning(f"Skipping {name.upper()} due to authentication/permission error during init.")
+                        continue
+                    # other initialization errors should still propagate
+                    raise
                 
                 src = f"{name.upper()}_API"
                 since = self.db.get_last_timestamp(src) + 1
-                print(f"-> {name.upper()}: Trades since {pd.to_datetime(since, unit='ms')}")
+                logger.info(f"-> {name.upper()}: Trades since {pd.to_datetime(since, unit='ms')}")
                 
+                # Quick authentication probe: if credentials are invalid, stop with a clear warning
+                try:
+                    NetworkRetry.run(lambda: ex.fetch_balance())
+                except Exception as e:
+                    # If balance fetch indicates auth/permission problems, log and skip this exchange
+                    if isinstance(e, getattr(ccxt, 'AuthenticationError', Exception)) or isinstance(e, getattr(ccxt, 'PermissionDenied', Exception)):
+                        logger.error(f"[AUTH ERROR] {name.upper()}: Invalid API credentials or insufficient permissions.")
+                        logger.warning(f"Skipping {name.upper()} due to invalid credentials.")
+                        continue
+                    # Fallback heuristic on message content
+                    msg = str(e).lower()
+                    if 'authentication' in msg or 'invalid' in msg or 'permission' in msg or 'api key' in msg:
+                        logger.error(f"[AUTH ERROR] {name.upper()}: {e}")
+                        logger.warning(f"Skipping {name.upper()} due to authentication failure.")
+                        continue
+                    # otherwise continue — some exchanges block balance fetches for certain keys
+
                 nt = []
                 while True:
                     def ft(): return ex.fetch_my_trades(since=since)
@@ -215,16 +357,27 @@ class Ingestor:
                     for t in nt:
                         self.db.save_trade({'id':f"{name}_{t['id']}", 'date':t['datetime'], 'source':src, 'action':'BUY' if t['side']=='buy' else 'SELL', 'coin':t['symbol'].split('/')[0], 'amount':float(t['amount']), 'price_usd':float(t['price']), 'fee':t['fee']['cost'] if t['fee'] else 0, 'batch_id':bid})
                     self.db.commit()
-                    print(f"   Saved {len(nt)} trades.")
+                    logger.info(f"   Saved {len(nt)} trades.")
 
-                if ex.has.get('fetchLedger'): self._sync_ledger(ex, name)
+                if ex.has.get('fetchLedger'):
+                    try:
+                        self._sync_ledger(ex, name)
+                    except Exception as e:
+                        # If ledger sync failed due to auth, log and skip
+                        if isinstance(e, ApiAuthError) or isinstance(e, getattr(ccxt, 'AuthenticationError', Exception)):
+                            logger.error(f"[AUTH ERROR] {name.upper()} (ledger): {e}")
+                            logger.warning(f"Skipping ledger sync for {name.upper()} due to authentication failure.")
+                            continue
+                        else:
+                            # ignore other ledger errors but log them
+                            logger.warning(f"{name} ledger sync error: {e}")
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
     def _sync_ledger(self, ex, name):
         src = f"{name.upper()}_LEDGER"
         since = self.db.get_last_timestamp(src) + 1
-        print(f"   {name.upper()}: Checking Staking...")
+        logger.info(f"   {name.upper()}: Checking Staking...")
         try:
             b = NetworkRetry.run(lambda: ex.fetch_ledger(since=since))
             if b:
@@ -293,13 +446,12 @@ class WalletAuditor:
 
     def run_audit(self):
         if not GLOBAL_CONFIG['general']['run_audit']:
-            print("\n--- 4. AUDIT SKIPPED (Config) ---")
+            logger.info("--- 4. AUDIT SKIPPED (Config) ---")
             return
-
-        print("\n--- 4. RUNNING AUDIT (Via TokenView) ---")
+        logger.info("--- 4. RUNNING AUDIT (Via TokenView) ---")
         if not WALLETS_FILE.exists(): return
         if not self.api_key or "PASTE" in self.api_key:
-            print("   [Skip] No TokenView API Key found.")
+            logger.info("   [Skip] No TokenView API Key found.")
             return
 
         # DB Balances
@@ -317,17 +469,18 @@ class WalletAuditor:
             valid = [a for a in addrs if "PASTE_" not in a]
             if not valid: continue
 
-            print(f"   Checking {coin} ({len(valid)} wallets)...")
+            logger.info(f"   Checking {coin} ({len(valid)} wallets)...")
             tot = 0.0
             for addr in valid:
                 try:
                     bal = self.check_tokenview(coin, addr)
                     tot += bal
-                except Exception as e: print(f"      [!] Failed: {addr[:6]}... ({e})")
+                except Exception as e:
+                    logger.warning(f"      [!] Failed: {addr[:6]}... ({e})")
                 
                 # CONFIG CHECK: Wait or Skip?
                 if GLOBAL_CONFIG['performance']['respect_free_tier_limits']:
-                    print("      [Free Tier] Pausing 2s...")
+                    logger.info("      [Free Tier] Pausing 2s...")
                     time.sleep(2.0)
                 
             self.real[coin] = tot
@@ -339,23 +492,38 @@ class WalletAuditor:
         for attempt in range(3):
             try:
                 r = requests.get(url, timeout=15)
-                if r.status_code == 429: time.sleep(5); continue
+                # If the API indicates authentication failure, raise an exception so callers can stop
+                if r.status_code in (401, 403):
+                    logger.error(f"[TOKENVIEW AUTH ERROR] Invalid TokenView API key (status {r.status_code}).")
+                    raise ApiAuthError("TokenView: invalid API key or unauthorized")
+
+                if r.status_code == 429:
+                    time.sleep(5); continue
+
                 if r.status_code == 200:
                     data = r.json()
-                    if data.get('code') != 1: return 0.0
+                    # TokenView returns a 'code' field; non-1 usually means error — inspect message
+                    if data.get('code') != 1:
+                        msg = str(data.get('message','')).lower()
+                        # If response explicitly mentions invalid API key or invalid address, raise
+                        if 'invalid' in msg and ('key' in msg or 'apikey' in msg or 'address' in msg):
+                            logger.error(f"[TOKENVIEW ERROR] {msg}")
+                            raise ApiAuthError(f"TokenView: {msg}")
+                        return 0.0
+
                     return float(data.get('data', 0)) / (10 ** self.DECIMALS.get(coin.upper(), 18))
             except: time.sleep(1)
         return 0.0
 
     def print_report(self):
-        print("\n   --- RECONCILIATION ---")
-        print(f"   {'COIN':<5} | {'DB':<10} | {'CHAIN':<10} | {'DIFF':<10}")
-        print("   " + "-"*40)
+        logger.info("--- RECONCILIATION ---")
+        logger.info(f"{'COIN':<5} | {'DB':<10} | {'CHAIN':<10} | {'DIFF':<10}")
+        logger.info("" + "-"*40)
         for c in sorted(set(list(self.calc.keys())+list(self.real.keys()))):
             if c in self.real:
                 d = self.calc.get(c,0) - self.real.get(c,0)
                 stat = f"{d:+.4f}" if abs(d)>0.0001 else "OK"
-                print(f"   {c:<5} | {self.calc.get(c,0):<10.4f} | {self.real.get(c,0):<10.4f} | {stat}")
+                logger.info(f"{c:<5} | {self.calc.get(c,0):<10.4f} | {self.real.get(c,0):<10.4f} | {stat}")
 
 # ==========================================
 # 5. TAX ENGINE
@@ -365,7 +533,7 @@ class TaxEngine:
         self.db, self.year, self.tt, self.inc, self.hold = db, int(y), [], [], {}
 
     def run(self):
-        print(f"\n--- 5. REPORT ({self.year}) ---")
+        logger.info(f"--- 5. REPORT ({self.year}) ---")
         df = self.db.get_all()
         for _, t in df.iterrows():
             d = pd.to_datetime(t['date'])
@@ -409,41 +577,54 @@ class TaxEngine:
         if snap:
             fn = 'EOY_HOLDINGS_SNAPSHOT.csv' if self.year < datetime.now().year else 'CURRENT_HOLDINGS_DRAFT.csv'
             pd.DataFrame(snap).to_csv(yd/fn, index=False)
-            print(f"   -> Saved {fn}")
+            logger.info(f"   -> Saved {fn}")
 
 # ==========================================
 # MAIN
 # ==========================================
 if __name__ == "__main__":
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    sys.stdout = DualLogger(LOG_DIR/f"Manual_{ts}.log")
-    
-    print("--- CRYPTO TAX MASTER V20 (Configurable) ---")
-    
-    if not KEYS_FILE.exists():
-        print("CRITICAL: Missing Config Files. Run 'setup_env.py' first.")
-        sys.exit(1)
-    
-    db = DatabaseManager()
-    ingest = Ingestor(db)
-    ingest.run_csv_scan()
-    ingest.run_api_sync()
-    
-    bf = PriceFetcher()
-    for _, r in db.get_zeros().iterrows():
-        p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
-        if p>0: db.update_price(r['id'], p)
-    db.commit()
-
-    WalletAuditor(db).run_audit()
+    try:
+        set_run_context('direct')
+    except Exception:
+        RUN_CONTEXT = 'direct'
+    logger.info("--- CRYPTO TAX MASTER V20 (Configurable) ---")
 
     try:
+        if not KEYS_FILE.exists():
+            logger.critical("Missing Config Files. Run 'setup_env.py' first.")
+            raise ApiAuthError("Missing api_keys.json or required config files")
+
+        db = DatabaseManager()
+        ingest = Ingestor(db)
+        ingest.run_csv_scan()
+        ingest.run_api_sync()
+
+        bf = PriceFetcher()
+        for _, r in db.get_zeros().iterrows():
+            p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
+            if p>0: db.update_price(r['id'], p)
+        db.commit()
+
+        WalletAuditor(db).run_audit()
+
         y = input("\nEnter Tax Year: ")
         if y.isdigit():
             eng = TaxEngine(db, y)
             eng.run()
             eng.export()
-    except Exception as e: print(f"Error: {e}")
-    
-    db.close()
-    input("\nDone. Press Enter.")
+
+        db.close()
+        input("\nDone. Press Enter.")
+
+    except ApiAuthError as e:
+        logger.critical(f"Authentication/address failure: {e}")
+        # ensure DB is closed if open
+        try: db.close()
+        except: pass
+        sys.exit(1)
+    except Exception as e:
+        logger.exception(f"Unhandled error: {e}")
+        try: db.close()
+        except: pass
+        input("\nScript crashed. Check logs. Press Enter to close...")
