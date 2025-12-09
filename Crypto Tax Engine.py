@@ -166,8 +166,8 @@ class Ingestor:
         src = f"{name.upper()}_LEDGER"
         since = self.db.get_last_timestamp(src) + 1
         print(f"-> {name.upper()}: Checking Rewards...")
-        # (Simplified Ledger Logic for brevity - see V15 for full)
-        # Assume standard fetch logic here...
+        # (Simplified Ledger Logic for brevity)
+        pass
 
 # ==========================================
 # 3. HELPER: PRICE FETCHER
@@ -195,7 +195,7 @@ class TaxEngine:
         self.year = int(year)
         self.tt_rows = []
         self.inc_rows = []
-        self.holdings = {} # {BTC: [{'amt': 1, 'price': 50000, 'date': obj}]}
+        self.holdings = {}
 
     def run(self):
         print(f"\n--- 3. GENERATING {self.year} REPORT ---")
@@ -263,11 +263,11 @@ class TaxEngine:
             pd.DataFrame(self.inc_rows).to_csv(ydir / 'INCOME_REPORT.csv', index=False)
             print(f"   -> Saved INCOME_REPORT.csv")
 
-        # 3. EOY SNAPSHOT (The "Bank Statement")
+        # 3. HOLDINGS SNAPSHOT (WITH SAFETY GUARD)
         snapshot = []
         for coin, lots in self.holdings.items():
             total = sum(l['a'] for l in lots)
-            if total > 0.000001: # Filter dust
+            if total > 0.000001:
                 total_cost = sum(l['a'] * l['p'] for l in lots)
                 snapshot.append({
                     'Coin': coin,
@@ -277,14 +277,28 @@ class TaxEngine:
                 })
         
         if snapshot:
-            pd.DataFrame(snapshot).to_csv(ydir / 'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
-            print(f"   -> Saved EOY_HOLDINGS_SNAPSHOT.csv (Holdings as of Dec 31, {self.year})")
+            # SAFETY LOGIC: Can we finalize this year?
+            current_system_year = datetime.now().year
+            is_finalizable = (self.year < current_system_year)
+
+            if is_finalizable:
+                # Year is over. Create the FINAL snapshot.
+                pd.DataFrame(snapshot).to_csv(ydir / 'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
+                print(f"   -> [FINALIZED] Saved EOY_HOLDINGS_SNAPSHOT.csv (Holdings as of Dec 31, {self.year})")
+            else:
+                # Year is NOT over. Create a DRAFT snapshot.
+                pd.DataFrame(snapshot).to_csv(ydir / 'CURRENT_HOLDINGS_DRAFT.csv', index=False)
+                print(f"\n   ---------------------------------------------------------------")
+                print(f"   [INFO] Year {self.year} is still active. Reports are in DRAFT mode.")
+                print(f"   [SAFEGUARD] Final EOY Snapshot is blocked until Jan 1, {self.year + 1}.")
+                print(f"   -> Saved 'CURRENT_HOLDINGS_DRAFT.csv' for your reference.")
+                print(f"   ---------------------------------------------------------------")
 
 # ==========================================
 # MAIN
 # ==========================================
 if __name__ == "__main__":
-    print("--- CRYPTO TAX MASTER V16 ---")
+    print("--- CRYPTO TAX MASTER V16 (Safety Guard Enabled) ---")
     db = DatabaseManager()
     ingest = Ingestor(db)
     
@@ -292,7 +306,7 @@ if __name__ == "__main__":
     ingest.run_csv_scan()
     ingest.run_api_sync()
     
-    # 2. Backfill 0.0 prices (for Staking)
+    # 2. Backfill
     bf = PriceFetcher()
     zeros = db.get_zeros()
     if not zeros.empty:
@@ -303,11 +317,14 @@ if __name__ == "__main__":
         db.commit()
 
     # 3. Report
-    y = input("\nEnter Tax Year: ")
-    if y.isdigit():
-        eng = TaxEngine(db, y)
-        eng.run()
-        eng.export()
+    try:
+        y_input = input("\nEnter Tax Year: ")
+        if y_input.isdigit():
+            eng = TaxEngine(db, y_input)
+            eng.run()
+            eng.export()
+    except Exception as e:
+        print(f"Error: {e}")
     
     db.close()
     input("\nDone. Press Enter.")
