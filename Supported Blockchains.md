@@ -62,7 +62,3 @@ Stablecoins live as tokens on underlying chains; query the wallet address on the
 
 - If you want, I can add a machine-readable CSV or JSON manifest of these chains (useful for automated tests and ingestion).
 - Tell me if you'd like the table split into multiple columns or converted into a compact reference card.
-
-
-
-
