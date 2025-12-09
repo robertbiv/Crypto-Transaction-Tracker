@@ -60,7 +60,7 @@ def main():
     
     # 1. API Keys
     api_data = {
-        "_INSTRUCTIONS": "Enter Read-Only keys. The script ignores keys with 'PASTE_'.",
+        "_INSTRUCTIONS": "Enter Read-Only keys. Keys with 'PASTE_' are ignored. NOTE: TokenView Key is REQUIRED if 'run_audit' is True in config.json.",
         "coinbase": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "kraken": {"apiKey": "PASTE_KEY", "secret": "PASTE_PRIVATE_KEY"},
         "tokenview": {"apiKey": "PASTE_YOUR_TOKENVIEW_KEY_HERE"}
@@ -78,6 +78,7 @@ def main():
 
     # 3. User Config (NEW)
     config_data = {
+        "_INSTRUCTIONS": "If 'run_audit' is true, you MUST provide a TokenView key in api_keys.json.",
         "general": {
             "run_audit": True,
             "create_db_backups": True
