@@ -8,20 +8,32 @@ from pathlib import Path
 LOG_DIR = tax_app.OUTPUT_DIR / "logs"
 if not LOG_DIR.exists(): LOG_DIR.mkdir(parents=True)
 
-# Generate a unique filename based on current date and time
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-LOG_FILE = LOG_DIR / f"AutoRun_{timestamp}.log"
+# Mark run context so engine logs show this was started via Auto_Runner
+try:
+    tax_app.set_run_context('autorunner')
+except Exception:
+    try: tax_app.RUN_CONTEXT = 'autorunner'
+    except Exception: pass
 
-def log(message):
-    """Prints to console AND appends to the log file."""
-    # We don't need the timestamp in the message body anymore because the filename has it,
-    # but it's good practice to keep it for long running processes.
-    ts_prefix = datetime.now().strftime("[%H:%M:%S] ")
-    formatted_msg = f"{ts_prefix}{message}"
-    
-    print(formatted_msg)
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(formatted_msg + "\n")
+def log(message, level="info"):
+    """Centralized logging for the Auto Runner using `tax_app.logger`.
+
+    Falls back to printing if the central logger is unavailable.
+    """
+    try:
+        if level == "info":
+            tax_app.logger.info(message)
+        elif level == "warning":
+            tax_app.logger.warning(message)
+        elif level == "error":
+            tax_app.logger.error(message)
+        else:
+            tax_app.logger.info(message)
+    except Exception:
+        # Fallback to console printing if centralized logger isn't available
+        ts_prefix = datetime.now().strftime("[%H:%M:%S] ")
+        formatted_msg = f"{ts_prefix}{message}"
+        print(formatted_msg)
 
 def run_automation():
     log("=========================================")
