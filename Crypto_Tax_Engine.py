@@ -71,12 +71,10 @@ class DatabaseManager:
     def create_safety_backup(self):
         """Creates a SINGLE rolling backup (Overwrites previous)."""
         if DB_FILE.exists():
-            # Flush any pending changes first
             self.conn.commit() 
             try:
                 if DB_BACKUP.exists():
                     print("   [Safety] Overwriting old backup with current state...")
-                
                 shutil.copy(DB_FILE, DB_BACKUP)
                 print("   [Safety] New Backup Saved: 'crypto_master.db.bak'")
             except Exception as e:
@@ -86,10 +84,9 @@ class DatabaseManager:
         """Restores the backup if the operation failed."""
         if DB_BACKUP.exists():
             print("   [CRITICAL] Restoring database from backup...")
-            self.close() # Must close connection to overwrite file
+            self.close()
             try:
                 shutil.copy(DB_BACKUP, DB_FILE)
-                # Re-open connection
                 self.conn = sqlite3.connect(str(DB_FILE))
                 self.cursor = self.conn.cursor()
                 print("   [Success] Database restored to previous state.")
@@ -97,11 +94,6 @@ class DatabaseManager:
                 print(f"   [FATAL] Could not restore backup! Error: {e}")
 
     def remove_safety_backup(self):
-        """
-        This keeps the backup file as a 'Last Good Known Configuration'.
-        It does NOT delete it. It simply confirms success.
-        The next run will overwrite this file.
-        """
         if DB_BACKUP.exists():
             print("   [Safety] Run successful. Backup file retained as restore point.")
 
@@ -110,7 +102,6 @@ class DatabaseManager:
         if not DB_FILE.exists(): return
         
         try:
-            # Open a temp connection just to check integrity
             temp_conn = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True)
             temp_cursor = temp_conn.cursor()
             temp_cursor.execute("PRAGMA integrity_check")
@@ -189,8 +180,6 @@ class Ingestor:
 
     def run_csv_scan(self):
         print("\n--- 1. SCANNING INPUTS FOLDER ---")
-        
-        # SAFETY: Create backup before touching CSVs
         self.db.create_safety_backup()
         
         try:
@@ -203,8 +192,6 @@ class Ingestor:
                 self._archive(fp)
             
             if not found: print("   No new CSV files found.")
-            
-            # If we get here, everything worked.
             self.db.remove_safety_backup()
             
         except Exception as e:
@@ -226,9 +213,7 @@ class Ingestor:
                 price = float(r.get('usd_value_at_time', 0))
                 fee = float(r.get('fee', 0))
                 
-                # Retry logic for price fetch
                 if price == 0: 
-                    # If this fetch fails/times out, it throws error -> triggers restore
                     def fetch_p(): return self.fetcher.get_price(coin, d)
                     price = NetworkRetry.run(fetch_p, context=f"Price {coin}")
                 
@@ -256,19 +241,17 @@ class Ingestor:
         if not KEYS_FILE.exists(): return
         with open(KEYS_FILE) as f: keys = json.load(f)
         
-        # SAFETY: Backup before API sync
         self.db.create_safety_backup()
         
         try:
             for name, creds in keys.items():
                 if not hasattr(ccxt, name): continue
                 
-                # Add timeout config to exchange
                 def init_ex(): return getattr(ccxt, name)({
                     'apiKey': creds['apiKey'], 
                     'secret': creds['secret'], 
                     'enableRateLimit': True,
-                    'timeout': 30000 # 30 Second Timeout
+                    'timeout': 30000 
                 })
                 
                 ex = NetworkRetry.run(init_ex, context=f"{name} Connect")
@@ -289,10 +272,14 @@ class Ingestor:
                 
                 if nt:
                     bid = f"API_{name}_{datetime.now().strftime('%Y%m%d%H%M')}"
-                    # Backup raw JSON
+                    
+                    # --- UPDATED: SAVE AS CSV BACKUP ---
                     try:
-                        with open(ARCHIVE_DIR/f"{bid}.json",'w') as f: json.dump(nt,f,default=str)
-                    except: pass 
+                        csv_backup_path = ARCHIVE_DIR / f"{bid}.csv"
+                        pd.DataFrame(nt).to_csv(csv_backup_path, index=False)
+                    except Exception as e:
+                        print(f"   [Warning] CSV Backup failed: {e}")
+                    # -----------------------------------
                     
                     for t in nt:
                         uid = f"{name}_{t['id']}"
@@ -310,7 +297,6 @@ class Ingestor:
                 if ex.has.get('fetchLedger'):
                     self._sync_ledger(ex, name)
             
-            # If we finish all APIs without crash, keep backup as restore point
             self.db.remove_safety_backup()
 
         except Exception as e:
