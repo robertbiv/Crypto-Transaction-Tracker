@@ -24,46 +24,33 @@ DB_FILE = BASE_DIR / 'crypto_master.db'
 DB_BACKUP = BASE_DIR / 'crypto_master.db.bak'
 KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
+CONFIG_FILE = BASE_DIR / 'config.json'
 
-# Fallback: Ensure folders exist even if setup wasn't run
 for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
     if not d.exists(): d.mkdir(parents=True)
 
 # ==========================================
-# 0. SETUP VERIFICATION
+# 0. CONFIG LOADER
 # ==========================================
-def verify_setup():
-    """Checks if configuration files exist and are valid JSON."""
-    issues = []
+def load_config():
+    defaults = {
+        "general": {"run_audit": True, "create_db_backups": True},
+        "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}
+    }
+    if not CONFIG_FILE.exists(): return defaults
+    try:
+        with open(CONFIG_FILE) as f: 
+            user_config = json.load(f)
+            # Merge defaults in case keys are missing
+            for section, keys in defaults.items():
+                if section not in user_config: user_config[section] = keys
+                else:
+                    for k, v in keys.items():
+                        if k not in user_config[section]: user_config[section][k] = v
+            return user_config
+    except: return defaults
 
-    # Check API Keys
-    if not KEYS_FILE.exists():
-        issues.append("[MISSING] 'api_keys.json' not found.")
-    else:
-        try:
-            with open(KEYS_FILE, 'r') as f: json.load(f)
-        except json.JSONDecodeError:
-            issues.append("[CORRUPT] 'api_keys.json' contains invalid JSON.")
-
-    # Check Wallets
-    if not WALLETS_FILE.exists():
-        issues.append("[MISSING] 'wallets.json' not found.")
-    else:
-        try:
-            with open(WALLETS_FILE, 'r') as f: json.load(f)
-        except json.JSONDecodeError:
-            issues.append("[CORRUPT] 'wallets.json' contains invalid JSON.")
-    
-    if issues:
-        print("\n" + "!"*60)
-        print("   CRITICAL ERROR: CONFIGURATION ISSUES DETECTED")
-        print("!"*60)
-        for issue in issues:
-            print(f"   {issue}")
-        print("\n   >>> ACTION REQUIRED: Please re-run 'setup_env.py' to fix these files.")
-        print("!"*60 + "\n")
-        input("Press Enter to exit...")
-        sys.exit(1)
+GLOBAL_CONFIG = load_config()
 
 # ==========================================
 # 0.5 RESILIENCE UTILS
@@ -75,10 +62,8 @@ class NetworkRetry:
             try:
                 return func()
             except Exception as e:
-                if i == retries - 1:
-                    print(f"   [!!!] {context} TIMEOUT/FAIL: {e}")
-                    raise TimeoutError(f"{context} failed.")
-                time.sleep(delay * (backoff ** i) + random.uniform(0, 1))
+                if i == retries - 1: raise TimeoutError(f"{context} failed: {e}")
+                time.sleep(delay * (backoff ** i))
 
 class DualLogger(object):
     def __init__(self, filename):
@@ -88,9 +73,7 @@ class DualLogger(object):
         self.terminal.write(message)
         self.log.write(message)
         self.log.flush()
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
+    def flush(self): self.terminal.flush()
 
 # ==========================================
 # 1. DATABASE CORE
@@ -103,52 +86,45 @@ class DatabaseManager:
         self._init_tables()
 
     def create_safety_backup(self):
+        if not GLOBAL_CONFIG['general']['create_db_backups']: return
         if DB_FILE.exists():
-            self.conn.commit() 
-            try:
-                shutil.copy(DB_FILE, DB_BACKUP)
-                print("   [Safety] Overwriting backup ('crypto_master.db.bak')")
+            self.conn.commit()
+            try: shutil.copy(DB_FILE, DB_BACKUP)
             except: pass
 
     def restore_safety_backup(self):
+        if not GLOBAL_CONFIG['general']['create_db_backups']: return
         if DB_BACKUP.exists():
-            print("   [CRITICAL] Restoring database from backup...")
             self.close()
             try:
                 shutil.copy(DB_BACKUP, DB_FILE)
                 self.conn = sqlite3.connect(str(DB_FILE))
                 self.cursor = self.conn.cursor()
-                print("   [Success] Database restored.")
-            except: print("   [FATAL] Restore failed.")
+                print("   [SAFE] Restored database backup.")
+            except: pass
 
-    def remove_safety_backup(self):
-        if DB_BACKUP.exists():
-            print("   [Safety] Run successful. Backup retained.")
+    def remove_safety_backup(self): pass 
 
     def _ensure_integrity(self):
         if not DB_FILE.exists(): return
         try:
-            temp_conn = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True)
-            temp_conn.execute("PRAGMA integrity_check")
-            temp_conn.close()
-        except:
-            self._recover_db()
+            c = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True)
+            c.execute("PRAGMA integrity_check")
+            c.close()
+        except: self._recover_db()
 
     def _recover_db(self):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.move(str(DB_FILE), str(BASE_DIR / f"CORRUPT_{ts}_{DB_FILE.name}"))
-        print(f"   -> [ALERT] Corrupt DB moved. Created fresh database.")
+        ts = datetime.now().strftime("%Y%m%d")
+        shutil.move(str(DB_FILE), str(BASE_DIR / f"CORRUPT_{ts}.db"))
+        print("   [!] Database corrupted. Created fresh DB.")
 
     def _init_tables(self):
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (id TEXT PRIMARY KEY, date TEXT, source TEXT, action TEXT, coin TEXT, amount REAL, price_usd REAL, fee REAL, batch_id TEXT)''')
         self.conn.commit()
 
     def get_last_timestamp(self, source):
-        try:
-            res = self.cursor.execute("SELECT date FROM trades WHERE source=? ORDER BY date DESC LIMIT 1", (source,)).fetchone()
-            if res: return int(pd.to_datetime(res[0]).timestamp() * 1000)
-        except: pass
-        return 1262304000000 
+        res = self.cursor.execute("SELECT date FROM trades WHERE source=? ORDER BY date DESC LIMIT 1", (source,)).fetchone()
+        return int(pd.to_datetime(res[0]).timestamp()*1000) if res else 1262304000000
 
     def save_trade(self, t):
         try: self.cursor.execute("INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?)", list(t.values()))
@@ -169,7 +145,7 @@ class Ingestor:
         self.fetcher = PriceFetcher()
 
     def run_csv_scan(self):
-        print("\n--- 1. SCANNING INPUTS FOLDER ---")
+        print("\n--- 1. SCANNING INPUTS ---")
         self.db.create_safety_backup()
         try:
             found = False
@@ -178,7 +154,7 @@ class Ingestor:
                 found = True
                 self._proc_csv(fp, f"CSV_{fp.name}_{datetime.now().strftime('%Y%m%d')}")
                 self._archive(fp)
-            if not found: print("   No new CSV files found.")
+            if not found: print("   No new CSV files.")
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
@@ -191,18 +167,18 @@ class Ingestor:
                 d = pd.to_datetime(r.get('date'))
                 coin = r.get('coin', r.get('coin_type', 'UNK'))
                 amt = float(r.get('amount', 0))
-                price = float(r.get('usd_value_at_time', 0))
-                fee = float(r.get('fee', 0))
-                if price == 0: 
-                    def fetch_p(): return self.fetcher.get_price(coin, d)
-                    price = NetworkRetry.run(fetch_p, context=f"Price {coin}")
-                self.db.save_trade({'id': f"{src}_{d.strftime('%Y%m%d%H%M')}_{coin}_{amt}", 'date': d.isoformat(), 'source': src, 'action': 'INCOME' if src!='DEFI' else 'BUY', 'coin': coin, 'amount': amt, 'price_usd': price, 'fee': fee, 'batch_id': batch})
+                p = float(r.get('usd_value_at_time', 0))
+                f = float(r.get('fee', 0))
+                if p == 0: 
+                    def gp(): return self.fetcher.get_price(coin, d)
+                    p = NetworkRetry.run(gp)
+                self.db.save_trade({'id': f"{src}_{d.strftime('%Y%m%d%H%M')}_{coin}_{amt}", 'date': d.isoformat(), 'source': src, 'action': 'INCOME' if src!='DEFI' else 'BUY', 'coin': coin, 'amount': amt, 'price_usd': p, 'fee': f, 'batch_id': batch})
             except: pass
         self.db.commit()
 
     def _archive(self, fp):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        try: shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_PROCESSED_{ts}{fp.suffix}"))
+        ts = datetime.now().strftime("%Y%m%d_%H%M")
+        try: shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_PROC_{ts}{fp.suffix}"))
         except: pass
 
     def run_api_sync(self):
@@ -210,14 +186,15 @@ class Ingestor:
         if not KEYS_FILE.exists(): return
         with open(KEYS_FILE) as f: keys = json.load(f)
         self.db.create_safety_backup()
-        
         try:
+            timeout = GLOBAL_CONFIG['performance']['api_timeout_seconds']
             for name, creds in keys.items():
-                if name.startswith("_") or "PASTE_" in creds.get('apiKey', ''): continue
+                if "PASTE_" in creds.get('apiKey', ''): continue
+                if name == 'tokenview': continue
                 if not hasattr(ccxt, name): continue
                 
-                def init_ex(): return getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit': True, 'timeout': 30000})
-                ex = NetworkRetry.run(init_ex, context=f"{name} Connect")
+                def init(): return getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit':True, 'timeout': timeout * 1000})
+                ex = NetworkRetry.run(init)
                 
                 src = f"{name.upper()}_API"
                 since = self.db.get_last_timestamp(src) + 1
@@ -225,41 +202,36 @@ class Ingestor:
                 
                 nt = []
                 while True:
-                    def fetch_t(): return ex.fetch_my_trades(since=since)
-                    b = NetworkRetry.run(fetch_t, context=f"{name} Fetch")
+                    def ft(): return ex.fetch_my_trades(since=since)
+                    b = NetworkRetry.run(ft)
                     if not b: break
                     nt.extend(b)
                     since = b[-1]['timestamp'] + 1
                 
                 if nt:
-                    bid = f"API_{name}_{datetime.now().strftime('%Y%m%d%H%M')}"
-                    try: pd.DataFrame(nt).to_csv(ARCHIVE_DIR / f"{bid}.csv", index=False)
+                    bid = f"API_{name}_{datetime.now().strftime('%Y%m%d')}"
+                    try: pd.DataFrame(nt).to_csv(ARCHIVE_DIR/f"{bid}.csv", index=False)
                     except: pass
                     for t in nt:
                         self.db.save_trade({'id':f"{name}_{t['id']}", 'date':t['datetime'], 'source':src, 'action':'BUY' if t['side']=='buy' else 'SELL', 'coin':t['symbol'].split('/')[0], 'amount':float(t['amount']), 'price_usd':float(t['price']), 'fee':t['fee']['cost'] if t['fee'] else 0, 'batch_id':bid})
                     self.db.commit()
                     print(f"   Saved {len(nt)} trades.")
 
-                if ex.has.get('fetchLedger'):
-                    self._sync_ledger(ex, name)
+                if ex.has.get('fetchLedger'): self._sync_ledger(ex, name)
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
     def _sync_ledger(self, ex, name):
         src = f"{name.upper()}_LEDGER"
         since = self.db.get_last_timestamp(src) + 1
-        print(f"   {name.upper()}: Checking Rewards/Staking...")
+        print(f"   {name.upper()}: Checking Staking...")
         try:
-            def fetch_l(): return ex.fetch_ledger(since=since)
-            batch = NetworkRetry.run(fetch_l, retries=3, context=f"{name} Ledger")
-            if batch:
-                c = 0
-                for item in batch:
-                    if any(x in item.get('type','').lower() for x in ['staking','reward','dividend','interest','airdrop','mining']):
-                        self.db.save_trade({'id': f"{name}_LEDGER_{item['id']}", 'date': item['datetime'], 'source': src, 'action': 'INCOME', 'coin': item['currency'], 'amount': float(item['amount']), 'price_usd': 0.0, 'fee': 0, 'batch_id': 'API_SYNC_LEDGER'})
-                        c += 1
+            b = NetworkRetry.run(lambda: ex.fetch_ledger(since=since))
+            if b:
+                for i in b:
+                    if any(x in i.get('type','').lower() for x in ['staking','reward','dividend']):
+                        self.db.save_trade({'id':f"{name}_{i['id']}", 'date':i['datetime'], 'source':src, 'action':'INCOME', 'coin':i['currency'], 'amount':float(i['amount']), 'price_usd':0.0, 'fee':0, 'batch_id':'LEDGER'})
                 self.db.commit()
-                if c>0: print(f"   Found {c} rewards.")
         except: pass
 
 # ==========================================
@@ -268,205 +240,207 @@ class Ingestor:
 class PriceFetcher:
     def __init__(self): 
         self.cache = {}
-        self.stablecoins = {'USD', 'USDC', 'USDT', 'DAI', 'BUSD', 'GUSD', 'USDP', 'PYUSD', 'TUSD', 'FRAX'}
-        self.cache_file = BASE_DIR / 'stablecoins_cache.json'
-        self.cache_is_stale = True
-        self.dynamic_list_updated = False
-        self._load_local_cache()
+        self.stables = {'USD','USDC','USDT','DAI','BUSD','PYUSD','GUSD'}
+        self.cache_file = BASE_DIR/'stablecoins_cache.json'
+        self._load_cache()
 
-    def _load_local_cache(self):
+    def _load_cache(self):
         if self.cache_file.exists():
             try:
-                if (datetime.now() - datetime.fromtimestamp(self.cache_file.stat().st_mtime)) < timedelta(days=7):
-                    self.cache_is_stale = False
-                with open(self.cache_file, 'r') as f: self.stablecoins.update(json.load(f))
+                if (datetime.now()-datetime.fromtimestamp(self.cache_file.stat().st_mtime)).days < 7:
+                    with open(self.cache_file) as f: self.stables.update(json.load(f))
+                    return
             except: pass
+        self._fetch_api()
 
-    def _fetch_dynamic_stablecoins(self):
-        print("   [Net] Updating stablecoin list...")
+    def _fetch_api(self):
         try:
-            url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&per_page=30"
-            resp = requests.get(url, timeout=5)
-            if resp.status_code == 200:
-                for coin in resp.json(): self.stablecoins.add(coin['symbol'].upper())
-                with open(self.cache_file, 'w') as f: json.dump(list(self.stablecoins), f)
-                self.dynamic_list_updated = True
-                self.cache_is_stale = False
+            r = requests.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins", timeout=5)
+            if r.status_code==200:
+                for c in r.json(): self.stables.add(c['symbol'].upper())
+                with open(self.cache_file,'w') as f: json.dump(list(self.stables),f)
         except: pass
 
     def get_price(self, s, d):
-        if s.upper() in self.stablecoins: return 1.0
-        if self.cache_is_stale and not self.dynamic_list_updated:
-            self._fetch_dynamic_stablecoins()
-            if s.upper() in self.stablecoins: return 1.0
-
+        if s.upper() in self.stables: return 1.0
         try:
             k = f"{s}_{d.date()}"
             if k in self.cache: return self.cache[k]
-            def dl_price(): return yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False)
-            df = NetworkRetry.run(dl_price, retries=3, delay=1, context=f"Price {s}")
+            def dp(): return yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False)
+            df = NetworkRetry.run(dp, retries=3)
             if not df.empty: 
-                v = df['Close'].iloc[0]; self.cache[k] = float(v.iloc[0] if isinstance(v,pd.Series) else v)
+                v=df['Close'].iloc[0]; self.cache[k]=float(v.iloc[0] if isinstance(v,pd.Series) else v)
                 return self.cache[k]
         except: pass
         return 0.0
 
 # ==========================================
-# 4. AUDITOR (Wallet Check)
+# 4. AUDITOR (TokenView Edition)
 # ==========================================
 class WalletAuditor:
     def __init__(self, db):
         self.db = db
-        self.calculated_balances = {}
-        self.real_balances = {}
+        self.calc = {}
+        self.real = {}
+        self.api_key = self._load_tokenview_key()
+        self.DECIMALS = {'BTC': 8, 'ETH': 18, 'LTC': 8, 'DOGE': 8, 'TRX': 6, 'SOL': 9, 'XRP': 6, 'ADA': 6, 'DOT': 10, 'MATIC': 18, 'AVAX': 18, 'BNB': 18}
+
+    def _load_tokenview_key(self):
+        if not KEYS_FILE.exists(): return None
+        with open(KEYS_FILE) as f: 
+            keys = json.load(f)
+            return keys.get('tokenview', {}).get('apiKey')
 
     def run_audit(self):
-        print("\n--- 4. RUNNING LEDGER AUDIT ---")
+        if not GLOBAL_CONFIG['general']['run_audit']:
+            print("\n--- 4. AUDIT SKIPPED (Config) ---")
+            return
+
+        print("\n--- 4. RUNNING AUDIT (Via TokenView) ---")
         if not WALLETS_FILE.exists(): return
+        if not self.api_key or "PASTE" in self.api_key:
+            print("   [Skip] No TokenView API Key found.")
+            return
 
-        # 1. Calc DB
+        # DB Balances
         df = pd.read_sql_query("SELECT coin, amount, action FROM trades", self.db.conn)
-        for _, row in df.iterrows():
-            c = row['coin']
-            if c not in self.calculated_balances: self.calculated_balances[c] = 0.0
-            if row['action'] in ['BUY', 'INCOME']: self.calculated_balances[c] += row['amount']
-            elif row['action'] == 'SELL': self.calculated_balances[c] -= row['amount']
+        for _, r in df.iterrows():
+            c = r['coin']
+            if c not in self.calc: self.calc[c] = 0.0
+            if r['action'] in ['BUY','INCOME']: self.calc[c] += r['amount']
+            elif r['action'] == 'SELL': self.calc[c] -= r['amount']
 
-        # 2. Check Chain
+        # Chain Balances
         with open(WALLETS_FILE) as f: wallets = json.load(f)
-        
-        for coin, addresses in wallets.items():
-            if coin.startswith("_"): continue 
-            valid_addresses = [a for a in addresses if "PASTE_" not in a]
-            if not valid_addresses: continue
+        for coin, addrs in wallets.items():
+            if coin.startswith("_"): continue
+            valid = [a for a in addrs if "PASTE_" not in a]
+            if not valid: continue
 
-            print(f"   Checking {coin} blockchain ({len(valid_addresses)} wallets)...")
-            total_coin = 0.0
-            for addr in valid_addresses:
-                print(f"      -> Scanning {addr[:6]}...")
+            print(f"   Checking {coin} ({len(valid)} wallets)...")
+            tot = 0.0
+            for addr in valid:
                 try:
-                    if coin == 'BTC':
-                        r = requests.get(f"https://blockchain.info/q/addressbalance/{addr}")
-                        if r.status_code == 200: total_coin += int(r.text) / 100000000
-                except: pass
-                time.sleep(0.5)
-            self.real_balances[coin] = total_coin
+                    bal = self.check_tokenview(coin, addr)
+                    tot += bal
+                except Exception as e: print(f"      [!] Failed: {addr[:6]}... ({e})")
+                
+                # CONFIG CHECK: Wait or Skip?
+                if GLOBAL_CONFIG['performance']['respect_free_tier_limits']:
+                    print("      [Free Tier] Pausing 2s...")
+                    time.sleep(2.0)
+                
+            self.real[coin] = tot
             
-        # 3. Compare
-        print("\n   --- RECONCILIATION REPORT ---")
-        print(f"   {'COIN':<5} | {'DB SAYS':<12} | {'CHAIN SAYS':<12} | {'VARIANCE':<12}")
-        print("   " + "-"*50)
-        
-        all_coins = set(list(self.calculated_balances.keys()) + list(self.real_balances.keys()))
-        for coin in sorted(all_coins):
-            db_bal = self.calculated_balances.get(coin, 0.0)
-            real_bal = self.real_balances.get(coin, 0.0)
-            if coin in self.real_balances:
-                diff = db_bal - real_bal
-                status = "OK"
-                if abs(diff) > 0.0001: status = f"MISMATCH ({diff:+.5f})"
-                print(f"   {coin:<5} | {db_bal:<12.5f} | {real_bal:<12.5f} | {status}")
+        self.print_report()
+
+    def check_tokenview(self, coin, addr):
+        url = f"https://services.tokenview.io/vipapi/addr/b/{coin.lower()}/{addr}?apikey={self.api_key}"
+        for attempt in range(3):
+            try:
+                r = requests.get(url, timeout=15)
+                if r.status_code == 429: time.sleep(5); continue
+                if r.status_code == 200:
+                    data = r.json()
+                    if data.get('code') != 1: return 0.0
+                    return float(data.get('data', 0)) / (10 ** self.DECIMALS.get(coin.upper(), 18))
+            except: time.sleep(1)
+        return 0.0
+
+    def print_report(self):
+        print("\n   --- RECONCILIATION ---")
+        print(f"   {'COIN':<5} | {'DB':<10} | {'CHAIN':<10} | {'DIFF':<10}")
+        print("   " + "-"*40)
+        for c in sorted(set(list(self.calc.keys())+list(self.real.keys()))):
+            if c in self.real:
+                d = self.calc.get(c,0) - self.real.get(c,0)
+                stat = f"{d:+.4f}" if abs(d)>0.0001 else "OK"
+                print(f"   {c:<5} | {self.calc.get(c,0):<10.4f} | {self.real.get(c,0):<10.4f} | {stat}")
 
 # ==========================================
 # 5. TAX ENGINE
 # ==========================================
 class TaxEngine:
-    def __init__(self, db, year):
-        self.db, self.year, self.tt_rows, self.inc_rows, self.holdings = db, int(year), [], [], {}
+    def __init__(self, db, y):
+        self.db, self.year, self.tt, self.inc, self.hold = db, int(y), [], [], {}
 
     def run(self):
-        print(f"\n--- 5. GENERATING {self.year} REPORT ---")
+        print(f"\n--- 5. REPORT ({self.year}) ---")
         df = self.db.get_all()
         for _, t in df.iterrows():
-            try:
-                d = pd.to_datetime(t['date'])
-                if d.year > self.year: continue
-                is_target = (d.year == self.year)
-
-                if t['action'] in ['BUY', 'INCOME']:
-                    cost = (t['amount'] * t['price_usd']) + t['fee']
-                    eff = cost / t['amount'] if t['amount'] else 0
-                    self._add(t['coin'], t['amount'], eff, d)
-                    if is_target and t['action'] == 'INCOME':
-                        val = t['amount'] * t['price_usd']
-                        self.inc_rows.append({'Date': d.date(), 'Source': t['source'], 'Coin': t['coin'], 'Amount': t['amount'], 'USD Value': round(val,2)})
-
-                elif t['action'] == 'SELL':
-                    net_proc = (t['amount'] * t['price_usd']) - t['fee']
-                    basis, term, acq = self._sell(t['coin'], t['amount'], d)
-                    if is_target:
-                        self.tt_rows.append({'Description': f"{t['amount']} {t['coin']}", 'Date Acquired': acq, 'Date Sold': d.strftime('%m/%d/%Y'), 'Proceeds': round(net_proc, 2), 'Cost Basis': round(basis, 2), 'Gain/Loss': round(net_proc - basis, 2)})
-            except: pass
+            d = pd.to_datetime(t['date'])
+            if d.year > self.year: continue
+            is_yr = (d.year == self.year)
+            
+            if t['action'] in ['BUY','INCOME']:
+                c = (t['amount']*t['price_usd'])+t['fee']
+                self._add(t['coin'], t['amount'], c/t['amount'] if t['amount'] else 0, d)
+                if is_yr and t['action']=='INCOME': self.inc.append({'Date':d.date(),'Coin':t['coin'],'Amt':t['amount'],'USD':round(t['amount']*t['price_usd'],2)})
+            
+            elif t['action'] == 'SELL':
+                net = (t['amount']*t['price_usd'])-t['fee']
+                b, term, acq = self._sell(t['coin'], t['amount'], d)
+                if is_yr: self.tt.append({'Description':f"{t['amount']} {t['coin']}", 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':round(net,2), 'Cost Basis':round(b,2)})
 
     def _add(self, c, a, p, d):
-        if c not in self.holdings: self.holdings[c] = []
-        self.holdings[c].append({'a': a, 'p': p, 'd': d})
+        if c not in self.hold: self.hold[c]=[]
+        self.hold[c].append({'a':a,'p':p,'d':d})
 
     def _sell(self, c, a, d):
-        if c not in self.holdings: self.holdings[c] = []
+        if c not in self.hold: self.hold[c]=[]
         rem, b, ds = a, 0, set()
-        while rem > 0 and self.holdings[c]:
-            l = self.holdings[c][0]; ds.add(l['d'])
-            if l['a'] <= rem: b += l['a'] * l['p']; rem -= l['a']; self.holdings[c].pop(0)
-            else: b += rem * l['p']; l['a'] -= rem; rem = 0
-        term = 'Long' if ds and (d - min(ds)).days > 365 else 'Short'
-        acq = list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
-        return b, term, acq
+        while rem>0 and self.hold[c]:
+            l=self.hold[c][0]; ds.add(l['d'])
+            if l['a']<=rem: b+=l['a']*l['p']; rem-=l['a']; self.hold[c].pop(0)
+            else: b+=rem*l['p']; l['a']-=rem; rem=0
+        return b, 'Long' if ds and (d-min(ds)).days>365 else 'Short', list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
 
     def export(self):
-        ydir = OUTPUT_DIR / f"Year_{self.year}"
-        if not ydir.exists(): ydir.mkdir(parents=True)
-        if self.tt_rows: pd.DataFrame(self.tt_rows).to_csv(ydir / 'TURBOTAX_CAP_GAINS.csv', index=False)
-        if self.inc_rows: pd.DataFrame(self.inc_rows).to_csv(ydir / 'INCOME_REPORT.csv', index=False)
+        yd = OUTPUT_DIR/f"Year_{self.year}"
+        if not yd.exists(): yd.mkdir(parents=True)
+        if self.tt: pd.DataFrame(self.tt).to_csv(yd/'TURBOTAX_CAP_GAINS.csv', index=False)
+        if self.inc: pd.DataFrame(self.inc).to_csv(yd/'INCOME_REPORT.csv', index=False)
         
-        snapshot = []
-        for coin, lots in self.holdings.items():
-            total = sum(l['a'] for l in lots)
-            if total > 0.000001:
-                total_cost = sum(l['a'] * l['p'] for l in lots)
-                snapshot.append({'Coin': coin, 'Holdings': round(total, 8), 'Total Cost Basis': round(total_cost, 2), 'Avg Price': round(total_cost/total, 2)})
+        snap = []
+        for c, ls in self.hold.items():
+            t = sum(l['a'] for l in ls)
+            if t>0.000001: snap.append({'Coin':c, 'Holdings':round(t,8), 'Value':round(sum(l['a']*l['p'] for l in ls),2)})
         
-        if snapshot:
-            if self.year < datetime.now().year:
-                pd.DataFrame(snapshot).to_csv(ydir / 'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
-                print(f"   -> [FINALIZED] Saved EOY_HOLDINGS_SNAPSHOT.csv")
-            else:
-                pd.DataFrame(snapshot).to_csv(ydir / 'CURRENT_HOLDINGS_DRAFT.csv', index=False)
-                print(f"\n   [SAFEGUARD] Year {self.year} active. Saved 'CURRENT_HOLDINGS_DRAFT.csv'.")
+        if snap:
+            fn = 'EOY_HOLDINGS_SNAPSHOT.csv' if self.year < datetime.now().year else 'CURRENT_HOLDINGS_DRAFT.csv'
+            pd.DataFrame(snap).to_csv(yd/fn, index=False)
+            print(f"   -> Saved {fn}")
 
 # ==========================================
 # MAIN
 # ==========================================
 if __name__ == "__main__":
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    sys.stdout = DualLogger(LOG_DIR / f"Manual_{timestamp}.log")
-
-    print("--- CRYPTO TAX MASTER V18 (Logic Only) ---")
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    sys.stdout = DualLogger(LOG_DIR/f"Manual_{ts}.log")
     
-    # 0. SETUP VERIFICATION
-    verify_setup()
-
+    print("--- CRYPTO TAX MASTER V20 (Configurable) ---")
+    
+    if not KEYS_FILE.exists():
+        print("CRITICAL: Missing Config Files. Run 'setup_env.py' first.")
+        sys.exit(1)
+    
     db = DatabaseManager()
     ingest = Ingestor(db)
     ingest.run_csv_scan()
     ingest.run_api_sync()
     
     bf = PriceFetcher()
-    zeros = db.get_zeros()
-    if not zeros.empty:
-        print(f"\n--- Backfilling {len(zeros)} missing prices ---")
-        for _, r in zeros.iterrows():
-            p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
-            if p > 0: db.update_price(r['id'], p)
-        db.commit()
+    for _, r in db.get_zeros().iterrows():
+        p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
+        if p>0: db.update_price(r['id'], p)
+    db.commit()
 
-    auditor = WalletAuditor(db)
-    auditor.run_audit()
+    WalletAuditor(db).run_audit()
 
     try:
-        y_input = input("\nEnter Tax Year: ")
-        if y_input.isdigit():
-            eng = TaxEngine(db, y_input)
+        y = input("\nEnter Tax Year: ")
+        if y.isdigit():
+            eng = TaxEngine(db, y)
             eng.run()
             eng.export()
     except Exception as e: print(f"Error: {e}")
