@@ -33,21 +33,34 @@ for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
 # 0. SETUP VERIFICATION
 # ==========================================
 def verify_setup():
-    """Checks if the user has run the setup script."""
-    missing_files = []
+    """Checks if configuration files exist and are valid JSON."""
+    issues = []
+
+    # Check API Keys
     if not KEYS_FILE.exists():
-        missing_files.append('api_keys.json')
+        issues.append("[MISSING] 'api_keys.json' not found.")
+    else:
+        try:
+            with open(KEYS_FILE, 'r') as f: json.load(f)
+        except json.JSONDecodeError:
+            issues.append("[CORRUPT] 'api_keys.json' contains invalid JSON.")
+
+    # Check Wallets
     if not WALLETS_FILE.exists():
-        missing_files.append('wallets.json')
+        issues.append("[MISSING] 'wallets.json' not found.")
+    else:
+        try:
+            with open(WALLETS_FILE, 'r') as f: json.load(f)
+        except json.JSONDecodeError:
+            issues.append("[CORRUPT] 'wallets.json' contains invalid JSON.")
     
-    if missing_files:
+    if issues:
         print("\n" + "!"*60)
-        print("   CRITICAL ERROR: CONFIGURATION MISSING")
+        print("   CRITICAL ERROR: CONFIGURATION ISSUES DETECTED")
         print("!"*60)
-        print(f"   The following required files are missing:\n")
-        for f in missing_files:
-            print(f"    - {f}")
-        print("\n   >>> ACTION REQUIRED: Please run 'setup_env.py' first.")
+        for issue in issues:
+            print(f"   {issue}")
+        print("\n   >>> ACTION REQUIRED: Please re-run 'setup_env.py' to fix these files.")
         print("!"*60 + "\n")
         input("Press Enter to exit...")
         sys.exit(1)
