@@ -7,7 +7,7 @@ import shutil
 import sys
 import os
 import random
-import requests # Added for Stablecoin API & Blockchain Audit
+import requests
 import yfinance as yf
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,41 +25,32 @@ DB_BACKUP = BASE_DIR / 'crypto_master.db.bak'
 KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 
-# Create Folders
+# Fallback: Ensure folders exist even if setup wasn't run
 for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
     if not d.exists(): d.mkdir(parents=True)
 
 # ==========================================
-# 0. SETUP & TEMPLATES
+# 0. SETUP VERIFICATION
 # ==========================================
-def create_templates():
-    """Generates configuration files if they are missing."""
-    # 1. API Keys Template
+def verify_setup():
+    """Checks if the user has run the setup script."""
+    missing_files = []
     if not KEYS_FILE.exists():
-        print("   [Setup] Creating 'api_keys.json' template...")
-        data = {
-            "_INSTRUCTIONS": "1. Enter Read-Only keys. 2. You can leave unused exchanges here; the script will ignore them if they still say 'PASTE_...'.",
-            "coinbase": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_API_SECRET_HERE" },
-            "kraken": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_PRIVATE_KEY_HERE" },
-            "binanceus": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_SECRET_HERE" },
-            "gemini": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_SECRET_HERE" },
-            "cryptocom": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_SECRET_HERE" },
-            "kucoin": { "apiKey": "PASTE_YOUR_API_KEY_HERE", "secret": "PASTE_YOUR_SECRET_HERE", "password": "PASTE_YOUR_PASSPHRASE_HERE" }
-        }
-        with open(KEYS_FILE, 'w') as f: json.dump(data, f, indent=4)
-
-    # 2. Wallets Template
+        missing_files.append('api_keys.json')
     if not WALLETS_FILE.exists():
-        print("   [Setup] Creating 'wallets.json' template...")
-        data = {
-            "_INSTRUCTIONS": "Paste PUBLIC addresses to audit holdings. The script uses these to check if your database matches reality. Separate multiple addresses with commas.",
-            "BTC": ["PASTE_BTC_ADDRESS_1", "PASTE_BTC_ADDRESS_2"],
-            "ETH": ["PASTE_ETH_ADDRESS_HERE"],
-            "SOL": ["PASTE_SOL_ADDRESS_HERE"],
-            "ADA": ["PASTE_CARDANO_ADDRESS_HERE"],
-            "DOT": ["PASTE_POLKADOT_ADDRESS_HERE"]
-        }
-        with open(WALLETS_FILE, 'w') as f: json.dump(data, f, indent=4)
+        missing_files.append('wallets.json')
+    
+    if missing_files:
+        print("\n" + "!"*60)
+        print("   CRITICAL ERROR: CONFIGURATION MISSING")
+        print("!"*60)
+        print(f"   The following required files are missing:\n")
+        for f in missing_files:
+            print(f"    - {f}")
+        print("\n   >>> ACTION REQUIRED: Please run 'setup_env.py' first.")
+        print("!"*60 + "\n")
+        input("Press Enter to exit...")
+        sys.exit(1)
 
 # ==========================================
 # 0.5 RESILIENCE UTILS
@@ -103,7 +94,7 @@ class DatabaseManager:
             self.conn.commit() 
             try:
                 shutil.copy(DB_FILE, DB_BACKUP)
-                print("   [Safety] Overwrote old backup with current state ('crypto_master.db.bak')")
+                print("   [Safety] Overwriting backup ('crypto_master.db.bak')")
             except: pass
 
     def restore_safety_backup(self):
@@ -119,7 +110,7 @@ class DatabaseManager:
 
     def remove_safety_backup(self):
         if DB_BACKUP.exists():
-            print("   [Safety] Run successful. Backup retained as restore point.")
+            print("   [Safety] Run successful. Backup retained.")
 
     def _ensure_integrity(self):
         if not DB_FILE.exists(): return
@@ -182,7 +173,6 @@ class Ingestor:
         df = pd.read_csv(fp)
         df.columns = [c.lower() for c in df.columns]
         src = 'DEFI' if 'sent_asset' in df.columns else 'MINING' if 'coin_type' in df.columns else 'MANUAL'
-        count = 0
         for _, r in df.iterrows():
             try:
                 d = pd.to_datetime(r.get('date'))
@@ -194,10 +184,8 @@ class Ingestor:
                     def fetch_p(): return self.fetcher.get_price(coin, d)
                     price = NetworkRetry.run(fetch_p, context=f"Price {coin}")
                 self.db.save_trade({'id': f"{src}_{d.strftime('%Y%m%d%H%M')}_{coin}_{amt}", 'date': d.isoformat(), 'source': src, 'action': 'INCOME' if src!='DEFI' else 'BUY', 'coin': coin, 'amount': amt, 'price_usd': price, 'fee': fee, 'batch_id': batch})
-                count += 1
             except: pass
         self.db.commit()
-        print(f"   Ingested {count} rows.")
 
     def _archive(self, fp):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -212,17 +200,12 @@ class Ingestor:
         
         try:
             for name, creds in keys.items():
-                if name.startswith("_"): continue
-                if "PASTE_" in creds.get('apiKey', ''):
-                    # Silently skip defaults
-                    continue
+                if name.startswith("_") or "PASTE_" in creds.get('apiKey', ''): continue
                 if not hasattr(ccxt, name): continue
                 
-                # Connect
                 def init_ex(): return getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit': True, 'timeout': 30000})
                 ex = NetworkRetry.run(init_ex, context=f"{name} Connect")
                 
-                # Fetch Trades
                 src = f"{name.upper()}_API"
                 since = self.db.get_last_timestamp(src) + 1
                 print(f"-> {name.upper()}: Trades since {pd.to_datetime(since, unit='ms')}")
@@ -239,13 +222,11 @@ class Ingestor:
                     bid = f"API_{name}_{datetime.now().strftime('%Y%m%d%H%M')}"
                     try: pd.DataFrame(nt).to_csv(ARCHIVE_DIR / f"{bid}.csv", index=False)
                     except: pass
-                    
                     for t in nt:
                         self.db.save_trade({'id':f"{name}_{t['id']}", 'date':t['datetime'], 'source':src, 'action':'BUY' if t['side']=='buy' else 'SELL', 'coin':t['symbol'].split('/')[0], 'amount':float(t['amount']), 'price_usd':float(t['price']), 'fee':t['fee']['cost'] if t['fee'] else 0, 'batch_id':bid})
                     self.db.commit()
-                    print(f"   Saved {len(nt)} new trades.")
+                    print(f"   Saved {len(nt)} trades.")
 
-                # Fetch Ledger (Staking)
                 if ex.has.get('fetchLedger'):
                     self._sync_ledger(ex, name)
             self.db.remove_safety_backup()
@@ -265,7 +246,7 @@ class Ingestor:
                         self.db.save_trade({'id': f"{name}_LEDGER_{item['id']}", 'date': item['datetime'], 'source': src, 'action': 'INCOME', 'coin': item['currency'], 'amount': float(item['amount']), 'price_usd': 0.0, 'fee': 0, 'batch_id': 'API_SYNC_LEDGER'})
                         c += 1
                 self.db.commit()
-                if c>0: print(f"   Found {c} new rewards.")
+                if c>0: print(f"   Found {c} rewards.")
         except: pass
 
 # ==========================================
@@ -289,7 +270,7 @@ class PriceFetcher:
             except: pass
 
     def _fetch_dynamic_stablecoins(self):
-        print("   [Net] Updating stablecoin list from CoinGecko...")
+        print("   [Net] Updating stablecoin list...")
         try:
             url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&per_page=30"
             resp = requests.get(url, timeout=5)
@@ -343,13 +324,10 @@ class WalletAuditor:
         
         for coin, addresses in wallets.items():
             if coin.startswith("_"): continue 
-            
-            # SMART SKIP: Ignore if user hasn't filled it in
             valid_addresses = [a for a in addresses if "PASTE_" not in a]
             if not valid_addresses: continue
 
             print(f"   Checking {coin} blockchain ({len(valid_addresses)} wallets)...")
-            
             total_coin = 0.0
             for addr in valid_addresses:
                 print(f"      -> Scanning {addr[:6]}...")
@@ -357,10 +335,8 @@ class WalletAuditor:
                     if coin == 'BTC':
                         r = requests.get(f"https://blockchain.info/q/addressbalance/{addr}")
                         if r.status_code == 200: total_coin += int(r.text) / 100000000
-                    # Add more chains here if needed
-                except: print(f"      [!] Failed to read {addr}")
+                except: pass
                 time.sleep(0.5)
-            
             self.real_balances[coin] = total_coin
             
         # 3. Compare
@@ -372,7 +348,6 @@ class WalletAuditor:
         for coin in sorted(all_coins):
             db_bal = self.calculated_balances.get(coin, 0.0)
             real_bal = self.real_balances.get(coin, 0.0)
-            # Only show if we actually checked the chain to avoid noise
             if coin in self.real_balances:
                 diff = db_bal - real_bal
                 status = "OK"
@@ -453,9 +428,11 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     sys.stdout = DualLogger(LOG_DIR / f"Manual_{timestamp}.log")
 
-    print("--- CRYPTO TAX MASTER V17 (Resilience Edition) ---")
-    create_templates() # Run setup checks
+    print("--- CRYPTO TAX MASTER V18 (Logic Only) ---")
     
+    # 0. SETUP VERIFICATION
+    verify_setup()
+
     db = DatabaseManager()
     ingest = Ingestor(db)
     ingest.run_csv_scan()
@@ -470,7 +447,6 @@ if __name__ == "__main__":
             if p > 0: db.update_price(r['id'], p)
         db.commit()
 
-    # Run Auditor (Restored)
     auditor = WalletAuditor(db)
     auditor.run_audit()
 
