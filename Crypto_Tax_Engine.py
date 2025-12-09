@@ -7,6 +7,7 @@ import shutil
 import sys
 import os
 import random
+import requests # Added for Stablecoin API
 import yfinance as yf
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -272,14 +273,11 @@ class Ingestor:
                 
                 if nt:
                     bid = f"API_{name}_{datetime.now().strftime('%Y%m%d%H%M')}"
-                    
-                    # --- UPDATED: SAVE AS CSV BACKUP ---
                     try:
                         csv_backup_path = ARCHIVE_DIR / f"{bid}.csv"
                         pd.DataFrame(nt).to_csv(csv_backup_path, index=False)
                     except Exception as e:
                         print(f"   [Warning] CSV Backup failed: {e}")
-                    # -----------------------------------
                     
                     for t in nt:
                         uid = f"{name}_{t['id']}"
@@ -329,23 +327,81 @@ class Ingestor:
         except: pass
 
 # ==========================================
-# 3. HELPER: PRICE FETCHER (Robust)
+# 3. HELPER: PRICE FETCHER (Lazy + Cached)
 # ==========================================
 class PriceFetcher:
-    def __init__(self): self.cache={}
-    def get_price(self, s, d):
-        if s in ['USD','USDC','USDT']: return 1.0
+    def __init__(self): 
+        self.cache = {}
+        # Core list (Fallback)
+        self.stablecoins = {'USD', 'USDC', 'USDT', 'DAI', 'BUSD', 'GUSD', 'USDP', 'PYUSD', 'TUSD', 'FRAX'}
+        self.cache_file = BASE_DIR / 'stablecoins_cache.json'
+        self.dynamic_list_updated = False # Flag to track if we updated this session
+        
+        # Load local cache on startup (Fast)
+        self._load_local_cache()
+
+    def _load_local_cache(self):
+        """Loads cache from disk but does NOT hit API yet."""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'r') as f:
+                    cached_list = json.load(f)
+                    self.stablecoins.update(cached_list)
+            except: pass
+
+    def _fetch_dynamic_stablecoins(self):
+        """Pulls top stablecoins from CoinGecko and saves to local JSON."""
+        print("   [Net] Fetching latest stablecoin list from CoinGecko...")
         try:
-            k=f"{s}_{d.date()}"
+            url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins&per_page=30"
+            resp = requests.get(url, timeout=5)
+            
+            if resp.status_code == 200:
+                new_coins = []
+                for coin in resp.json():
+                    symbol = coin['symbol'].upper()
+                    if symbol not in self.stablecoins:
+                        self.stablecoins.add(symbol)
+                        new_coins.append(symbol)
+                
+                # Save to cache file
+                with open(self.cache_file, 'w') as f:
+                    json.dump(list(self.stablecoins), f)
+                
+                if new_coins:
+                    print(f"   [Net] Added {len(new_coins)} new stablecoins (e.g. {new_coins[0]}).")
+                else:
+                    print("   [Net] Stablecoin list is up to date.")
+        except Exception as e:
+            print(f"   [Info] Could not fetch dynamic stablecoin list ({e}).")
+        
+        self.dynamic_list_updated = True
+
+    def get_price(self, s, d):
+        # 1. Check current known stablecoins
+        if s.upper() in self.stablecoins: 
+            return 1.0
+            
+        # 2. LAZY UPDATE: If coin is unknown and we haven't checked API yet, check now.
+        if not self.dynamic_list_updated:
+            self._fetch_dynamic_stablecoins()
+            # Re-check after update
+            if s.upper() in self.stablecoins:
+                return 1.0
+
+        # 3. Check Cache
+        try:
+            k = f"{s}_{d.date()}"
             if k in self.cache: return self.cache[k]
             
+            # 4. Fetch from Yahoo
             def dl_price():
                 return yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False)
             
             df = NetworkRetry.run(dl_price, retries=3, delay=1, context=f"Price {s}")
             
             if not df.empty: 
-                v=df['Close'].iloc[0]; self.cache[k]=float(v.iloc[0] if isinstance(v,pd.Series) else v)
+                v = df['Close'].iloc[0]; self.cache[k] = float(v.iloc[0] if isinstance(v,pd.Series) else v)
                 return self.cache[k]
         except: pass
         return 0.0
