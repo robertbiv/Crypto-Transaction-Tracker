@@ -5,6 +5,7 @@ import json
 import time
 import shutil
 import sys
+import os
 import yfinance as yf
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,12 +17,31 @@ BASE_DIR = Path.cwd()
 INPUT_DIR = BASE_DIR / 'inputs'
 ARCHIVE_DIR = BASE_DIR / 'processed_archive'
 OUTPUT_DIR = BASE_DIR / 'outputs'
+LOG_DIR = OUTPUT_DIR / 'logs'
 DB_FILE = BASE_DIR / 'crypto_master.db'
 KEYS_FILE = BASE_DIR / 'api_keys.json'
 
 # Create Folders
-for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR]:
+for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
     if not d.exists(): d.mkdir(parents=True)
+
+# ==========================================
+# 0. DUAL LOGGER (Screen + File)
+# ==========================================
+class DualLogger(object):
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, "a", encoding='utf-8')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
+        pass
 
 # ==========================================
 # 1. DATABASE CORE
@@ -166,8 +186,21 @@ class Ingestor:
         src = f"{name.upper()}_LEDGER"
         since = self.db.get_last_timestamp(src) + 1
         print(f"-> {name.upper()}: Checking Rewards...")
-        # (Simplified Ledger Logic for brevity)
-        pass
+        try:
+            batch = ex.fetch_ledger(since=since)
+            if batch:
+                for item in batch:
+                    # Filter for income keywords
+                    if any(x in item.get('type','').lower() for x in ['staking','reward','dividend','interest','airdrop','mining']):
+                        uid = f"{name}_LEDGER_{item['id']}"
+                        self.db.save_trade({
+                            'id': uid, 'date': item['datetime'], 'source': src,
+                            'action': 'INCOME', 'coin': item['currency'],
+                            'amount': float(item['amount']), 'price_usd': 0.0, 'fee': 0,
+                            'batch_id': 'API_SYNC_LEDGER'
+                        })
+                self.db.commit()
+        except: pass
 
 # ==========================================
 # 3. HELPER: PRICE FETCHER
@@ -249,21 +282,17 @@ class TaxEngine:
         return b, term, acq
 
     def export(self):
-        # Create Year Folder
         ydir = OUTPUT_DIR / f"Year_{self.year}"
         if not ydir.exists(): ydir.mkdir(parents=True)
 
-        # 1. Export
         if self.tt_rows:
             pd.DataFrame(self.tt_rows).to_csv(ydir / 'GENERIC_TAX_CAP_GAINS.csv', index=False)
             print(f"   -> Saved GENERIC_TAX_CAP_GAINS.csv")
 
-        # 2. Income
         if self.inc_rows:
             pd.DataFrame(self.inc_rows).to_csv(ydir / 'INCOME_REPORT.csv', index=False)
             print(f"   -> Saved INCOME_REPORT.csv")
 
-        # 3. HOLDINGS SNAPSHOT (WITH SAFETY GUARD)
         snapshot = []
         for coin, lots in self.holdings.items():
             total = sum(l['a'] for l in lots)
@@ -277,16 +306,13 @@ class TaxEngine:
                 })
         
         if snapshot:
-            # SAFETY LOGIC: Can we finalize this year?
             current_system_year = datetime.now().year
             is_finalizable = (self.year < current_system_year)
 
             if is_finalizable:
-                # Year is over. Create the FINAL snapshot.
                 pd.DataFrame(snapshot).to_csv(ydir / 'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
                 print(f"   -> [FINALIZED] Saved EOY_HOLDINGS_SNAPSHOT.csv (Holdings as of Dec 31, {self.year})")
             else:
-                # Year is NOT over. Create a DRAFT snapshot.
                 pd.DataFrame(snapshot).to_csv(ydir / 'CURRENT_HOLDINGS_DRAFT.csv', index=False)
                 print(f"\n   ---------------------------------------------------------------")
                 print(f"   [INFO] Year {self.year} is still active. Reports are in DRAFT mode.")
@@ -298,6 +324,11 @@ class TaxEngine:
 # MAIN
 # ==========================================
 if __name__ == "__main__":
+    # SET UP LOGGING FOR MANUAL RUNS
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_file = LOG_DIR / f"Manual_{timestamp}.log"
+    sys.stdout = DualLogger(log_file) # Redirect print to file AND screen
+
     print("--- CRYPTO TAX MASTER V16 (Safety Guard Enabled) ---")
     db = DatabaseManager()
     ingest = Ingestor(db)
@@ -318,7 +349,7 @@ if __name__ == "__main__":
 
     # 3. Report
     try:
-        y_input = input("\nEnter Tax Year: ")
+        y_input = input("\nEnter Tax Year: ") # Use input() normally, it still works with stdout redirected
         if y_input.isdigit():
             eng = TaxEngine(db, y_input)
             eng.run()
