@@ -57,8 +57,3 @@ Stablecoins live as tokens on underlying chains; query the wallet address on the
 - For UTXO chains (BTC, LTC, DOGE): use Blockchair or the chain explorer API to fetch transaction history and UTXO sets.
 - For EVM-based wallets: query token balances and transfer events via Moralis or an archive node; remember that tokens are discovered by scanning contract events at an address.
 - Moralis and some providers use numeric chain IDs (e.g., 1 for Ethereum mainnet). Map the chain ID to the network when building queries.
-
-## Notes
-
-- If you want, I can add a machine-readable CSV or JSON manifest of these chains (useful for automated tests and ingestion).
-- Tell me if you'd like the table split into multiple columns or converted into a compact reference card.
