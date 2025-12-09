@@ -327,7 +327,7 @@ class Ingestor:
         except: pass
 
 # ==========================================
-# 3. HELPER: PRICE FETCHER (Lazy + Cached)
+# 3. HELPER: PRICE FETCHER (Lazy + Cached + Age Check)
 # ==========================================
 class PriceFetcher:
     def __init__(self): 
@@ -335,19 +335,27 @@ class PriceFetcher:
         # Core list (Fallback)
         self.stablecoins = {'USD', 'USDC', 'USDT', 'DAI', 'BUSD', 'GUSD', 'USDP', 'PYUSD', 'TUSD', 'FRAX'}
         self.cache_file = BASE_DIR / 'stablecoins_cache.json'
-        self.dynamic_list_updated = False # Flag to track if we updated this session
         
-        # Load local cache on startup (Fast)
+        self.cache_is_stale = True # Assume stale until verified
+        self.dynamic_list_updated = False # Did we hit API this session?
+        
+        # Load local cache on startup
         self._load_local_cache()
 
     def _load_local_cache(self):
-        """Loads cache from disk but does NOT hit API yet."""
+        """Loads cache from disk. Sets 'stale' status based on file age."""
         if self.cache_file.exists():
             try:
+                # Check file age (7 Days)
+                file_age = datetime.now() - datetime.fromtimestamp(self.cache_file.stat().st_mtime)
+                if file_age < timedelta(days=7):
+                    self.cache_is_stale = False # Fresh!
+                
                 with open(self.cache_file, 'r') as f:
                     cached_list = json.load(f)
                     self.stablecoins.update(cached_list)
-            except: pass
+            except: 
+                self.cache_is_stale = True # If corrupt, treat as stale
 
     def _fetch_dynamic_stablecoins(self):
         """Pulls top stablecoins from CoinGecko and saves to local JSON."""
@@ -357,39 +365,32 @@ class PriceFetcher:
             resp = requests.get(url, timeout=5)
             
             if resp.status_code == 200:
-                new_coins = []
                 for coin in resp.json():
                     symbol = coin['symbol'].upper()
-                    if symbol not in self.stablecoins:
-                        self.stablecoins.add(symbol)
-                        new_coins.append(symbol)
+                    self.stablecoins.add(symbol)
                 
                 # Save to cache file
                 with open(self.cache_file, 'w') as f:
                     json.dump(list(self.stablecoins), f)
                 
-                if new_coins:
-                    print(f"   [Net] Added {len(new_coins)} new stablecoins (e.g. {new_coins[0]}).")
-                else:
-                    print("   [Net] Stablecoin list is up to date.")
+                self.dynamic_list_updated = True
+                self.cache_is_stale = False # Now it's fresh
         except Exception as e:
             print(f"   [Info] Could not fetch dynamic stablecoin list ({e}).")
-        
-        self.dynamic_list_updated = True
 
     def get_price(self, s, d):
-        # 1. Check current known stablecoins
+        # 1. Check known stablecoins (Fast)
         if s.upper() in self.stablecoins: 
             return 1.0
             
-        # 2. LAZY UPDATE: If coin is unknown and we haven't checked API yet, check now.
-        if not self.dynamic_list_updated:
+        # 2. LAZY CONDITIONAL: Only fetch if cache is OLD *and* we haven't updated yet
+        if self.cache_is_stale and not self.dynamic_list_updated:
             self._fetch_dynamic_stablecoins()
             # Re-check after update
             if s.upper() in self.stablecoins:
                 return 1.0
 
-        # 3. Check Cache
+        # 3. Check Price Cache
         try:
             k = f"{s}_{d.date()}"
             if k in self.cache: return self.cache[k]
