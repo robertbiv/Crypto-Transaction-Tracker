@@ -1,13 +1,8 @@
-import importlib.util
+import Crypto_Tax_Engine as tax_app
 import pandas as pd
 from datetime import datetime
 import sys
 from pathlib import Path
-
-# Load module with spaces in filename
-spec = importlib.util.spec_from_file_location("tax_app", Path(__file__).parent / "Crypto Tax Engine.py")
-tax_app = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(tax_app)
 
 # --- LOGGING CONFIGURATION ---
 LOG_DIR = tax_app.OUTPUT_DIR / "logs"
