@@ -113,7 +113,23 @@ python Setup.py
 ### **3\. Configure**
 
 * **api\_keys.json:** Add Read-Only keys for exchanges. Add a **Moralis** key for EVM/Solana audits.  
-* **wallets.json:** Add public addresses for on-chain audits.  
+* **wallets.json:** Add public addresses for on-chain audits. To add multiple wallets for the same coin, use a JSON array of addresses. Example:
+
+```json
+{
+   "ETH": [
+      "0xFirstEthAddressHere",
+      "0xSecondEthAddressHere",
+      "0xThirdEthAddressHere"
+   ],
+   "BTC": [
+      "bc1FirstBtcAddressHere",
+      "1SecondBtcAddressHere"
+   ]
+}
+```
+
+Notes: Use public addresses only (do NOT paste private keys). For EVM chains prefer checksummed `0x...` addresses when possible.
 * **config.json:** (Optional) Switch accounting.method to "HIFO" if desired (Defaults to "FIFO").
 
 ### **4\. Run**

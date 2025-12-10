@@ -80,7 +80,7 @@ def main():
     
     # --- 1. API Keys ---
     api_data = {
-        "_INSTRUCTIONS": "Enter Read-Only keys. Moralis is REQUIRED for EVM/Solana audit. Blockchair is OPTIONAL (BTC/UTXO). If you don't have a key, leave as 'PASTE_KEY' or empty string.",
+        "_INSTRUCTIONS": "Enter Read-Only keys. Moralis is REQUIRED for EVM/Solana audit. Blockchair is OPTIONAL (BTC/UTXO). If you don't have a key, leave as is.",
         
         # --- AUDIT PROVIDERS ---
         "moralis": {"apiKey": "PASTE_MORALIS_KEY_HERE"},
@@ -195,7 +195,7 @@ def main():
 
     # --- 3. User Config (Updated for V30) ---
     config_data = {
-        "_INSTRUCTIONS": "General runtime options. 'accounting.method': 'FIFO' (Default) or 'HIFO'. 'general.run_audit': True/False.",
+        "_INSTRUCTIONS": "General runtime options. 'accounting.method': 'FIFO' (Default) or 'HIFO' (Not Recommended Look at README for Why). 'general.run_audit using the public wallet keys (Enter in wallets.json)': True/False.",
         "general": {
             "run_audit": True,
             "create_db_backups": True
