@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 # --- LOGGING CONFIGURATION ---
+# Note: Log folder creation is deferred to runtime to allow safe imports by Test Suite
 LOG_DIR = tax_app.OUTPUT_DIR / "logs"
-if not LOG_DIR.exists(): LOG_DIR.mkdir(parents=True)
 
 # Mark run context so engine logs show this was started via Auto_Runner
 try:
@@ -16,26 +16,20 @@ except Exception:
     except Exception: pass
 
 def log(message, level="info"):
-    """Centralized logging for the Auto Runner using `tax_app.logger`.
-
-    Falls back to printing if the central logger is unavailable.
-    """
+    """Centralized logging for the Auto Runner using `tax_app.logger`."""
     try:
-        if level == "info":
-            tax_app.logger.info(message)
-        elif level == "warning":
-            tax_app.logger.warning(message)
-        elif level == "error":
-            tax_app.logger.error(message)
-        else:
-            tax_app.logger.info(message)
+        if level == "info": tax_app.logger.info(message)
+        elif level == "warning": tax_app.logger.warning(message)
+        elif level == "error": tax_app.logger.error(message)
+        else: tax_app.logger.info(message)
     except Exception:
-        # Fallback to console printing if centralized logger isn't available
         ts_prefix = datetime.now().strftime("[%H:%M:%S] ")
-        formatted_msg = f"{ts_prefix}{message}"
-        print(formatted_msg)
+        print(f"{ts_prefix}{message}")
 
 def run_automation():
+    # SAFETY: Ensure folders exist before starting (Safe because called at runtime, not import)
+    tax_app.initialize_folders()
+    
     log("=========================================")
     log("   CRYPTO TAX AUTO-PILOT: STARTED")
     log("=========================================")
