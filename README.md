@@ -1,36 +1,62 @@
-🛡️ Crypto Tax Automation Engine (V18)
-A fully automated, self-hosted Python system for tracking cryptocurrency taxes across exchanges, wallets, and DeFi. It features self-healing databases, network resilience, automated backups, and year-over-year tax reporting (Export compatible). This program sends no telematry data except for anything that the api maintainers collect. 
-APIs Used and their Privacy Policies:
+2. Initial SetupRun the setup script to generate your folder structure and configuration templates:python Setup.py
+📂 The EcosystemThe script automatically builds and maintains this structure:/My_Crypto_Tax_Folder
+# Crypto Tax Automation Engine (V21)
 
+A self-hosted Python system for tracking cryptocurrency taxes across exchanges, wallets, and DeFi. Features include a resilient database with safety backups, automated ingestion from exchanges and wallets, price backfill, and year-over-year tax reporting (Export-compatible CSVs).
 
-🚀 Quick Start
-1. Install RequirementsYou need Python installed. Open your terminal or command prompt and run: 
+**Privacy Notice:** This tool runs locally and does not send telemetry to the developer. It communicates only with third-party services you configure (exchanges, Moralis, CoinGecko, etc.). Review each provider's privacy policy before use.
 
+## APIs (examples)
+
+- Moralis — EVM & Solana chain indexing (audit)
+- Blockchair — Bitcoin & UTXO data
+- CoinGecko — token metadata & stablecoin discovery
+- Yahoo Finance — historical price backfill
+- CCXT (exchanges) — Binance, Coinbase, Kraken, KuCoin, Bybit, OKX, Gate.io, and others
+
+---
+
+## Quick Start
+
+1. Install requirements (Python 3.8+ recommended):
+
+```pwsh
 pip install pandas ccxt yfinance requests
+```
 
-2. Initial Setup
-Run the setup script to generate your folder structure and configuration templates:python setup_env.py
-This will create the inputs, outputs, and logs folders, as well as api_keys.json and wallets.json.
+2. Initialize the project structure and templates:
 
-3. Configure Your Keys 
-These CANNOT make transactions on your behalf. Use Read-Only just in case of your computer getting compromised.
-Open api_keys.json: Paste your Read-Only API keys for Coinbase, Kraken, etc.
-Open wallets.json: Paste your public wallet addresses (BTC, ETH, SOL) for the audit feature.
+```pwsh
+python Setup.py
+```
 
-4. Run the Auto-Pilot
-To sync your data and generate reports, simply double-click or run:python auto_runner.py
+3. Configure API keys and wallets:
 
-📂 The Ecosystem
-The script automatically builds and maintains this structure.
+- Edit `api_keys.json` and paste your exchange API keys (use read-only keys).
+- Add public wallet addresses to `wallets.json` for the audit feature (Moralis / TokenView).
 
+4. Run the Auto-Pilot (sync + reports):
+
+```pwsh
+python Auto_Runner.py
+```
+
+---
+
+## Project layout
+
+The runner creates and maintains these files/folders:
+
+```
 /My_Crypto_Tax_Folder
 │
-├── setup_env.py                   # [USER] Run once to initialize folders/files
-├── auto_runner.py                 # [USER] Run this to sync & update taxes
-├── Crypto_Tax_Master_V18.py       # [CORE] The logic engine (do not delete)
+├── Setup.py                       # [USER] Run once to initialize folders/files
+├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
+├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
 │
-├── api_keys.json                  # [USER] Your Exchange Keys
+├── api_keys.json                  # [USER] Your Exchange & Audit Keys
 ├── wallets.json                   # [USER] Your Public Addresses (For Audit)
+├── config.json                    # [USER] Settings (Enable/Disable Audit, Backups)
 │
 ├── crypto_master.db               # [AUTO] The permanent database
 ├── crypto_master.db.bak           # [AUTO] Safety backup (Last known good state)
@@ -43,73 +69,82 @@ The script automatically builds and maintains this structure.
     ├── logs/                      # [AUTO] Timestamped text logs of every run
     ├── Year_2024/                 # [AUTO] Finalized Tax Reports
     └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
+```
 
+---
 
-🧠 How It Works
+## How it works (high level)
 
-1. The "Two-Step" Data Flow
+1. Ingestion → Database
 
-Step 1: Ingestion (Files & API) -> Database
-The script reads new CSVs from inputs/ and new Trades from APIs.
-It saves them to crypto_master.db.
-It moves processed CSVs to processed_archive/ so they aren't read twice.
+- Reads CSVs from `inputs/` and ingest trades/ledgers via exchange APIs (CCXT).
+- Saves records into `crypto_master.db` and archives processed CSVs.
 
-Step 2: Calculation (Database) -> Reports
-The Tax Engine calculates taxes by reading only from the Database.
-This ensures instant recalculations without re-downloading history.
+2. Calculation → Reports
 
-2. Year-Over-Year "Safety Lock"
+- The TaxEngine computes cost basis, gains, and income from the DB and exports:
+    - `GENERIC_TAX_CAP_GAINS.csv` (capital gains)
+    - `INCOME_REPORT.csv` (income items)
+    - `EOY_HOLDINGS_SNAPSHOT.csv` or `CURRENT_HOLDINGS_DRAFT.csv`
 
-The script intelligently handles tax years:
-Current Year (e.g. 2025): Runs in Draft Mode. It overwrites the 2025 folder every time you run it to show "Year-to-Date" estimates. It saves CURRENT_HOLDINGS_DRAFT.csv.
-Past Year (e.g. 2024): If the current date is Jan 1st, 2025 or later, the script runs the Final Report. It saves EOY_HOLDINGS_SNAPSHOT.csv. This file is your permanent record.
+3. Year handling
 
-3. Smart Price Fetching
+- Current year: Draft reports (updated each run).
+- Past years: Finalized EOY snapshots are preserved.
 
-Stablecoins: Automatically detects stablecoins (USDC, DAI, PYUSD) and assigns them $1.00.
-Volatile Coins: If a price is missing (e.g., from a staking reward), it queries Yahoo Finance for the historical price on that specific day and saves it to the database.
+4. Price fetching
 
-📥 Inputting Data
+- Stablecoins are detected and treated as $1.00.
+- Missing historical prices are backfilled via Yahoo Finance.
 
-Automatic (API)
-Supported: Coinbase, Kraken, Binance, Gemini, Crypto.com, KuCoin, Bybit.
+---
 
-How: Add keys to api_keys.json. The script handles Trades and Staking Rewards automatically.
+## Inputs
 
-Manual (CSV)
-Supported: MoonPay, Ramp, Transak, PayPal, Ledger Live, Trezor.
+- Automatic (APIs): Configure exchange keys in `api_keys.json`. The engine syncs trades, fees, and ledger entries (staking/rewards) where available.
+- Manual (CSV): Drop files in `inputs/` with headers `date, coin, amount, usd_value_at_time, fee` and run the auto-runner.
 
-How: Download the CSV receipt. Rename headers to match: date, coin, amount, usd_value_at_time, fee.
+---
 
-Action: Drop file in inputs/. Run auto_runner.py.
+## Outputs
 
-📊 The Outputs
+Files are written under `outputs/Year_<YYYY>/`:
 
-Go to outputs/Year_XXXX/:
-File Name
-Usage
-GENERIC_TAX_CAP_GAINS.csv
+- `GENERIC_TAX_CAP_GAINS.csv` — upload to Export (Investments)
+- `INCOME_REPORT.csv` — summary of income items
+- `EOY_HOLDINGS_SNAPSHOT.csv` — permanent end-of-year snapshot
+- `CURRENT_HOLDINGS_DRAFT.csv` — live draft holdings for the current year
 
-Upload to Export "Investments" section.
-INCOME_REPORT.csv
-Type the "Total Sum" into "Misc Income" (Schedule 1).
-EOY_HOLDINGS_SNAPSHOT.csv
-Keep Safe. Your "Bank Statement" for Dec 31st.
+Run logs are written to `outputs/logs/` with timestamped filenames and rotated backups. Older run logs are compressed and archived automatically.
 
-MASTER_LEDGER.csv - (Optional) A raw list of every calculated transaction for auditing.
+---
 
-🛡️ Resilience & Safety Features
+## Resilience & safety
 
-Self-Healing Database: Before every write operation, the script makes a .bak copy. If the script crashes or the internet dies mid-sync, it keeps the backup as a restore point.
+- Database backups: the engine keeps `.bak` copies before writes.
+- Corruption recovery: corrupt DB files are moved to `CORRUPT_<DATE>.db` and a fresh DB is created.
+- Network retries: exponential backoff for transient API/network failures.
 
-Corruption Recovery: If crypto_master.db becomes unreadable, the script automatically moves it to CORRUPT_DATE.db and creates a fresh database to keep you running.
+---
 
-Network Retry: If an API times out or your internet flickers, the script waits 2s, 4s, then 8s and retries automatically before giving up.
+## Troubleshooting
 
-🆘 Troubleshooting
+- "Configuration Missing": run `python Setup.py` first.
+- "Database Locked": close other programs holding the DB (DB Browser, editors).
+- Audit variances:
+    - Negative variance: check for missing withdrawals or transfers.
+    - Positive variance: may be staking rewards, airdrops, or unrecorded receipts — add a manual CSV if needed.
 
-"Configuration Missing": You tried to run auto_runner.py before setup_env.py. Run setup first.
-"Database Locked": Close any other programs (like DB Browser) that have the database file open.
-"Variance Mismatch" (Audit):
-Negative Variance: You spent crypto (or transferred it) and didn't log it. The DB thinks you have it; Blockchain says you don't. Check for missing withdrawals.
-Positive Variance: You received a reward/gift/airdrop that the API missed. Add a manual CSV to inputs/.
+---
+
+## Disclaimer
+
+This software is provided "as-is" and does not constitute tax or legal advice. Verify all outputs and consult a qualified tax professional when necessary. The developer is not liable for errors or any tax consequences arising from use of this software.
+
+---
+
+If you'd like, I can also add:
+
+- A short `README_QUICK.md` with only the commands and minimal steps,
+- A `requirements.txt` file listing pinned package versions,
+- Or expand the troubleshooting section with example fixes.
