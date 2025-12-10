@@ -28,12 +28,8 @@ KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 CONFIG_FILE = BASE_DIR / 'config.json'
 
-# NOTE: Folders are now created via initialize_folders(), not on import.
-
-# Logger setup
 logger = logging.getLogger("crypto_tax_engine")
 logger.setLevel(logging.INFO)
-
 RUN_CONTEXT = 'imported'
 
 class RunContextFilter(logging.Filter):
@@ -45,68 +41,47 @@ class RunContextFilter(logging.Filter):
 def set_run_context(context: str):
     global RUN_CONTEXT
     RUN_CONTEXT = context
-    # (Logger setup logic...)
-    for h in list(logger.handlers):
-        try:
-            if isinstance(h, logging.handlers.RotatingFileHandler):
-                logger.removeHandler(h)
-        except: pass
-
+    for h in list(logger.handlers): logger.removeHandler(h)
     try:
         if not LOG_DIR.exists(): 
             try: LOG_DIR.mkdir(parents=True)
-            except: pass # Defer creation if testing or permission issues
-            
+            except: pass
         from logging.handlers import RotatingFileHandler
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fname = LOG_DIR / f"{timestamp}.{context}.log"
-        
         fh = RotatingFileHandler(str(fname), maxBytes=5_000_000, backupCount=5, encoding='utf-8')
         fh.setLevel(logging.INFO)
-        fmt = logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s")
-        fh.setFormatter(fmt)
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s"))
         fh.addFilter(RunContextFilter())
         logger.addHandler(fh)
-    except Exception: pass
-
-    has_stream = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
-    if not has_stream:
-        try:
-            sh = logging.StreamHandler(sys.stdout)
-            sh.setLevel(logging.INFO)
-            sh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s"))
-            sh.addFilter(RunContextFilter())
-            logger.addHandler(sh)
-        except: pass
+    except: pass
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setLevel(logging.INFO)
+        sh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(run_context)s]: %(message)s"))
+        sh.addFilter(RunContextFilter())
+        logger.addHandler(sh)
 
 set_run_context(RUN_CONTEXT)
 
 class ApiAuthError(Exception): pass
 
 def initialize_folders():
-    """Ensure all required directories exist."""
     for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
         if not d.exists(): d.mkdir(parents=True)
 
-# ==========================================
-# 0. CONFIG LOADER
-# ==========================================
 def load_config():
-    defaults = {
-        "general": {"run_audit": True, "create_db_backups": True},
-        "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30},
-        "logging": {"compress_older_than_days": 30}
-    }
+    defaults = {"general": {"run_audit": True, "create_db_backups": True}, "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}, "logging": {"compress_older_than_days": 30}}
     if not CONFIG_FILE.exists(): return defaults
     try:
         with open(CONFIG_FILE) as f: 
-            user_config = json.load(f)
-            for section, keys in defaults.items():
-                if section not in user_config: user_config[section] = keys
-                else:
-                    for k, v in keys.items():
-                        if k not in user_config[section]: user_config[section][k] = v
-            return user_config
+            user = json.load(f)
+            for k, v in defaults.items():
+                if k not in user: user[k] = v
+                else: 
+                    for sk, sv in v.items():
+                        if sk not in user[k]: user[k][sk] = sv
+            return user
     except: return defaults
 
 GLOBAL_CONFIG = load_config()
@@ -120,12 +95,9 @@ class NetworkRetry:
                 if i == retries - 1: raise TimeoutError(f"{context} failed: {e}")
                 time.sleep(delay * (backoff ** i))
 
-# ==========================================
-# 1. DATABASE CORE
-# ==========================================
 class DatabaseManager:
     def __init__(self):
-        initialize_folders() # Ensure folders exist before DB creation
+        initialize_folders()
         self._ensure_integrity()
         self.conn = sqlite3.connect(str(DB_FILE))
         self.cursor = self.conn.cursor()
@@ -183,7 +155,7 @@ class DatabaseManager:
     def close(self): self.conn.close()
 
 # ==========================================
-# 2. INGESTOR (SMART V22)
+# 2. INGESTOR
 # ==========================================
 class Ingestor:
     def __init__(self, db):
@@ -217,18 +189,20 @@ class Ingestor:
                 recv_a = float(r.get('received_amount', 0))
                 fee = float(r.get('fee', 0))
                 
-                # Logic for Swaps/Transfers/Income (Same as V22)
-                if sent_c and recv_c and sent_a > 0 and recv_a > 0:
-                    p_sent = float(r.get('usd_value_at_time', 0))
-                    if p_sent == 0: p_sent = self.fetcher.get_price(str(sent_c), d) * sent_a
-                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'MANUAL_SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p_sent / sent_a) if sent_a else 0, 'fee': fee, 'batch_id': batch})
-                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'MANUAL_SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p_sent / recv_a) if recv_a else 0, 'fee': 0, 'batch_id': batch})
-                elif 'transfer' in tx_type:
-                    if fee > 0:
-                        fc = r.get('fee_coin', sent_c if sent_c else 'ETH')
-                        self.db.save_trade({'id': f"{batch}_{idx}_FEE", 'date': d.isoformat(), 'source': 'TRANSFER_FEE', 'action': 'SELL', 'coin': str(fc), 'amount': fee, 'price_usd': self.fetcher.get_price(str(fc), d), 'fee': 0, 'batch_id': batch})
+                if any(x in tx_type for x in ['default', 'loss', 'bad_debt', 'stolen', 'hacked', 'liquidation']):
+                    if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_LOSS", 'date': d.isoformat(), 'source': 'LOSS', 'action': 'LOSS', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0.0, 'fee': 0, 'batch_id': batch})
+                elif any(x in tx_type for x in ['borrow', 'deposit_collateral']):
+                    if recv_c and recv_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_DEP", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'DEPOSIT', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
+                    elif sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_WIT", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'WITHDRAWAL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
+                elif 'repay' in tx_type:
+                    if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_REP", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'WITHDRAWAL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
+                elif sent_c and recv_c and sent_a > 0 and recv_a > 0:
+                    p = float(r.get('usd_value_at_time', 0))
+                    if p==0: p = self.fetcher.get_price(str(sent_c), d) * sent_a
+                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else 0, 'fee': fee, 'batch_id': batch})
+                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else 0, 'fee': 0, 'batch_id': batch})
                 elif recv_c and recv_a > 0:
-                    act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo']) else 'BUY'
+                    act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest']) else 'BUY'
                     p = float(r.get('usd_value_at_time', 0))
                     if p==0: p = self.fetcher.get_price(str(recv_c), d)
                     self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': 'MANUAL', 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
@@ -240,8 +214,7 @@ class Ingestor:
         self.db.commit()
 
     def _archive(self, fp):
-        ts = datetime.now().strftime("%Y%m%d_%H%M")
-        try: shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_PROC_{ts}{fp.suffix}"))
+        try: shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_PROC_{datetime.now().strftime('%Y%m%d_%H%M')}{fp.suffix}"))
         except: pass
 
     def run_api_sync(self):
@@ -250,12 +223,9 @@ class Ingestor:
         with open(KEYS_FILE) as f: keys = json.load(f)
         self.db.create_safety_backup()
         try:
-            timeout = GLOBAL_CONFIG['performance']['api_timeout_seconds']
             for name, creds in keys.items():
-                if "PASTE_" in creds.get('apiKey', ''): continue
-                if name in ['moralis', 'blockchair', 'tokenview']: continue
-                if not hasattr(ccxt, name): continue
-                ex = getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit':True, 'timeout': timeout * 1000})
+                if "PASTE_" in creds.get('apiKey', '') or not hasattr(ccxt, name): continue
+                ex = getattr(ccxt, name)({'apiKey': creds['apiKey'], 'secret': creds['secret'], 'enableRateLimit':True})
                 src = f"{name.upper()}_API"
                 since = self.db.get_last_timestamp(src) + 1
                 nt = []
@@ -266,26 +236,21 @@ class Ingestor:
                         nt.extend(b)
                         since = b[-1]['timestamp'] + 1
                     except: break
-                if nt:
-                    bid = f"API_{name}_{datetime.now().strftime('%Y%m%d')}"
-                    for t in nt:
-                        self.db.save_trade({'id':f"{name}_{t['id']}", 'date':t['datetime'], 'source':src, 'action':'BUY' if t['side']=='buy' else 'SELL', 'coin':t['symbol'].split('/')[0], 'amount':float(t['amount']), 'price_usd':float(t['price']), 'fee':t['fee']['cost'] if t['fee'] else 0, 'batch_id':bid})
-                    self.db.commit()
+                for t in nt:
+                    self.db.save_trade({'id':f"{name}_{t['id']}", 'date':t['datetime'], 'source':src, 'action':'BUY' if t['side']=='buy' else 'SELL', 'coin':t['symbol'].split('/')[0], 'amount':float(t['amount']), 'price_usd':float(t['price']), 'fee':t['fee']['cost'] if t['fee'] else 0, 'batch_id':f"API_{name}"})
+                self.db.commit()
                 if ex.has.get('fetchLedger'): self._sync_ledger(ex, name)
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
     def _sync_ledger(self, ex, name):
-        src = f"{name.upper()}_LEDGER"
-        since = self.db.get_last_timestamp(src) + 1
-        logger.info(f"   {name.upper()}: Checking Ledger (Staking/Promos)...")
         try:
-            b = NetworkRetry.run(lambda: ex.fetch_ledger(since=since))
+            b = NetworkRetry.run(lambda: ex.fetch_ledger(since=self.db.get_last_timestamp(f"{name.upper()}_LEDGER")+1))
             if b:
                 for i in b:
                     t = i.get('type','').lower()
-                    if any(x in t for x in ['staking','reward','dividend','airdrop','promo','gift','distribution','bonus']):
-                        self.db.save_trade({'id':f"{name}_{i['id']}", 'date':i['datetime'], 'source':src, 'action':'INCOME', 'coin':i['currency'], 'amount':float(i['amount']), 'price_usd':0.0, 'fee':0, 'batch_id':'LEDGER'})
+                    if any(x in t for x in ['staking','reward','dividend','airdrop','promo']):
+                        self.db.save_trade({'id':f"{name}_{i['id']}", 'date':i['datetime'], 'source':f"{name.upper()}_LEDGER", 'action':'INCOME', 'coin':i['currency'], 'amount':float(i['amount']), 'price_usd':0.0, 'fee':0, 'batch_id':'LEDGER'})
                 self.db.commit()
         except: pass
 
@@ -298,7 +263,6 @@ class PriceFetcher:
         self.stables = {'USD','USDC','USDT','DAI','BUSD','PYUSD','GUSD'}
         self.cache_file = BASE_DIR/'stablecoins_cache.json'
         self._load_cache()
-
     def _load_cache(self):
         if self.cache_file.exists():
             try:
@@ -307,7 +271,6 @@ class PriceFetcher:
                     return
             except: pass
         self._fetch_api()
-
     def _fetch_api(self):
         try:
             r = requests.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category=stablecoins", timeout=5)
@@ -315,14 +278,12 @@ class PriceFetcher:
                 for c in r.json(): self.stables.add(c['symbol'].upper())
                 with open(self.cache_file,'w') as f: json.dump(list(self.stables),f)
         except: pass
-
     def get_price(self, s, d):
         if s.upper() in self.stables: return 1.0
         try:
             k = f"{s}_{d.date()}"
             if k in self.cache: return self.cache[k]
-            def dp(): return yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False)
-            df = NetworkRetry.run(dp, retries=3)
+            df = NetworkRetry.run(lambda: yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False), retries=3)
             if not df.empty: 
                 v=df['Close'].iloc[0]; self.cache[k]=float(v.iloc[0] if isinstance(v,pd.Series) else v)
                 return self.cache[k]
@@ -358,8 +319,8 @@ class WalletAuditor:
         for _, r in df.iterrows():
             c = r['coin']
             if c not in self.calc: self.calc[c] = 0.0
-            if r['action'] in ['BUY','INCOME']: self.calc[c] += r['amount']
-            elif r['action'] in ['SELL','SPEND']: self.calc[c] -= r['amount']
+            if r['action'] in ['BUY','INCOME','DEPOSIT']: self.calc[c] += r['amount']
+            elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: self.calc[c] -= r['amount']
 
         with open(WALLETS_FILE) as f: wallets = json.load(f)
         for coin, addrs in wallets.items():
@@ -410,29 +371,112 @@ class WalletAuditor:
                 logger.info(f"{c:<5} | {self.calc.get(c,0):<10.4f} | {self.real.get(c,0):<10.4f} | {stat}")
 
 # ==========================================
-# 5. TAX ENGINE
+# 5. TAX ENGINE (V26: Auto-Carryover Import)
 # ==========================================
 class TaxEngine:
     def __init__(self, db, y):
         self.db, self.year, self.tt, self.inc, self.hold = db, int(y), [], [], {}
+        self.us_losses = {'short': 0.0, 'long': 0.0} 
+        self.prior_carryover = {'short': 0.0, 'long': 0.0}
+        self.wash_sale_log = []
+        
+        # AUTO IMPORT PRIOR YEAR LOSSES
+        self._load_prior_year_data()
+
+    def _load_prior_year_data(self):
+        """Looks for previous year's Loss Report and imports Carryover."""
+        prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
+        if prior_file.exists():
+            try:
+                df = pd.read_csv(prior_file)
+                # Parse Short Term Carryover
+                row_short = df[df['Item'] == 'Short-Term Carryover to Next Year']
+                if not row_short.empty:
+                    val = float(row_short['Value'].iloc[0])
+                    self.prior_carryover['short'] = val
+                    self.us_losses['short'] += val # Apply immediately as starting loss
+                    logger.info(f"   [INFO] Imported Short-Term Carryover from {self.year-1}: ${val}")
+
+                # Parse Long Term Carryover
+                row_long = df[df['Item'] == 'Long-Term Carryover to Next Year']
+                if not row_long.empty:
+                    val = float(row_long['Value'].iloc[0])
+                    self.prior_carryover['long'] = val
+                    self.us_losses['long'] += val # Apply immediately
+                    logger.info(f"   [INFO] Imported Long-Term Carryover from {self.year-1}: ${val}")
+                    
+                # Compatibility with V24 (Legacy lumped carryover)
+                if row_short.empty and row_long.empty:
+                    row_legacy = df[df['Item'] == 'Carryover Loss to Next Year']
+                    if not row_legacy.empty:
+                        val = float(row_legacy['Value'].iloc[0])
+                        self.prior_carryover['long'] += val # Assume Long if unknown
+                        self.us_losses['long'] += val
+                        logger.info(f"   [INFO] Imported Legacy Carryover from {self.year-1}: ${val}")
+            except Exception as e:
+                logger.warning(f"   [WARN] Failed to read prior year carryover: {e}")
 
     def run(self):
         logger.info(f"--- 5. REPORT ({self.year}) ---")
         df = self.db.get_all()
+        all_buys = df[df['action'].isin(['BUY', 'INCOME'])]
+        all_buys_dict = {}
+        for _, r in all_buys.iterrows():
+            c = r['coin']
+            if c not in all_buys_dict: all_buys_dict[c] = []
+            all_buys_dict[c].append(pd.to_datetime(r['date']))
+
         for _, t in df.iterrows():
             d = pd.to_datetime(t['date'])
             if d.year > self.year: continue
             is_yr = (d.year == self.year)
+            
             if t['action'] in ['BUY','INCOME']:
                 c = (t['amount']*t['price_usd'])+t['fee']
                 self._add(t['coin'], t['amount'], c/t['amount'] if t['amount'] else 0, d)
-                if is_yr and t['action']=='INCOME': self.inc.append({'Date':d.date(),'Coin':t['coin'],'Amt':t['amount'],'USD':round(t['amount']*t['price_usd'],2)})
-            elif t['action'] in ['SELL','SPEND']:
+                if is_yr and t['action']=='INCOME': 
+                    self.inc.append({'Date':d.date(),'Coin':t['coin'],'Amt':t['amount'],'USD':round(t['amount']*t['price_usd'],2)})
+
+            elif t['action'] == 'DEPOSIT':
+                self._add(t['coin'], t['amount'], 0, d) 
+
+            elif t['action'] in ['SELL','SPEND','LOSS']:
                 net = (t['amount']*t['price_usd'])-t['fee']
+                if t['action'] == 'LOSS': net = 0.0
+                
                 b, term, acq = self._sell(t['coin'], t['amount'], d)
+                
+                gain = net - b
+                wash_disallowed = 0.0
+                
+                if gain < 0:
+                    window_start = d - timedelta(days=30)
+                    window_end = d + timedelta(days=30)
+                    if t['coin'] in all_buys_dict:
+                        nearby_buys = [bd for bd in all_buys_dict[t['coin']] if window_start <= bd <= window_end and bd != d]
+                        if nearby_buys:
+                            wash_disallowed = abs(gain)
+                            if is_yr:
+                                self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Loss Disallowed': round(wash_disallowed, 2), 'Note': 'Loss disallowed/deferred (Wash Sale).'})
+                                logger.warning(f"   [WASH SALE] {t['coin']} loss disallowed.")
+                
+                final_basis = b
+                if wash_disallowed > 0: final_basis = net 
+                
                 if is_yr: 
                     desc = f"{t['amount']} {t['coin']}" + (" (Fee)" if t['source']=='TRANSFER_FEE' else "")
-                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':round(net,2), 'Cost Basis':round(b,2), 'Term': term})
+                    if t['action'] == 'LOSS': desc = f"LOSS: {desc}"
+                    if wash_disallowed > 0: desc += " (WASH SALE)"
+                    
+                    realized_gain = net - final_basis
+                    if realized_gain < 0:
+                        if term == 'Short': self.us_losses['short'] += abs(realized_gain)
+                        else: self.us_losses['long'] += abs(realized_gain)
+
+                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':round(net,2), 'Cost Basis':round(final_basis,2), 'Term': term})
+
+            elif t['action'] == 'WITHDRAWAL':
+                self._sell(t['coin'], t['amount'], d)
 
     def _add(self, c, a, p, d):
         if c not in self.hold: self.hold[c]=[]
@@ -445,13 +489,63 @@ class TaxEngine:
             l=self.hold[c][0]; ds.add(l['d'])
             if l['a']<=rem: b+=l['a']*l['p']; rem-=l['a']; self.hold[c].pop(0)
             else: b+=rem*l['p']; l['a']-=rem; rem=0
-        return b, 'Long' if ds and (d-min(ds)).days>365 else 'Short', list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
+        term = 'Short'
+        if ds:
+            earliest = min(ds)
+            if (d - earliest).days > 365: term = 'Long'
+        return b, term, list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
 
     def export(self):
         yd = OUTPUT_DIR/f"Year_{self.year}"
         if not yd.exists(): yd.mkdir(parents=True)
         if self.tt: pd.DataFrame(self.tt).to_csv(yd/'GENERIC_TAX_CAP_GAINS.csv', index=False)
         if self.inc: pd.DataFrame(self.inc).to_csv(yd/'INCOME_REPORT.csv', index=False)
+        
+        # --- US LOSS & CARRYOVER ANALYSIS ---
+        short_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Short' and (x['Proceeds']-x['Cost Basis'])>0])
+        long_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Long' and (x['Proceeds']-x['Cost Basis'])>0])
+        
+        # Start with Gains, Subtract Losses (Including Carryover)
+        net_short = short_gain - self.us_losses['short']
+        net_long = long_gain - self.us_losses['long']
+        
+        # Combine Nets to determine deduction
+        total_net = net_short + net_long
+        deduction = 0.0
+        carryover_short = 0.0
+        carryover_long = 0.0
+        
+        if total_net < 0:
+            deduction = min(abs(total_net), 3000.0)
+            remaining_loss = abs(total_net) - deduction
+            
+            # Attribute remaining loss back to Short/Long for next year
+            # Logic: Deduction uses Short Term first, then Long Term.
+            # (Simplified attribution for CSV reporting)
+            if net_short < 0 and net_long < 0:
+                # Both lost. Split remaining proportionally or simply?
+                # Precise IRS rules are complex. Here we prioritize Short Term carryover.
+                carryover_short = remaining_loss if abs(net_short) > remaining_loss else abs(net_short)
+                carryover_long = remaining_loss - carryover_short
+            elif net_short < 0:
+                carryover_short = remaining_loss
+            elif net_long < 0:
+                carryover_long = remaining_loss
+
+        loss_report = [
+            {'Item': 'Prior Year Short-Term Carryover', 'Value': round(self.prior_carryover['short'], 2)},
+            {'Item': 'Prior Year Long-Term Carryover', 'Value': round(self.prior_carryover['long'], 2)},
+            {'Item': 'Current Year Net Short-Term', 'Value': round(net_short, 2)},
+            {'Item': 'Current Year Net Long-Term', 'Value': round(net_long, 2)},
+            {'Item': 'Total Net Capital Gain/Loss', 'Value': round(total_net, 2)},
+            {'Item': 'Allowable Deduction (Form 1040)', 'Value': round(deduction * -1, 2)},
+            {'Item': 'Short-Term Carryover to Next Year', 'Value': round(carryover_short, 2)},
+            {'Item': 'Long-Term Carryover to Next Year', 'Value': round(carryover_long, 2)}
+        ]
+        pd.DataFrame(loss_report).to_csv(yd/'US_TAX_LOSS_ANALYSIS.csv', index=False)
+        
+        if self.wash_sale_log: pd.DataFrame(self.wash_sale_log).to_csv(yd/'WASH_SALE_REPORT.csv', index=False)
+
         snap = []
         for c, ls in self.hold.items():
             t = sum(l['a'] for l in ls)
@@ -468,29 +562,22 @@ if __name__ == "__main__":
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     try: set_run_context('direct')
     except: RUN_CONTEXT = 'direct'
-    logger.info("--- CRYPTO TAX MASTER V22 (Smart Ingestor) ---")
-    
-    # Initialize folders ONLY when running directly
+    logger.info("--- CRYPTO TAX MASTER V26 (Auto-Carryover) ---")
     initialize_folders()
-
     try:
         if not KEYS_FILE.exists():
             logger.critical("Missing config. Run 'python Setup.py' first.")
             raise ApiAuthError("Missing keys")
-
         db = DatabaseManager()
         ingest = Ingestor(db)
         ingest.run_csv_scan()
         ingest.run_api_sync()
-
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():
             p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
             if p>0: db.update_price(r['id'], p)
         db.commit()
-
         WalletAuditor(db).run_audit()
-
         y = input("\nEnter Tax Year: ")
         if y.isdigit():
             eng = TaxEngine(db, y)
