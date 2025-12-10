@@ -77,7 +77,7 @@ def main():
     # Includes Moralis (Required for EVM/Solana audit) and Blockchair (Optional)
     # Plus every Certified/Supported Exchange
     api_data = {
-        "_INSTRUCTIONS": "Enter Read-Only keys. Moralis is REQUIRED for Audit (EVM/Solana). Blockchair is OPTIONAL (BTC/UTXO).",
+        "_INSTRUCTIONS": "Enter READ-ONLY API keys for each service. For exchanges provide 'apiKey' and 'secret'. Some exchanges also require 'password' (e.g., OKX, KuCoin). ALWAYS create keys with read-only or withdrawal-disabled permissions. Moralis is REQUIRED for EVM/Solana audit (get a free key from https://moralis.io). Blockchair is OPTIONAL for UTXO chains. Do NOT paste private keys or secrets from unknown sources.",
         
         # --- AUDIT PROVIDERS ---
         "moralis": {"apiKey": "PASTE_MORALIS_KEY_HERE"},
@@ -154,7 +154,7 @@ def main():
 
     # --- 2. Wallets (All Chains) ---
     wallet_data = {
-        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use Moralis (EVM/SOL) and Blockchair (BTC/UTXO).",
+        "_INSTRUCTIONS": "Paste PUBLIC wallet addresses per chain as lists. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. Do NOT paste private keys. For Monero (XMR) a view key may be required by some explorers; see project docs.",
         
         # --- UTXO CHAINS (Blockchair) ---
         "BTC": ["PASTE_BTC_ADDRESS"],
@@ -192,7 +192,7 @@ def main():
 
     # --- 3. User Config ---
     config_data = {
-        "_INSTRUCTIONS": "To run Audit, you need a Moralis Key in api_keys.json.",
+        "_INSTRUCTIONS": "General runtime options and API timeouts. Key fields: 'general.run_audit' (True/False to enable chain audits), 'general.create_db_backups' (True/False), 'performance.respect_free_tier_limits' (pause between requests), 'performance.api_timeout_seconds' (network timeout seconds), 'logging.compress_older_than_days' (compress logs older than this many days). Ensure Moralis key is present in api_keys.json to enable EVM/Solana audits.",
         "general": {
             "run_audit": True,
             "create_db_backups": True
