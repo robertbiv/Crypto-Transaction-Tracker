@@ -125,15 +125,15 @@ python -m unittest unit_test.TestUSComprehensiveCompliance -v
 
 | File | Purpose | Status |
 |------|---------|--------|
-| **unit_test.py** | 148 tests across 45 classes | ✅ Complete |
+| **tests/unit_test.py** | 148 tests across 45 classes | ✅ Complete |
 | **Crypto_Tax_Engine.py** | Core tax calculation engine | ✅ Tested (100%) |
 | **Auto_Runner.py** | Workflow orchestration | ✅ Tested |
 | **Setup.py** | Initial configuration | ✅ Tested |
 | **README.md** | Comprehensive documentation | ✅ Updated |
 | **requirements.txt** | Python dependencies | ✅ Current |
-| **TEST_COVERAGE_SUMMARY.md** | Detailed coverage report | ✅ New |
-| **WALLET_FORMAT_COMPATIBILITY.md** | Wallet format docs | ✅ Current |
-| **test_wallet_compatibility.py** | Wallet format tests | ✅ Current |
+| **tests/TEST_COVERAGE_SUMMARY.md** | Detailed coverage report | ✅ Current |
+| **docs/WALLET_FORMAT_COMPATIBILITY.md** | Wallet format docs | ✅ Current |
+| **tests/test_wallet_compatibility.py** | Wallet format tests | ✅ Current |
 
 ---
 

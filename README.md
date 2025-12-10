@@ -55,13 +55,20 @@ The script automatically builds and maintains this structure:
 ├── README.md                      # [DOCS] This manual
 ├── requirements.txt               # [DOCS] Python dependencies list
 ├── .gitignore                     # [DOCS] Git ignore file (Crucial for security)
-├── Supported Blockchains.md       # [DOCS] List of supported chains
-├── Supported Exchanges.md         # [DOCS] List of supported exchanges
 │
 ├── Setup.py                       # [USER] Run once to initialize folders/files
+├── docs/                          # [DOCS] Supporting documentation
+│   ├── Supported Blockchains.md   # [DOCS] List of supported chains
+│   ├── Supported Exchanges.md     # [DOCS] List of supported exchanges
+│   └── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
+├── tests/                         # [USER] Test suite & documentation
+│   ├── unit_test.py               # [USER] Verification suite (148 tests, 45 test classes)
+│   ├── test_wallet_compatibility.py # [USER] Wallet format compatibility tests
+│   ├── TEST_COVERAGE_SUMMARY.md   # [DOCS] Detailed test coverage breakdown
+│   └── FINAL_STATUS.md            # [DOCS] Executive summary & checklist
+│
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
-├── unit_test.py                   # [USER] Verification suite (148 tests, 45 test classes)
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
 ├── wallets.json                   # [USER] Your Public Addresses (For Audit)
@@ -75,9 +82,9 @@ The script automatically builds and maintains this structure:
 ├── processed_archive/             # [AUTO] Old CSVs move here after processing
 │
 └── outputs/
-    ├── logs/                      # [AUTO] Timestamped text logs of every run
-    ├── Year_2024/                 # [AUTO] Finalized Tax Reports
-    └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
+   ├── logs/                      # [AUTO] Timestamped text logs of every run
+   ├── Year_2024/                 # [AUTO] Finalized Tax Reports
+   └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
 ```
 
 ## **🔗 APIs Used & Privacy Policies**
@@ -181,14 +188,14 @@ python Auto_Runner.py
 To run the comprehensive test suite and verify the math is perfect before filing:
 
 ```bash
-python unit_test.py
+python tests/unit_test.py
 ```
 
 This runs **148 test methods** across **45 test classes** including edge cases, random scenarios, US tax compliance verification, and graceful error handling.
 
 **For detailed test coverage information**, see:
-- `TEST_COVERAGE_SUMMARY.md` - Comprehensive breakdown of all 148 tests by component and tax rule
-- `FINAL_STATUS.md` - Executive summary and production readiness checklist
+- `tests/TEST_COVERAGE_SUMMARY.md` - Comprehensive breakdown of all 148 tests by component and tax rule
+- `tests/FINAL_STATUS.md` - Executive summary and production readiness checklist
 
 ## **📂 Output Files (outputs/Year_YYYY/)**
 
