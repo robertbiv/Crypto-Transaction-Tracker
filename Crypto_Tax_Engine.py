@@ -10,8 +10,10 @@ import random
 import requests
 import yfinance as yf
 import gzip
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
+from decimal import Decimal, ROUND_HALF_UP
 import logging
 
 # ==========================================
@@ -85,6 +87,30 @@ def load_config():
     except: return defaults
 
 GLOBAL_CONFIG = load_config()
+
+# ==========================================
+# UTILITY FUNCTIONS FOR DECIMAL ARITHMETIC
+# ==========================================
+def to_decimal(value):
+    """Safely convert float/int/str to Decimal to avoid IEEE 754 precision loss"""
+    if isinstance(value, Decimal):
+        return value
+    elif isinstance(value, str):
+        try:
+            return Decimal(value)
+        except:
+            return Decimal('0')
+    elif isinstance(value, (int, float)):
+        return Decimal(str(value))  # Convert via string, not direct float
+    else:
+        return Decimal('0')
+
+def round_decimal(value, places=8):
+    """Round Decimal to specified decimal places"""
+    if not isinstance(value, Decimal):
+        value = to_decimal(value)
+    quantizer = Decimal(10) ** -places
+    return value.quantize(quantizer, rounding=ROUND_HALF_UP)
 
 class NetworkRetry:
     @staticmethod
@@ -479,17 +505,20 @@ class StakeTaxCSVManager:
                 # Parse protocol
                 protocol = str(r.get('protocol', r.get('source', 'STAKING'))).lower().strip()
                 
-                # Generate dedup hash: hash(date + coin + amount + protocol)
-                dedup_key = f"{d.date()}_{coin}_{amount:.8f}_{protocol}"
+                # Generate dedup hash: hash(datetime with HH:MM:SS + coin + amount + protocol)
+                # This prevents false positives when same reward received multiple times per day
+                time_str = d.strftime('%Y-%m-%d %H:%M:%S') if hasattr(d, 'strftime') else str(d)
+                dedup_key = f"{time_str}_{coin}_{amount:.8f}_{protocol}"
                 dedup_hash = hashlib.sha256(dedup_key.encode()).hexdigest()[:16]
                 
-                # Check if already imported (via STAKETAX or any other source on same date/coin/amount/protocol)
+                # Check if already imported (via STAKETAX or any other source on same datetime/coin/amount/protocol)
                 # This prevents duplicates from CCXT ledger sync + StakeTaxCSV
+                # Note: Now includes time to handle multiple rewards on same day
                 existing = self.db.conn.execute(
                     """SELECT id FROM trades 
-                       WHERE DATE(date) = ? AND coin = ? AND ABS(amount - ?) < 0.00001 
+                       WHERE datetime(date) = datetime(?) AND coin = ? AND ABS(amount - ?) < 0.00001 
                        AND action = 'INCOME' AND source IN ('STAKETAX', 'KRAKEN_LEDGER', 'BINANCE_LEDGER', 'KUCOIN_LEDGER', 'OKEX_LEDGER')""",
-                    (d.date(), coin, amount)
+                    (d, coin, amount)
                 ).fetchone()
                 
                 if existing:
@@ -571,16 +600,51 @@ class PriceFetcher:
                 with open(self.cache_file,'w') as f: json.dump(list(self.stables),f)
         except: pass
     def get_price(self, s, d):
-        if s.upper() in self.stables: return 1.0
+        """Fetch historical price with multiple fallback strategies.
+        
+        Returns Decimal to avoid IEEE 754 floating point errors.
+        Fallback chain: Cache -> YFinance -> Adjacent dates -> CoinGecko -> Error flag
+        """
+        if s.upper() in self.stables: 
+            return Decimal('1.0')
+        
         try:
             k = f"{s}_{d.date()}"
-            if k in self.cache: return self.cache[k]
-            df = NetworkRetry.run(lambda: yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False), retries=3)
-            if not df.empty: 
-                v=df['Close'].iloc[0]; self.cache[k]=float(v.iloc[0] if isinstance(v,pd.Series) else v)
+            if k in self.cache: 
                 return self.cache[k]
-        except: pass
-        return 0.0
+            
+            # Try YFinance with 3-day window
+            df = NetworkRetry.run(
+                lambda: yf.download(f"{s.upper()}-USD", start=d, end=d+timedelta(days=3), progress=False), 
+                retries=3
+            )
+            if not df.empty and not df['Close'].isna().all(): 
+                v = df['Close'].iloc[0]
+                price_float = float(v.iloc[0] if isinstance(v, pd.Series) else v)
+                if not (price_float == 0.0 or pd.isna(price_float)):
+                    self.cache[k] = Decimal(str(price_float))
+                    return self.cache[k]
+        except Exception as e:
+            logger.warning(f"   YFinance failed for {s} on {d.date()}: {e}")
+        
+        # Fallback: Try CoinGecko for historical data (more reliable)
+        try:
+            url = f"https://api.coingecko.com/api/v3/coins/{s.lower()}/history?date={d.strftime('%d-%m-%Y')}"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                price_data = r.json().get('market_data', {}).get('current_price', {})
+                if 'usd' in price_data and price_data['usd'] and price_data['usd'] > 0:
+                    price = Decimal(str(price_data['usd']))
+                    self.cache[k] = price
+                    logger.info(f"   Fallback: Got {s} price from CoinGecko on {d.date()}: {price}")
+                    return price
+        except Exception as e:
+            logger.warning(f"   CoinGecko fallback failed for {s}: {e}")
+        
+        # Last resort: Log warning but do NOT return 0.0 (which would cause tax error)
+        logger.warning(f"   ⚠ WARNING: Could not determine price for {s} on {d.date()}. This may result in incorrect tax calculations. User should manually review.")
+        # Return None to signal missing data rather than 0.0 (which is incorrect)
+        return None
 
 # ==========================================
 # 4. AUDITOR (V29: FBAR Reporting Support)
@@ -652,7 +716,9 @@ class WalletAuditor:
                 try:
                     if coin_key in self.MORALIS_CHAINS: tot += self.check_moralis(coin_key, addr)
                     elif coin_key in self.BLOCKCHAIR_CHAINS: tot += self.check_blockchair(coin_key, addr)
-                except Exception as e: logger.warning(f"      [!] Failed: {addr[:6]}... ({e})")
+                except Exception as e: 
+                    # Log only the exception type, not the full exception (which may contain sensitive data like API keys)
+                    logger.warning(f"      [!] Failed: {addr[:6]}... ({type(e).__name__})")
                 if GLOBAL_CONFIG['performance']['respect_free_tier_limits']: time.sleep(1.0)
             self.real[coin_key] = tot
         self.print_report()
@@ -692,13 +758,21 @@ class WalletAuditor:
         return (float(r.json().get('balance', 0)) / 10**18) if r.status_code == 200 else 0.0
 
     def check_blockchair(self, coin, addr):
+        """Query Blockchair for wallet balance. NEVER log the API key."""
         chain = self.BLOCKCHAIR_CHAINS[coin]
         url = f"https://api.blockchair.com/{chain}/dashboards/address/{addr}"
-        if self.blockchair_key and "PASTE" not in self.blockchair_key: url += f"?key={self.blockchair_key}"
-        r = requests.get(url, timeout=15)
-        if r.status_code == 200:
-            bal = float(r.json().get('data', {}).get(addr, {}).get('address', {}).get('balance', 0))
-            return bal / (10 ** self.DECIMALS.get(coin, 8))
+        if self.blockchair_key and "PASTE" not in self.blockchair_key: 
+            url += f"?key={self.blockchair_key}"
+        
+        try:
+            r = requests.get(url, timeout=15)
+            if r.status_code == 200:
+                bal = float(r.json().get('data', {}).get(addr, {}).get('address', {}).get('balance', 0))
+                return bal / (10 ** self.DECIMALS.get(coin, 8))
+        except Exception as e:
+            # CRITICAL: Never log the full exception here as it may contain the URL with API key
+            logger.warning(f"      [!] Blockchair query failed for {coin} {addr[:6]}... : {type(e).__name__}")
+        
         return 0.0
 
     def print_report(self):
@@ -778,9 +852,20 @@ class TaxEngine:
                     if t['coin'] in all_buys_dict:
                         nearby_buys = [bd for bd in all_buys_dict[t['coin']] if window_start <= bd <= window_end and bd != d]
                         if nearby_buys:
-                            wash_disallowed = abs(gain)
-                            if is_yr:
-                                self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Loss Disallowed': round(wash_disallowed, 2), 'Note': 'Loss disallowed (Wash Sale).'})
+                            # IRS Wash Sale Rule: Loss is disallowed only to the extent of replacement shares (proportional)
+                            # Get replacement quantity within 30 days after sale
+                            replacement_qty = 0.0
+                            for buy_date in nearby_buys:
+                                if buy_date > d:  # Only count buys AFTER the sale
+                                    buy_records = df[(df['coin'] == t['coin']) & (pd.to_datetime(df['date']) == buy_date) & (df['action'].isin(['BUY', 'INCOME', 'GIFT_IN']))]
+                                    replacement_qty += buy_records['amount'].sum()
+                            
+                            # Calculate proportional loss disallowance
+                            if replacement_qty > 0.0:
+                                proportion = min(replacement_qty / t['amount'], 1.0)  # Cap at 1.0 (100%)
+                                wash_disallowed = abs(gain) * proportion
+                                if is_yr:
+                                    self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Amount Sold': round(t['amount'], 8), 'Replacement Qty': round(replacement_qty, 8), 'Loss Disallowed': round(wash_disallowed, 2), 'Note': f'Loss disallowed proportionally ({proportion:.2%}) per IRS Wash Sale rules.'})
                 
                 final_basis = b
                 if wash_disallowed > 0: final_basis = net 
