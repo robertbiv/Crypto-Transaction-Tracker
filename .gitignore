@@ -1,5 +1,5 @@
 # Ignore compiled Python files
-.venu/
+.venv/
 # Security: NEVER upload these
 api_keys.json
 wallets.json
