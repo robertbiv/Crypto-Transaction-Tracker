@@ -50,6 +50,10 @@ The runner creates and maintains these files/folders:
 ```
 /My_Crypto_Tax_Folder
 │
+├── README.md                      # [DOCS] This manual
+├── Supported Blockchains.md       # [DOCS] List of supported chains
+├── Supported Exchanges.md         # [DOCS] List of supported exchanges
+│
 ├── Setup.py                       # [USER] Run once to initialize folders/files
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)

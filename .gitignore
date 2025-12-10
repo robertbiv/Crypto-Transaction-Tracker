@@ -1,0 +1,26 @@
+# Ignore compiled Python files
+.venu/
+# Security: NEVER upload these
+api_keys.json
+wallets.json
+config.json
+
+# Data: Local databases and caches
+crypto_master.db
+crypto_master.db.bak
+stablecoins_cache.json
+*.db
+*.bak
+*CORRUPT*
+
+# Folders: User data that should stay local
+inputs/
+outputs/
+processed_archive/
+logs/
+
+# Python: System files
+__pycache__/
+*.pyc
+.DS_Store
+.env
