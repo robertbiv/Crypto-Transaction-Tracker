@@ -9,6 +9,8 @@ import os
 import random
 import math
 import importlib
+# --- CRITICAL FIX: Explicitly import requests for exception mocking ---
+import requests 
 from pathlib import Path
 from unittest.mock import patch, MagicMock, SideEffect
 from io import StringIO
@@ -19,7 +21,7 @@ import Crypto_Tax_Engine as app
 import Setup as setup_script
 import Auto_Runner
 
-# --- 1. TRUSTED SHADOW CALCULATOR (The "Truth") ---
+# ... (ShadowFIFO class same as before) ...
 class ShadowFIFO:
     def __init__(self):
         self.queues = {}
@@ -54,11 +56,8 @@ class ShadowFIFO:
         gain = proceeds - total_basis
         self.realized_gains.append({'coin': coin, 'proceeds': proceeds, 'basis': total_basis, 'gain': gain, 'date': date})
 
-# --- 2. CONFIGURATION HANDLING TESTS (UPDATED) ---
-class TestConfigHandling(unittest.TestCase):
-    """
-    Tests how the engine reacts to various user configurations (Audit On/Off, Missing Keys, Throttling).
-    """
+# --- COMPREHENSIVE US TAX LAW COMPLIANCE ---
+class TestUSComprehensiveCompliance(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
@@ -66,90 +65,115 @@ class TestConfigHandling(unittest.TestCase):
         app.BASE_DIR = self.test_path
         app.INPUT_DIR = self.test_path / 'inputs'
         app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'config_test.db'
+        app.DB_FILE = self.test_path / 'us_law_test.db'
         app.KEYS_FILE = self.test_path / 'api_keys.json'
         app.WALLETS_FILE = self.test_path / 'wallets.json'
         app.CONFIG_FILE = self.test_path / 'config.json'
         app.initialize_folders()
         self.db = app.DatabaseManager()
-        self.held_stdout = sys.stdout
-        sys.stdout = StringIO() # Capture logs
-
     def tearDown(self):
-        sys.stdout = self.held_stdout
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
+    def test_gas_fees_are_taxable_events(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'TRANSFER_FEE', 'action':'SELL', 'coin':'ETH', 'amount':0.01, 'price_usd':2000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        sale = engine.tt[0]
+        self.assertIn("(Fee)", sale['Description'])
+        self.assertEqual(sale['Proceeds'], 20.0)
+        self.assertEqual(sale['Cost Basis'], 10.0)
+    def test_income_classification(self):
+        self.db.save_trade({'id':'1', 'date':'2023-03-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':0.1, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        self.assertEqual(len(engine.inc), 1)
+        self.assertEqual(engine.inc[0]['USD'], 2000.0)
+        self.assertEqual(len(engine.tt), 0)
+    def test_crypto_to_crypto_taxability(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'SWAP', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        self.assertEqual(engine.tt[0]['Proceeds'], 15000.0)
+        self.assertEqual(engine.tt[0]['Cost Basis'], 10000.0)
+    def test_spending_crypto(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.5, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'SPEND', 'action':'SPEND', 'coin':'BTC', 'amount':0.5, 'price_usd':12000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        self.assertEqual(engine.tt[0]['Proceeds'], 6000.0)
+        self.assertEqual(engine.tt[0]['Cost Basis'], 5000.0)
 
-    def test_audit_disabled_in_config(self):
-        app.GLOBAL_CONFIG['general']['run_audit'] = False
-        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"]}, f)
-        auditor = app.WalletAuditor(self.db)
-        with patch.object(auditor, 'check_blockchair') as mock_bc:
-            with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
-                auditor.run_audit()
-            self.assertTrue(any("AUDIT SKIPPED" in log for log in cm.output))
-            mock_bc.assert_not_called()
+# --- US LOSS TESTS ---
+class TestUSLosses(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'loss_limits.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+    def test_loss_carryover_logic(self):
+        self.db.save_trade({'id':'1', 'date':'2022-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2022-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':0.0, 'fee':0, 'batch_id':'2'})
+        self.db.save_trade({'id':'3', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'3'})
+        self.db.save_trade({'id':'4', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':11000.0, 'fee':0, 'batch_id':'4'})
+        self.db.commit()
+        eng1 = app.TaxEngine(self.db, 2022)
+        eng1.run()
+        eng1.export()
+        eng2 = app.TaxEngine(self.db, 2023)
+        eng2.run()
+        eng2.export()
+        report_path = app.OUTPUT_DIR / "Year_2023" / "US_TAX_LOSS_ANALYSIS.csv"
+        self.assertTrue(report_path.exists())
+        df = pd.read_csv(report_path)
+        prior_st = float(df[df['Item'] == 'Prior Year Short-Term Carryover']['Value'].iloc[0])
+        self.assertEqual(prior_st, 7000.0)
+        total_net = float(df[df['Item'] == 'Total Net Capital Gain/Loss']['Value'].iloc[0])
+        self.assertEqual(total_net, 3000.0)
+    def test_wash_sale_report_creation(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-01-10', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
+        self.db.save_trade({'id':'3', 'date':'2023-01-15', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        engine.export()
+        ws_report = app.OUTPUT_DIR / "Year_2023" / "WASH_SALE_REPORT.csv"
+        self.assertTrue(ws_report.exists())
+    def test_wash_sale_across_years(self):
+        self.db.save_trade({'id':'1', 'date':'2023-12-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-12-25', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
+        self.db.save_trade({'id':'3', 'date':'2024-01-05', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        engine.export()
+        tt_report = app.OUTPUT_DIR / "Year_2023" / "TURBOTAX_CAP_GAINS.csv"
+        df = pd.read_csv(tt_report)
+        row = df.iloc[0]
+        self.assertEqual(row['Proceeds'], 10000.0)
+        self.assertEqual(row['Cost Basis'], 10000.0)
+        self.assertIn("WASH SALE", row['Description'])
 
-    def test_audit_enabled_but_no_keys(self):
-        app.GLOBAL_CONFIG['general']['run_audit'] = True
-        with open(app.KEYS_FILE, 'w') as f: 
-            json.dump({"moralis": {"apiKey": "PASTE_KEY"}, "blockchair": {"apiKey": ""}}, f)
-        with open(app.WALLETS_FILE, 'w') as f: json.dump({"ETH": ["0x123"]}, f)
-        auditor = app.WalletAuditor(self.db)
-        with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
-            auditor.run_audit()
-        self.assertTrue(any("RUNNING AUDIT" in log for log in cm.output))
-
-    def test_throttling_respects_config(self):
-        app.GLOBAL_CONFIG['general']['run_audit'] = True
-        app.GLOBAL_CONFIG['performance']['respect_free_tier_limits'] = True
-        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["addr1", "addr2"]}, f)
-        auditor = app.WalletAuditor(self.db)
-        with patch('time.sleep') as mock_sleep:
-            with patch.object(auditor, 'check_blockchair', return_value=0):
-                auditor.run_audit()
-            mock_sleep.assert_called()
-
-    @patch('requests.get')
-    def test_blockchair_optionality(self, mock_get):
-        """
-        Scenario: User has BTC wallet but NO Blockchair Key.
-        Expected: Engine attempts query WITHOUT key param.
-        """
-        app.GLOBAL_CONFIG['general']['run_audit'] = True
-        
-        # 1. Setup Keys (Blockchair key is empty/missing)
-        with open(app.KEYS_FILE, 'w') as f: 
-            json.dump({"blockchair": {"apiKey": "PASTE_KEY_OPTIONAL"}}, f)
-            
-        # 2. Setup Wallet
-        with open(app.WALLETS_FILE, 'w') as f: 
-            json.dump({"BTC": ["1A1z..."]}, f)
-            
-        # 3. Mock Response (Success)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"data": {"1A1z...": {"address": {"balance": 100000000}}}} # 1 BTC
-        mock_get.return_value = mock_response
-        
-        # 4. Run
-        auditor = app.WalletAuditor(self.db)
-        auditor.run_audit()
-        
-        # 5. Verify Call URL (Should NOT have ?key=...)
-        # We check the arguments passed to requests.get
-        args, kwargs = mock_get.call_args
-        url_called = args[0]
-        
-        # Should look like: https://api.blockchair.com/bitcoin/dashboards/address/1A1z...
-        self.assertIn("api.blockchair.com/bitcoin", url_called)
-        self.assertNotIn("?key=", url_called, "API Key param was included despite being empty/default!")
-        
-        # Verify balance was captured
-        self.assertEqual(auditor.real['BTC'], 1.0)
-
-# --- 3. REPORT VERIFICATION TESTS ---
+# --- REPORT VERIFICATION TESTS ---
 class TestReportVerification(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -194,7 +218,6 @@ class TestReportVerification(unittest.TestCase):
         df_snap = pd.read_csv(snap_file)
         self.assertEqual(df_snap[df_snap['Coin'] == 'BTC'].iloc[0]['Holdings'], 0.5)
 
-# --- 4. ARCHITECTURE STABILITY TESTS ---
 class TestArchitectureStability(unittest.TestCase):
     def test_import_order_resilience(self):
         for module in ['Crypto_Tax_Engine', 'Auto_Runner']:
@@ -209,7 +232,109 @@ class TestArchitectureStability(unittest.TestCase):
         re_app = sys.modules['Crypto_Tax_Engine']
         self.assertTrue(hasattr(re_app, 'TaxEngine'))
 
-# --- 5. SYSTEM INTERRUPTION & NETWORK TESTS ---
+class TestLendingLoss(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'loss_test.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+    def test_defaulted_loan_loss(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'LOSS', 'coin':'BTC', 'amount':1.0, 'price_usd':0.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        self.assertEqual(len(engine.tt), 1)
+        row = engine.tt[0]
+        self.assertIn("LOSS", row['Description'])
+        self.assertEqual(row['Proceeds'], 0.0)
+        self.assertEqual(row['Cost Basis'], 10000.0)
+    def test_borrow_repay_nontaxable(self):
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'DEPOSIT', 'coin':'ETH', 'amount':1.0, 'price_usd':0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2023-02-01', 'source':'M', 'action':'WITHDRAWAL', 'coin':'ETH', 'amount':1.0, 'price_usd':0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        self.assertEqual(len(engine.tt), 0)
+        self.assertEqual(len(engine.inc), 0)
+
+class TestConfigHandling(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'config_test.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+        self.held_stdout = sys.stdout
+        sys.stdout = StringIO()
+    def tearDown(self):
+        sys.stdout = self.held_stdout
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+    def test_audit_disabled_in_config(self):
+        app.GLOBAL_CONFIG['general']['run_audit'] = False
+        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"]}, f)
+        auditor = app.WalletAuditor(self.db)
+        with patch.object(auditor, 'check_blockchair') as mock_bc:
+            with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
+                auditor.run_audit()
+            self.assertTrue(any("AUDIT SKIPPED" in log for log in cm.output))
+            mock_bc.assert_not_called()
+    def test_audit_enabled_but_no_keys(self):
+        app.GLOBAL_CONFIG['general']['run_audit'] = True
+        with open(app.KEYS_FILE, 'w') as f: 
+            json.dump({"moralis": {"apiKey": "PASTE_KEY"}, "blockchair": {"apiKey": ""}}, f)
+        with open(app.WALLETS_FILE, 'w') as f: json.dump({"ETH": ["0x123"]}, f)
+        auditor = app.WalletAuditor(self.db)
+        with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
+            auditor.run_audit()
+        self.assertTrue(any("RUNNING AUDIT" in log for log in cm.output))
+    def test_throttling_respects_config(self):
+        app.GLOBAL_CONFIG['general']['run_audit'] = True
+        app.GLOBAL_CONFIG['performance']['respect_free_tier_limits'] = True
+        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["addr1", "addr2"]}, f)
+        auditor = app.WalletAuditor(self.db)
+        with patch('time.sleep') as mock_sleep:
+            with patch.object(auditor, 'check_blockchair', return_value=0):
+                auditor.run_audit()
+            mock_sleep.assert_called()
+    @patch('requests.get')
+    def test_blockchair_optionality(self, mock_get):
+        app.GLOBAL_CONFIG['general']['run_audit'] = True
+        with open(app.KEYS_FILE, 'w') as f: json.dump({"blockchair": {"apiKey": "PASTE_KEY_OPTIONAL"}}, f)
+        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1z..."]}, f)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {"1A1z...": {"address": {"balance": 100000000}}}}
+        mock_get.return_value = mock_response
+        auditor = app.WalletAuditor(self.db)
+        auditor.run_audit()
+        args, kwargs = mock_get.call_args
+        url_called = args[0]
+        self.assertIn("api.blockchair.com/bitcoin", url_called)
+        self.assertNotIn("?key=", url_called)
+        self.assertEqual(auditor.real['BTC'], 1.0)
+
 class TestSystemInterruptions(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -254,7 +379,6 @@ class TestSystemInterruptions(unittest.TestCase):
             self.assertGreaterEqual(mock_get.call_count, 5)
             mock_sleep.assert_called()
 
-# --- 6. SMART INGESTOR TESTS ---
 class TestSmartIngestor(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -293,7 +417,6 @@ class TestSmartIngestor(unittest.TestCase):
         df = self.db.get_all()
         self.assertEqual(len(df), 2)
 
-# --- 7. EXISTING TESTS (User Errors, Chaos) ---
 class TestUserErrors(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -446,6 +569,28 @@ class TestSafety(unittest.TestCase):
         app.initialize_folders()
         self.assertTrue(str(app.DB_FILE).startswith(self.test_dir))
 
+class TestSetupScript(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.root = Path(self.test_dir)
+        self.orig_base = setup_script.BASE_DIR
+        self.orig_req_dirs = setup_script.REQUIRED_DIRS
+        self.orig_keys = setup_script.KEYS_FILE
+        setup_script.BASE_DIR = self.root
+        setup_script.REQUIRED_DIRS = [self.root/'inputs', self.root/'outputs']
+        setup_script.KEYS_FILE = self.root/'api_keys.json'
+        self.held_stdout = sys.stdout
+        sys.stdout = StringIO()
+    def tearDown(self):
+        sys.stdout = self.held_stdout
+        shutil.rmtree(self.test_dir)
+        setup_script.BASE_DIR = self.orig_base
+        setup_script.REQUIRED_DIRS = self.orig_req_dirs
+        setup_script.KEYS_FILE = self.orig_keys
+    def test_json_generation_fresh(self):
+        setup_script.validate_json(setup_script.KEYS_FILE, {"k":"v"})
+        self.assertTrue(setup_script.KEYS_FILE.exists())
+
 if __name__ == '__main__':
-    print("--- RUNNING ULTIMATE SUITE (Chaos + Resilience + Config Handling + Blockchair Optionality) ---")
+    print("--- RUNNING ULTIMATE SUITE (Fixed Requests Import) ---")
     unittest.main()
