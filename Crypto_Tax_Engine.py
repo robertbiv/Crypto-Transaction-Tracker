@@ -555,7 +555,7 @@ if __name__ == "__main__":
 
     try:
         if not KEYS_FILE.exists():
-            logger.critical("Missing Config Files. Run 'setup_env.py' first.")
+            logger.critical("Missing configuration files. Run 'python Setup.py' to create templates (api_keys.json, wallets.json, config.json).")
             raise ApiAuthError("Missing api_keys.json or required config files")
 
         db = DatabaseManager()
@@ -571,14 +571,18 @@ if __name__ == "__main__":
 
         WalletAuditor(db).run_audit()
 
-        y = input("\nEnter Tax Year: ")
-        if y.isdigit():
-            eng = TaxEngine(db, y)
-            eng.run()
-            eng.export()
+        y = input("\nEnter Tax Year (YYYY) to generate reports, or press Enter to skip: ").strip()
+        if y:
+            if y.isdigit() and len(y) == 4:
+                eng = TaxEngine(db, y)
+                eng.run()
+                eng.export()
+            else:
+                logger.warning("Invalid year entered; skipping report generation.")
 
         db.close()
-        input("\nDone. Press Enter.")
+        if sys.stdin.isatty():
+            input("\nDone. Press Enter.")
 
     except ApiAuthError as e:
         logger.critical(f"Authentication/address failure: {e}")
@@ -589,4 +593,5 @@ if __name__ == "__main__":
         logger.exception(f"Unhandled error: {e}")
         try: db.close()
         except: pass
-        input("\nScript crashed. Check logs. Press Enter to close...")
+        if sys.stdin.isatty():
+            input("\nScript crashed. Check logs. Press Enter to close...")
