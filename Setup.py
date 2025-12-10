@@ -157,7 +157,7 @@ def main():
 
     # --- 2. Wallets (All Chains) ---
     wallet_data = {
-        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. Do NOT paste private keys.",
+        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. To add multiple wallets for the same coin, provide a JSON array of addresses, e.g. \"\"\"\n{\n  \"ETH\": [\"0xFirstAddr\", \"0xSecondAddr\"]\n}\n\"\"\"\nDo NOT paste private keys.",
         
         # --- UTXO CHAINS (Blockchair) ---
         "BTC": ["PASTE_BTC_ADDRESS"],
