@@ -1,38 +1,53 @@
-aiodns==3.6.0
-aiohappyeyeballs==2.6.1
-aiohttp==3.13.2
-aiosignal==1.4.0
-async-timeout==5.0.1
-attrs==25.4.0
-beautifulsoup4==4.14.3
-ccxt==4.5.26
-certifi==2025.11.12
-cffi==2.0.0
-charset-normalizer==3.4.4
-coincurve==21.0.0
-cryptography==46.0.3
-curl_cffi==0.13.0
-frozendict==2.4.7
-frozenlist==1.8.0
-idna==3.11
-multidict==6.7.0
-multitasking==0.0.12
-numpy==2.2.6
-pandas==2.3.3
-peewee==3.18.3
-platformdirs==4.5.1
-propcache==0.4.1
-protobuf==6.33.2
-pycares==4.11.0
-pycparser==2.23
-python-dateutil==2.9.0.post0
-pytz==2025.2
-requests==2.32.5
-six==1.17.0
-soupsieve==2.8
-typing_extensions==4.15.0
-tzdata==2025.2
-urllib3==2.6.1
-websockets==15.0.1
-yarl==1.22.0
-yfinance==0.2.66
+# Core Dependencies
+ccxt==4.5.26                           # Cryptocurrency exchange API
+pandas==2.3.3                          # Data analysis and manipulation
+yfinance==0.2.66                       # Yahoo Finance API for price lookups
+requests==2.32.5                       # HTTP library for API calls
+
+# Database
+peewee==3.18.3                         # Lightweight ORM for SQLite (if used)
+
+# Async & Networking
+aiohttp==3.13.2                        # Async HTTP client/server
+aiosignal==1.4.0                       # Signal support for aiohttp
+aiodns==3.6.0                          # DNS resolver for async
+aiohappyeyeballs==2.6.1                # Happy eyeballs DNS resolver
+async-timeout==5.0.1                   # Timeouts for async operations
+websockets==15.0.1                     # WebSocket support
+urllib3==2.6.1                         # HTTP client library
+
+# Cryptography & Security
+cryptography==46.0.3                   # Cryptographic recipes
+coincurve==21.0.0                      # Bitcoin and Ethereum curve library
+certifi==2025.11.12                    # Root certificate authority bundle
+curl_cffi==0.13.0                      # CFFI-based curl bindings
+
+# Data Parsing & Serialization
+protobuf==6.33.2                       # Protocol buffers
+soupsieve==2.8                         # CSS selector library for HTML parsing
+beautifulsoup4==4.14.3                 # HTML/XML parsing
+
+# Utilities
+python-dateutil==2.9.0.post0           # Date utilities
+pytz==2025.2                           # Timezone support
+tzdata==2025.2                         # IANA timezone database
+multitasking==0.0.12                   # Lightweight task scheduler
+six==1.17.0                            # Python 2/3 compatibility
+
+# Dependencies for aiohttp and async support
+attrs==25.4.0                          # Class attribute utilities
+charset-normalizer==3.4.4              # Character encoding detection
+cffi==2.0.0                            # Foreign function interface
+frozendict==2.4.7                      # Immutable dictionary
+frozenlist==1.8.0                      # Immutable list
+idna==3.11                             # Internationalized domain names
+multidict==6.7.0                       # Multidict implementation
+platformdirs==4.5.1                    # Platform-specific paths
+propcache==0.4.1                       # Property cache decorator
+pycares==4.11.0                        # Python interface to c-ares
+pycparser==2.23                        # C parser in Python
+typing_extensions==4.15.0              # Typing extensions for Python <3.10
+yarl==1.22.0                           # URL manipulation
+
+# Data Science
+numpy==2.2.6                           # Numerical computing (dependency of pandas)
