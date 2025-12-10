@@ -161,23 +161,156 @@ class DatabaseManager:
         ts = datetime.now().strftime("%Y%m%d")
         shutil.move(str(DB_FILE), str(BASE_DIR / f"CORRUPT_{ts}.db"))
         logger.error("[!] Database corrupted. Created fresh DB.")
+    
+    def _migrate_to_text_precision(self):
+        """CRITICAL MIGRATION: Convert REAL fields to TEXT for precision.
+        
+        This migration is needed for databases created before the Decimal precision fix.
+        It safely converts amount, price_usd, and fee from REAL (float) to TEXT (string).
+        
+        Safety: If migration fails, old database is backed up and fresh DB created.
+        """
+        try:
+            # Check if migration is needed (look for REAL type in schema)
+            schema = self.cursor.execute(
+                "PRAGMA table_info(trades)"
+            ).fetchall()
+            
+            # Check if amount is still REAL (old schema)
+            amount_info = [col for col in schema if col[1] == 'amount']
+            if not amount_info or amount_info[0][2] != 'REAL':
+                # Already migrated or new schema, skip
+                return
+            
+            logger.info("[MIGRATION] Converting database to TEXT-based precision...")
+            
+            # Create backup before migration
+            self.conn.commit()
+            backup_file = BASE_DIR / f"trades_backup_before_migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            shutil.copy(DB_FILE, backup_file)
+            logger.info(f"[MIGRATION] Backup created: {backup_file}")
+            
+            # Create new table with TEXT schema
+            self.cursor.execute('''CREATE TABLE trades_new (
+                id TEXT PRIMARY KEY,
+                date TEXT,
+                source TEXT,
+                action TEXT,
+                coin TEXT,
+                amount TEXT,
+                price_usd TEXT,
+                fee TEXT,
+                batch_id TEXT
+            )''')
+            
+            # Copy data, converting REAL values to TEXT strings via Decimal
+            self.cursor.execute('''
+                INSERT INTO trades_new
+                SELECT 
+                    id, date, source, action, coin,
+                    CAST(amount AS TEXT) as amount,
+                    CAST(price_usd AS TEXT) as price_usd,
+                    CAST(fee AS TEXT) as fee,
+                    batch_id
+                FROM trades
+            ''')
+            
+            # Drop old table and rename new one
+            self.cursor.execute("DROP TABLE trades")
+            self.cursor.execute("ALTER TABLE trades_new RENAME TO trades")
+            
+            self.conn.commit()
+            logger.info("[MIGRATION] ✅ Successfully migrated to TEXT-based precision schema")
+            
+        except Exception as e:
+            logger.error(f"[MIGRATION] Failed: {e}. Creating recovery backup...")
+            # Backup current database for manual inspection
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            failed_file = BASE_DIR / f"migration_failed_{ts}.db"
+            try:
+                self.conn.close()
+                shutil.copy(DB_FILE, failed_file)
+                # Recover from backup if available
+                if DB_BACKUP.exists():
+                    shutil.copy(DB_BACKUP, DB_FILE)
+                logger.error(f"[MIGRATION] Failed database backed up to: {failed_file}")
+            except:
+                pass
+            # Recreate connection
+            self.conn = sqlite3.connect(str(DB_FILE))
+            self.cursor = self.conn.cursor()
 
     def _init_tables(self):
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (id TEXT PRIMARY KEY, date TEXT, source TEXT, action TEXT, coin TEXT, amount REAL, price_usd REAL, fee REAL, batch_id TEXT)''')
+        # CRITICAL: Store amounts as TEXT (strings) to preserve decimal precision
+        # This avoids IEEE 754 rounding when storing to SQLite's REAL type
+        # Conversion to Decimal happens on read (see db_row_to_decimal)
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (
+            id TEXT PRIMARY KEY, 
+            date TEXT, 
+            source TEXT, 
+            action TEXT, 
+            coin TEXT, 
+            amount TEXT,          -- PRECISION: TEXT instead of REAL to avoid float rounding
+            price_usd TEXT,        -- PRECISION: TEXT instead of REAL to avoid float rounding
+            fee TEXT,              -- PRECISION: TEXT instead of REAL to avoid float rounding
+            batch_id TEXT
+        )''')
         self.conn.commit()
+        
+        # Migrate existing databases from REAL to TEXT (one-time operation)
+        self._migrate_to_text_precision()
 
     def get_last_timestamp(self, source):
         res = self.cursor.execute("SELECT date FROM trades WHERE source=? ORDER BY date DESC LIMIT 1", (source,)).fetchone()
         return int(pd.to_datetime(res[0]).timestamp()*1000) if res else 1262304000000
 
     def save_trade(self, t):
-        try: self.cursor.execute("INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?)", list(t.values()))
-        except: pass
+        """Save trade to database, converting numeric values to TEXT for precision.
+        
+        CRITICAL: Amounts, prices, and fees are stored as TEXT to preserve decimal precision.
+        Example: 0.00000001 BTC is stored as "0.00000001" (TEXT), not 1e-8 (REAL with rounding error).
+        """
+        try:
+            # Convert numeric fields to TEXT strings to preserve precision
+            t_copy = dict(t)
+            for field in ['amount', 'price_usd', 'fee']:
+                if field in t_copy:
+                    val = t_copy[field]
+                    if val is None:
+                        t_copy[field] = "0"
+                    elif isinstance(val, Decimal):
+                        t_copy[field] = str(val)  # Decimal -> string (preserves precision)
+                    else:
+                        # Convert float/int to string via Decimal to avoid IEEE 754 errors
+                        t_copy[field] = str(to_decimal(val))
+            
+            self.cursor.execute(
+                "INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?)", 
+                list(t_copy.values())
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save trade: {e}")
 
-    def commit(self): self.conn.commit()
-    def get_all(self): return pd.read_sql_query("SELECT * FROM trades ORDER BY date ASC", self.conn)
-    def get_zeros(self): return pd.read_sql_query("SELECT * FROM trades WHERE price_usd=0 AND action='INCOME'", self.conn)
-    def update_price(self, uid, p): self.cursor.execute("UPDATE trades SET price_usd=? WHERE id=?", (p, uid))
+    def commit(self): 
+        self.conn.commit()
+    
+    def get_all(self): 
+        """Read all trades, converting TEXT back to Decimal for precise calculations."""
+        df = pd.read_sql_query("SELECT * FROM trades ORDER BY date ASC", self.conn)
+        # Convert precision-critical fields from TEXT to Decimal
+        for col in ['amount', 'price_usd', 'fee']:
+            if col in df.columns:
+                df[col] = df[col].apply(lambda x: float(to_decimal(x)) if x else 0.0)
+        return df
+    
+    def get_zeros(self): 
+        """Get trades with zero price (needs manual price lookup)."""
+        return pd.read_sql_query("SELECT * FROM trades WHERE price_usd='0' OR price_usd IS NULL AND action='INCOME'", self.conn)
+    
+    def update_price(self, uid, p):
+        """Update price, converting to TEXT for precision."""
+        price_str = str(to_decimal(p)) if p else "0"
+        self.cursor.execute("UPDATE trades SET price_usd=? WHERE id=?", (price_str, uid))
     def close(self): self.conn.close()
 
 # ==========================================

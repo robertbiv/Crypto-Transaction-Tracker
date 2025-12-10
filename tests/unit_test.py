@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, SideEffect
 from io import StringIO
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 # Import application logic
 import Crypto_Tax_Engine as app
@@ -3108,7 +3109,163 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         # Should have income + trades with wash sale applied
         self.assertGreater(len(engine.inc), 0)
         self.assertGreater(len(engine.tt), 0)
+    
+    def test_satoshi_dust_precision(self):
+        """CRITICAL TEST: Verify 1 Satoshi (0.00000001 BTC) precision is preserved.
+        
+        This test validates the fix for IEEE 754 floating point rounding in the database.
+        
+        Before fix: 0.00000001 BTC stored as REAL → SQLite rounds to 0.0000000099999...
+                    When read back, amount < 1 Satoshi → "Insufficient Balance" errors
+        
+        After fix: 0.00000001 BTC stored as TEXT → Exact "0.00000001" preserved
+                   When converted to Decimal on read → Exact calculations
+        """
+        # Scenario: User accumulates dust over many small buys
+        # Buy 0.00000001 BTC (1 Satoshi) 5 times at $50,000 per BTC
+        satoshi = 0.00000001
+        price_per_btc = 50000.0
+        
+        for i in range(5):
+            self.db.save_trade({
+                'id': f'satoshi_buy_{i}',
+                'date': f'2023-01-{i+1:02d}',
+                'source': 'Exchange',
+                'action': 'BUY',
+                'coin': 'BTC',
+                'amount': satoshi,
+                'price_usd': price_per_btc,
+                'fee': 0,
+                'batch_id': f'batch_{i}'
+            })
+        
+        self.db.commit()
+        
+        # Verify all satoshis were stored exactly (not rounded)
+        df = self.db.get_all()
+        btc_records = df[df['coin'] == 'BTC']
+        
+        self.assertEqual(len(btc_records), 5, "Should have 5 satoshi purchases")
+        
+        # Check each amount is EXACTLY 0.00000001 (not rounded to 0.0 or 0.0000000099999...)
+        for idx, row in btc_records.iterrows():
+            amount = row['amount']
+            # Amount should be exactly satoshi value (using Decimal for comparison)
+            amount_decimal = app.to_decimal(amount)
+            expected_decimal = app.to_decimal(satoshi)
+            
+            self.assertEqual(
+                amount_decimal, expected_decimal,
+                f"Row {idx}: Expected {expected_decimal}, got {amount_decimal} (precision loss detected!)"
+            )
+        
+        # Now sell all satoshis (5 × 0.00000001 = 0.00000005 BTC)
+        total_satoshis = satoshi * 5
+        self.db.save_trade({
+            'id': 'satoshi_sell',
+            'date': '2023-06-01',
+            'source': 'Exchange',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': total_satoshis,
+            'price_usd': 55000.0,  # Price increase
+            'fee': 0,
+            'batch_id': 'sell_batch'
+        })
+        
+        self.db.commit()
+        
+        # Run tax engine
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        
+        # Verify the sale was recorded (not rejected due to "insufficient balance")
+        self.assertEqual(len(engine.tt), 1, "Should have 1 trade recorded (the SELL)")
+        
+        trade = engine.tt[0]
+        proceeds = float(trade['Proceeds'])
+        cost_basis = float(trade['Cost Basis'])
+        
+        # Expected calculations:
+        # Cost basis: 5 satoshis × $50,000/BTC × (1 BTC / 100,000,000 satoshis)
+        #            = 0.00000005 BTC × $50,000 = $0.0025
+        expected_basis = total_satoshis * price_per_btc
+        
+        # Proceeds: 0.00000005 BTC × $55,000 = $0.00275
+        expected_proceeds = total_satoshis * 55000.0
+        
+        # Gain: $0.00275 - $0.0025 = $0.00025
+        expected_gain = expected_proceeds - expected_basis
+        
+        self.assertAlmostEqual(cost_basis, expected_basis, places=6,
+                              msg="Cost basis calculation incorrect for satoshi-level precision")
+        self.assertAlmostEqual(proceeds, expected_proceeds, places=6,
+                              msg="Proceeds calculation incorrect for satoshi-level precision")
+        self.assertGreater(expected_gain, 0, "Should have positive gain")
+    
+    def test_wei_precision_ethereum(self):
+        """CRITICAL TEST: Verify Wei (10^-18 ETH) precision is preserved.
+        
+        Ethereum and ERC-20 tokens use 18 decimal places (Wei).
+        Example: 0.000000000000000001 ETH (1 Wei)
+        
+        This ensures the fix works for both UTXO chains (satoshis) and EVM chains (wei).
+        """
+        # 1 Wei = 10^-18 ETH
+        wei = Decimal('0.000000000000000001')  # Use Decimal directly
+        price_per_eth = Decimal('3000')
+        
+        # Buy some Wei
+        self.db.save_trade({
+            'id': 'wei_buy',
+            'date': '2023-01-01',
+            'source': 'Exchange',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': float(wei),  # Convert to float for DB
+            'price_usd': float(price_per_eth),
+            'fee': 0,
+            'batch_id': 'wei_batch'
+        })
+        
+        self.db.commit()
+        
+        # Verify Wei amount was stored exactly
+        df = self.db.get_all()
+        eth_buy = df[df['id'] == 'wei_buy'].iloc[0]
+        
+        amount_decimal = app.to_decimal(eth_buy['amount'])
+        expected_decimal = wei
+        
+        # This test will fail with REAL type (IEEE 754 rounding)
+        # But should pass with TEXT type (exact string storage)
+        self.assertEqual(
+            amount_decimal, expected_decimal,
+            f"Wei precision lost: Expected {expected_decimal}, got {amount_decimal}"
+        )
+    
+    def test_db_schema_uses_text_for_precision(self):
+        """CRITICAL TEST: Verify database schema uses TEXT for amount/price/fee.
+        
+        This is a sanity check that the schema migration/creation worked correctly.
+        If schema is still REAL, it means migration failed or wasn't applied.
+        """
+        # Get table schema
+        schema = self.db.cursor.execute("PRAGMA table_info(trades)").fetchall()
+        
+        # Build a dict of column name -> type
+        schema_dict = {col[1]: col[2] for col in schema}
+        
+        # CRITICAL: These must be TEXT, not REAL
+        for field in ['amount', 'price_usd', 'fee']:
+            self.assertIn(field, schema_dict, f"Field {field} missing from schema")
+            field_type = schema_dict[field]
+            self.assertEqual(
+                field_type, 'TEXT',
+                f"CRITICAL: {field} is {field_type}, should be TEXT for precision. "
+                f"Migration may have failed or not run."
+            )
 
 if __name__ == '__main__':
-    print("--- RUNNING ULTIMATE COMPREHENSIVE SUITE V35 (138 Tests + 3 Critical Remaining Functions) ---")
+    print("--- RUNNING ULTIMATE COMPREHENSIVE SUITE V36 (141 Tests + Schema Precision Validation) ---")
     unittest.main()
