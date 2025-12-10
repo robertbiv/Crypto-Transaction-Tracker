@@ -262,6 +262,277 @@ class Ingestor:
         except: pass
 
 # ==========================================
+# 2B. STAKETAXCSV MANAGER (Staking Rewards)
+# ==========================================
+import hashlib
+class StakeTaxCSVManager:
+    """Auto-generates StakeTax CSV for all staking protocols, imports with deduplication."""
+    
+    SUPPORTED_PROTOCOLS = [
+        'lido', 'rocket_pool', 'eth_staking', 'coinbase_staking', 'kraken_staking',
+        'binance_staking', 'bybit_staking', 'kucoin_staking', 'okx_staking',
+        'aave', 'compound', 'dyxd', 'curve', 'balancer', 'uniswap',
+        'curve_lp', 'convex', 'yearn', 'pancakeswap', 'quickswap'
+    ]
+    
+    def __init__(self, db):
+        self.db = db
+        self.fetcher = PriceFetcher()
+        self.csv_dir = INPUT_DIR / 'staketax_generated'
+        if not self.csv_dir.exists():
+            self.csv_dir.mkdir(parents=True, exist_ok=True)
+    
+    def run(self):
+        """Main entry point: generate CSV, import with dedup, archive."""
+        logger.info("--- 2B. STAKING REWARDS (StakeTax CSV) ---")
+        if not CONFIG_FILE.exists():
+            logger.info("   StakeTax disabled. Skipping.")
+            return
+        
+        try:
+            with open(CONFIG_FILE) as f: config = json.load(f)
+        except Exception as e:
+            logger.info(f"   Could not read config: {e}. Skipping.")
+            return
+        
+        staking_cfg = config.get('staking', {})
+        if not staking_cfg.get('enabled', False):
+            logger.info("   StakeTax disabled. Skipping.")
+            return
+        
+        # Extract wallet addresses from wallets.json
+        wallets = self._get_wallets_from_file()
+        protocols = staking_cfg.get('protocols_to_sync', ['all'])
+        
+        if not wallets:
+            logger.info("   No wallets found in wallets.json. Skipping StakeTax.")
+            return
+        
+        logger.info(f"   Found {len(wallets)} wallet(s) for staking sync.")
+        
+        # Generate CSV via staketaxcsv CLI
+        csv_file = self._generate_csv(wallets, protocols)
+        if not csv_file or not csv_file.exists():
+            logger.warning("   Failed to generate StakeTax CSV. Skipping import.")
+            return
+        
+        # Check if CSV is empty
+        try:
+            df_check = pd.read_csv(csv_file)
+            if df_check.empty:
+                logger.info("   StakeTax CSV is empty. No rewards found.")
+                self._archive(csv_file)
+                return
+        except Exception as e:
+            logger.error(f"   Could not read generated CSV: {e}")
+            return
+        
+        # Import with deduplication
+        self.db.create_safety_backup()
+        try:
+            self._import_csv(csv_file)
+            self.db.commit()
+            self._archive(csv_file)
+            self.db.remove_safety_backup()
+            logger.info("   ✓ StakeTax CSV imported successfully.")
+        except Exception as e:
+            logger.error(f"   StakeTax import failed: {e}")
+            self.db.restore_safety_backup()
+    
+    def _get_wallets_from_file(self):
+        """Extract all wallet addresses from wallets.json."""
+        if not WALLETS_FILE.exists():
+            return []
+        
+        try:
+            with open(WALLETS_FILE) as f:
+                wallet_data = json.load(f)
+            
+            wallets = []
+            for coin, addresses in wallet_data.items():
+                if coin.startswith('_'):  # Skip metadata like _INSTRUCTIONS
+                    continue
+                # Handle both single address (string) and multiple addresses (list)
+                if isinstance(addresses, list):
+                    wallets.extend(addresses)
+                elif isinstance(addresses, str) and not addresses.startswith('PASTE_'):
+                    wallets.append(addresses)
+            
+            return list(set(wallets))  # Remove duplicates
+        except:
+            return []
+    
+    def _generate_csv(self, wallets, protocols):
+        """Call staketaxcsv CLI to generate CSV."""
+        import subprocess
+        
+        try:
+            csv_out = self.csv_dir / f"staking_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            # Sanitize wallet list (remove None, empty strings, PASTE_ placeholders)
+            wallets = [w for w in wallets if w and isinstance(w, str) and not w.startswith('PASTE_')]
+            if not wallets:
+                logger.error("   No valid wallet addresses after sanitization.")
+                return None
+            
+            # Build staketaxcsv command
+            wallet_arg = ','.join(wallets)
+            protocol_arg = ','.join(protocols) if 'all' not in (protocols or []) else 'all'
+            
+            cmd = [
+                'staketaxcsv',
+                '--wallet', wallet_arg,
+                '--protocol', protocol_arg,
+                '--output', str(csv_out)
+            ]
+            
+            logger.info(f"   Running staketaxcsv with {len(wallets)} wallet(s)...")
+            
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            except subprocess.TimeoutExpired:
+                logger.error("   StakeTax CLI timed out after 10 minutes. Try again later.")
+                return None
+            
+            if result.returncode == 0 and csv_out.exists():
+                size = csv_out.stat().st_size
+                logger.info(f"   ✓ Generated {csv_out.name} ({size} bytes)")
+                return csv_out
+            else:
+                stderr_msg = result.stderr[:500] if result.stderr else "Unknown error"
+                logger.error(f"   StakeTax error: {stderr_msg}")
+                return None
+        except FileNotFoundError:
+            logger.error("   staketaxcsv CLI not found. Install with: pip install staketaxcsv")
+            return None
+        except Exception as e:
+            logger.error(f"   CSV generation failed: {type(e).__name__}: {e}")
+            return None
+    
+    def _import_csv(self, fp):
+        """Import CSV with deduplication hash."""
+        try:
+            df = pd.read_csv(fp)
+        except Exception as e:
+            logger.error(f"   Could not read CSV: {e}")
+            return
+        
+        df.columns = [c.lower().strip() for c in df.columns]
+        
+        # Statistics tracking
+        total_found = len(df)
+        imported = 0
+        dedup_skipped = 0
+        failed = 0
+        
+        if total_found == 0:
+            logger.info("   CSV is empty. No records to import.")
+            return
+        
+        logger.info(f"   Found {total_found} staking record(s) in CSV")
+        
+        for idx, r in df.iterrows():
+            try:
+                # Parse date
+                try:
+                    d = pd.to_datetime(r.get('date', r.get('timestamp', None)))
+                    if pd.isna(d):
+                        raise ValueError("Date is NaN")
+                except:
+                    logger.warning(f"   [SKIP] Row {idx}: Invalid or missing date")
+                    failed += 1
+                    continue
+                
+                # Parse coin
+                coin = str(r.get('coin', r.get('asset', r.get('token', None)))).upper().strip()
+                if not coin or coin == 'NONE':
+                    logger.warning(f"   [SKIP] Row {idx}: Missing coin/asset")
+                    failed += 1
+                    continue
+                
+                # Parse amount
+                try:
+                    amount = float(r.get('amount', r.get('quantity', 0)))
+                    if amount <= 0:
+                        logger.warning(f"   [SKIP] Row {idx}: Invalid amount {amount}")
+                        failed += 1
+                        continue
+                except (ValueError, TypeError):
+                    logger.warning(f"   [SKIP] Row {idx}: Could not parse amount")
+                    failed += 1
+                    continue
+                
+                # Parse protocol
+                protocol = str(r.get('protocol', r.get('source', 'STAKING'))).lower().strip()
+                
+                # Generate dedup hash: hash(date + coin + amount + protocol)
+                dedup_key = f"{d.date()}_{coin}_{amount:.8f}_{protocol}"
+                dedup_hash = hashlib.sha256(dedup_key.encode()).hexdigest()[:16]
+                
+                # Check if already imported (via STAKETAX or any other source on same date/coin/amount/protocol)
+                # This prevents duplicates from CCXT ledger sync + StakeTaxCSV
+                existing = self.db.conn.execute(
+                    """SELECT id FROM trades 
+                       WHERE DATE(date) = ? AND coin = ? AND ABS(amount - ?) < 0.00001 
+                       AND action = 'INCOME' AND source IN ('STAKETAX', 'KRAKEN_LEDGER', 'BINANCE_LEDGER', 'KUCOIN_LEDGER', 'OKEX_LEDGER')""",
+                    (d.date(), coin, amount)
+                ).fetchone()
+                
+                if existing:
+                    logger.info(f"   [DEDUP] {d.date()} | {coin} {amount:.8f} | {protocol} (already in {existing[0]})")
+                    dedup_skipped += 1
+                    continue
+                
+                # Get USD price at time (with fallback)
+                try:
+                    p = float(r.get('usd_value_at_time', r.get('price_usd', 0)))
+                except (ValueError, TypeError):
+                    p = 0.0
+                
+                if p <= 0:
+                    p = self.fetcher.get_price(coin, d)
+                    if p <= 0:
+                        logger.warning(f"   [SKIP] Row {idx}: Could not determine price for {coin} on {d.date()}")
+                        failed += 1
+                        continue
+                
+                # Save as INCOME (staking rewards are income)
+                self.db.save_trade({
+                    'id': f"STAKETAX_{dedup_hash}",
+                    'date': d.isoformat(),
+                    'source': 'STAKETAX',
+                    'action': 'INCOME',
+                    'coin': coin,
+                    'amount': amount,
+                    'price_usd': p,
+                    'fee': 0,
+                    'batch_id': 'STAKETAX'
+                })
+                
+                # Log imported record
+                usd_total = amount * p
+                logger.info(f"   [IMPORT] {d.date()} | {coin} {amount:.8f} @ ${p:.2f} | ${usd_total:.2f} | {protocol}")
+                imported += 1
+                
+            except Exception as e:
+                logger.warning(f"   [SKIP] StakeTax row {idx} failed: {e}")
+                failed += 1
+        
+        # Summary
+        logger.info(f"   --- Summary ---")
+        logger.info(f"   Total found:    {total_found}")
+        logger.info(f"   Imported:       {imported}")
+        logger.info(f"   Dedup skipped:  {dedup_skipped}")
+        logger.info(f"   Failed:         {failed}")
+    
+    def _archive(self, fp):
+        """Archive CSV to processed_archive."""
+        try:
+            shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_STAKETAX_{datetime.now().strftime('%Y%m%d_%H%M')}{fp.suffix}"))
+        except:
+            pass
+
+# ==========================================
 # 3. PRICE FETCHER
 # ==========================================
 class PriceFetcher:
@@ -592,6 +863,7 @@ if __name__ == "__main__":
         ingest = Ingestor(db)
         ingest.run_csv_scan()
         ingest.run_api_sync()
+        StakeTaxCSVManager(db).run()
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():
             p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
