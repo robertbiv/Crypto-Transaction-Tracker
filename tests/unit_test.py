@@ -2421,7 +2421,9 @@ class TestExtremePrecisionAndRounding(unittest.TestCase):
         app.BASE_DIR = self.orig_base
     
     def test_floating_point_precision_loss(self):
-        """Test: 0.1 + 0.2 != 0.3 (IEEE 754 rounding)"""
+        """Test: 0.1 + 0.2 != 0.3 (IEEE 754 rounding) - Verify Decimal arithmetic corrects this"""
+        # Setup: Buy 0.1 BTC at $10,000, then 0.2 BTC at $10,000 (total: 0.3 BTC @ $3,000 cost basis)
+        # Then sell all 0.3 BTC at $15,000 (should be $1,500 gain if using Decimal)
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.1, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-01-02', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.2, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.3, 'price_usd':15000.0, 'fee':0, 'batch_id':'3'})
@@ -2429,8 +2431,27 @@ class TestExtremePrecisionAndRounding(unittest.TestCase):
         
         engine = app.TaxEngine(self.db, 2023)
         engine.run()
-        # Should handle floating point precision correctly
-        self.assertTrue(len(engine.tt) >= 0)
+        
+        # Verify we have one trade result
+        self.assertEqual(len(engine.tt), 1)
+        
+        trade = engine.tt[0]
+        
+        # Cost basis should be exactly $3,000 (0.3 BTC * $10,000)
+        # With IEEE 754 float errors, this might be 3000.0000000001 or 2999.9999999999
+        # With Decimal, should be exactly 3000.00
+        cost_basis = float(trade['Cost Basis'])
+        proceeds = float(trade['Proceeds'])
+        
+        # Proceeds should be $4,500 (0.3 * 15,000)
+        self.assertAlmostEqual(proceeds, 4500.0, places=2, msg="Proceeds calculation incorrect")
+        
+        # Cost basis should be $3,000 (0.1 + 0.2) * $10,000
+        self.assertAlmostEqual(cost_basis, 3000.0, places=2, msg="Cost basis calculation incorrect - floating point error detected")
+        
+        # Realized gain should be $1,500
+        realized_gain = proceeds - cost_basis
+        self.assertAlmostEqual(realized_gain, 1500.0, places=1, msg="Realized gain calculation incorrect")
     
     def test_rounding_consistency_across_reports(self):
         """Test: Rounding is consistent between report runs"""
@@ -2446,6 +2467,7 @@ class TestExtremePrecisionAndRounding(unittest.TestCase):
         engine2.run()
         result2 = engine2.tt[0]['Cost Basis'] if len(engine2.tt) > 0 else 0
         
+        # Results must be EXACTLY equal (no floating point drift)
         self.assertEqual(result1, result2)
 
 # --- 29. PRICE CACHE & FETCHER TESTS ---
@@ -2900,6 +2922,174 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         
         # Check loss was calculated
         self.assertGreater(engine.us_losses['short'], 0)
+    
+    def test_wash_sale_proportionality_critical(self):
+        """CRITICAL TEST: Verify wash sale loss disallowance is proportional, not absolute
+        
+        Scenario: User sells 10 BTC at loss, buys back 0.0001 BTC within 30 days.
+        IRS Rule: Only 0.0001/10 = 0.001% of loss should be disallowed.
+        
+        Bug: Old code disallowed 100% of loss if ANY repurchase occurred.
+        Fix: New code calculates proportion = replacement_qty / sold_qty
+        """
+        # Setup: Buy 10 BTC at $20,000 (cost basis = $200,000)
+        self.db.save_trade({
+            'id':'buy1', 'date':'2023-01-01', 'source':'Exchange', 
+            'action':'BUY', 'coin':'BTC', 'amount':10.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'buy1'
+        })
+        
+        # Sell 10 BTC at $15,000 (proceeds = $150,000, loss = $50,000)
+        self.db.save_trade({
+            'id':'sell1', 'date':'2023-03-01', 'source':'Exchange', 
+            'action':'SELL', 'coin':'BTC', 'amount':10.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'sell1'
+        })
+        
+        # Buy back ONLY 0.0001 BTC within 30 days (wash sale window)
+        # This is a tiny repurchase (likely for cost averaging or accidental)
+        self.db.save_trade({
+            'id':'buy2', 'date':'2023-03-20', 'source':'Exchange', 
+            'action':'BUY', 'coin':'BTC', 'amount':0.0001, 'price_usd':16000.0, 'fee':0, 'batch_id':'buy2'
+        })
+        
+        self.db.commit()
+        
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        
+        # Verify we have the trade
+        self.assertEqual(len(engine.tt), 1, "Should have 1 trade (the SELL)")
+        
+        trade = engine.tt[0]
+        cost_basis = float(trade['Cost Basis'])
+        proceeds = float(trade['Proceeds'])
+        
+        # Expected values
+        expected_proceeds = 150000.0  # 10 * 15,000
+        expected_loss = 50000.0  # 200,000 - 150,000
+        
+        # Proportion of replacement = 0.0001 / 10.0 = 0.00001 (0.001%)
+        proportion = 0.0001 / 10.0
+        
+        # CRITICAL: Loss should be disallowed ONLY by proportion
+        # wash_disallowed = 50,000 * 0.00001 = 0.5 USD
+        expected_disallowed = expected_loss * proportion  # = $0.50
+        
+        # final_basis = original_basis - disallowed_loss = 200,000 - 0.50 = 199,999.50
+        expected_basis = expected_loss - expected_disallowed  # Wait, need to recalculate
+        
+        # Actually: final_basis = proceeds if wash applied, else original cost basis
+        # If proportional disallowance = 0.5, then realized gain = proceeds - (basis - disallowed)
+        #                                                       = 150,000 - (200,000 - 0.50)
+        #                                                       = 150,000 - 199,999.50
+        #                                                       = -49,999.50 (loss reduced by $0.50)
+        
+        realized_gain = proceeds - cost_basis
+        expected_realized_gain = -50000.0 + expected_disallowed  # Loss reduced by disallowed amount
+        
+        # The loss disallowed should be tiny (roughly $0.50)
+        actual_loss_disallowed = expected_loss + realized_gain  # = proceeds - original_basis = 150k - 200k = -50k, then add back disallowed
+        
+        # Simpler check: Verify wash_sale_log shows proportional disallowance
+        self.assertGreater(len(engine.wash_sale_log), 0, "Should have wash sale log entry")
+        
+        wash_log = engine.wash_sale_log[0]
+        loss_disallowed = float(wash_log['Loss Disallowed'])
+        
+        # Loss disallowed should be ~$0.50 (0.0001 * expected_loss / 10)
+        # Not $50,000 (the entire loss)
+        self.assertLess(loss_disallowed, 100.0, 
+                       f"Loss disallowed should be ~$0.50, not {loss_disallowed}. Proportionality not working!")
+        self.assertGreater(loss_disallowed, 0.01,
+                          f"Loss disallowed should be ~$0.50, got {loss_disallowed}")
+        
+        # Verify replacement quantity is logged correctly
+        replacement_qty = float(wash_log.get('Replacement Qty', 0))
+        self.assertAlmostEqual(replacement_qty, 0.0001, places=6,
+                              msg="Replacement quantity should be 0.0001 BTC")
+    
+    def test_wash_sale_proportionality_full_replacement(self):
+        """Test: When full replacement occurs (100%), full loss should be disallowed"""
+        # Buy 5 ETH at $2,000 (cost = $10,000)
+        self.db.save_trade({
+            'id':'buy1', 'date':'2023-01-01', 'source':'Exchange', 
+            'action':'BUY', 'coin':'ETH', 'amount':5.0, 'price_usd':2000.0, 'fee':0, 'batch_id':'buy1'
+        })
+        
+        # Sell 5 ETH at $1,500 (proceeds = $7,500, loss = $2,500)
+        self.db.save_trade({
+            'id':'sell1', 'date':'2023-02-01', 'source':'Exchange', 
+            'action':'SELL', 'coin':'ETH', 'amount':5.0, 'price_usd':1500.0, 'fee':0, 'batch_id':'sell1'
+        })
+        
+        # Buy back 5 ETH (FULL replacement) within 30 days
+        self.db.save_trade({
+            'id':'buy2', 'date':'2023-02-15', 'source':'Exchange', 
+            'action':'BUY', 'coin':'ETH', 'amount':5.0, 'price_usd':1600.0, 'fee':0, 'batch_id':'buy2'
+        })
+        
+        self.db.commit()
+        
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        
+        # Verify trade
+        self.assertEqual(len(engine.tt), 1)
+        
+        trade = engine.tt[0]
+        proceeds = float(trade['Proceeds'])
+        cost_basis = float(trade['Cost Basis'])
+        
+        # With full replacement (5/5 = 100%), entire loss of $2,500 should be disallowed
+        # Realized loss should be 0
+        realized_gain = proceeds - cost_basis
+        
+        # Check wash sale log
+        self.assertEqual(len(engine.wash_sale_log), 1)
+        loss_disallowed = float(engine.wash_sale_log[0]['Loss Disallowed'])
+        
+        # Should disallow full $2,500
+        self.assertAlmostEqual(loss_disallowed, 2500.0, places=0,
+                              msg="Full replacement should disallow full loss")
+    
+    def test_wash_sale_proportionality_zero_replacement(self):
+        """Test: When NO replacement occurs within 30 days, no loss should be disallowed"""
+        # Buy 3 BTC at $22,000 (cost = $66,000)
+        self.db.save_trade({
+            'id':'buy1', 'date':'2023-01-01', 'source':'Exchange', 
+            'action':'BUY', 'coin':'BTC', 'amount':3.0, 'price_usd':22000.0, 'fee':0, 'batch_id':'buy1'
+        })
+        
+        # Sell 3 BTC at $18,000 (proceeds = $54,000, loss = $12,000)
+        self.db.save_trade({
+            'id':'sell1', 'date':'2023-02-01', 'source':'Exchange', 
+            'action':'SELL', 'coin':'BTC', 'amount':3.0, 'price_usd':18000.0, 'fee':0, 'batch_id':'sell1'
+        })
+        
+        # Buy back AFTER 30-day window (no wash sale)
+        self.db.save_trade({
+            'id':'buy2', 'date':'2023-04-02', 'source':'Exchange', 
+            'action':'BUY', 'coin':'BTC', 'amount':2.0, 'price_usd':19000.0, 'fee':0, 'batch_id':'buy2'
+        })
+        
+        self.db.commit()
+        
+        engine = app.TaxEngine(self.db, 2023)
+        engine.run()
+        
+        # Verify trade
+        self.assertEqual(len(engine.tt), 1)
+        
+        # No wash sale should apply (buyback is after 30-day window)
+        self.assertEqual(len(engine.wash_sale_log), 0, "Should have NO wash sale entries")
+        
+        trade = engine.tt[0]
+        proceeds = float(trade['Proceeds'])
+        cost_basis = float(trade['Cost Basis'])
+        
+        # Full loss of $12,000 should be realized
+        realized_loss = cost_basis - proceeds
+        self.assertAlmostEqual(realized_loss, 12000.0, places=0,
+                              msg="No wash sale means full loss is realized")
     
     def test_staking_plus_wash_sale_same_year(self):
         """Test: Staking rewards combined with wash sale in same year"""

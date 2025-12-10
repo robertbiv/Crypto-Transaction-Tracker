@@ -4,9 +4,6 @@ pandas==2.3.3                          # Data analysis and manipulation
 yfinance==0.2.66                       # Yahoo Finance API for price lookups
 requests==2.32.5                       # HTTP library for API calls
 
-# Database
-peewee==3.18.3                         # Lightweight ORM for SQLite (if used)
-
 # Async & Networking
 aiohttp==3.13.2                        # Async HTTP client/server
 aiosignal==1.4.0                       # Signal support for aiohttp
