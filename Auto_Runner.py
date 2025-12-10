@@ -45,6 +45,12 @@ def run_automation():
         ingest.run_api_sync()
         log("   -> Sync process completed.")
         
+        # 2B. STAKING REWARDS (StakeTaxCSV Integration)
+        log(">>> STEP 1B: PROCESSING STAKING REWARDS (StakeTax CSV)")
+        stake_mgr = tax_app.StakeTaxCSVManager(db)
+        stake_mgr.run()
+        log("   -> Staking rewards processed.")
+        
         # 3. BACKFILL PRICES
         bf = tax_app.PriceFetcher()
         zeros = db.get_zeros()

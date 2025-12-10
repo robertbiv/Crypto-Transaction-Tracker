@@ -340,7 +340,12 @@ class StakeTaxCSVManager:
             self.db.restore_safety_backup()
     
     def _get_wallets_from_file(self):
-        """Extract all wallet addresses from wallets.json."""
+        """Extract all wallet addresses from wallets.json.
+        
+        Supports two formats:
+        1. Flat format (legacy): {"ETH": ["0x..."], "BTC": ["..."]}
+        2. Nested format: {"ethereum": {"addresses": ["0x..."]}, "bitcoin": {"addresses": ["..."]}}
+        """
         if not WALLETS_FILE.exists():
             return []
         
@@ -349,14 +354,23 @@ class StakeTaxCSVManager:
                 wallet_data = json.load(f)
             
             wallets = []
-            for coin, addresses in wallet_data.items():
-                if coin.startswith('_'):  # Skip metadata like _INSTRUCTIONS
+            for key, value in wallet_data.items():
+                if key.startswith('_'):  # Skip metadata like _INSTRUCTIONS
                     continue
-                # Handle both single address (string) and multiple addresses (list)
-                if isinstance(addresses, list):
-                    wallets.extend(addresses)
-                elif isinstance(addresses, str) and not addresses.startswith('PASTE_'):
-                    wallets.append(addresses)
+                
+                # Handle nested format: {"ethereum": {"addresses": [...]}}
+                if isinstance(value, dict) and 'addresses' in value:
+                    addresses = value['addresses']
+                    if isinstance(addresses, list):
+                        wallets.extend([a for a in addresses if a and isinstance(a, str) and not a.startswith('PASTE_')])
+                    elif isinstance(addresses, str) and not addresses.startswith('PASTE_'):
+                        wallets.append(addresses)
+                
+                # Handle flat format: {"ETH": [...]} or {"ETH": "0x..."}
+                elif isinstance(value, list):
+                    wallets.extend([a for a in value if a and isinstance(a, str) and not a.startswith('PASTE_')])
+                elif isinstance(value, str) and not value.startswith('PASTE_'):
+                    wallets.append(value)
             
             return list(set(wallets))  # Remove duplicates
         except:
@@ -581,6 +595,16 @@ class WalletAuditor:
         self.DECIMALS = {'BTC': 8, 'ETH': 18, 'LTC': 8, 'DOGE': 8, 'TRX': 6, 'SOL': 9, 'XRP': 6, 'ADA': 6, 'DOT': 10, 'MATIC': 18, 'AVAX': 18, 'BNB': 18}
         self.MORALIS_CHAINS = {'ETH': '0x1', 'BNB': '0x38', 'MATIC': '0x89', 'AVAX': '0xa86a', 'FTM': '0xfa', 'CRO': '0x19', 'ARBITRUM': '0xa4b1', 'OPTIMISM': '0xa', 'GNOSIS': '0x64', 'BASE': '0x2105', 'PULSE': '0x171', 'LINEA': '0xe708', 'MOONBEAM': '0x504', 'SOL': 'mainnet'}
         self.BLOCKCHAIR_CHAINS = {'BTC': 'bitcoin', 'LTC': 'litecoin', 'DOGE': 'dogecoin', 'BCH': 'bitcoin-cash', 'DASH': 'dash', 'ZEC': 'zcash', 'XMR': 'monero', 'XRP': 'ripple', 'XLM': 'stellar', 'EOS': 'eos', 'TRX': 'tron', 'ADA': 'cardano'}
+        # Map blockchain names (from wallets.json) to coin symbols (for chain lookups)
+        self.BLOCKCHAIN_TO_SYMBOL = {
+            'bitcoin': 'BTC', 'litecoin': 'LTC', 'dogecoin': 'DOGE', 'bitcoincash': 'BCH',
+            'dash': 'DASH', 'zcash': 'ZEC', 'monero': 'XMR', 'ripple': 'XRP', 'stellar': 'XLM',
+            'eos': 'EOS', 'tron': 'TRX', 'cardano': 'ADA',
+            'ethereum': 'ETH', 'polygon': 'MATIC', 'binance': 'BNB', 'avalanche': 'AVAX',
+            'fantom': 'FTM', 'cronos': 'CRO', 'arbitrum': 'ARBITRUM', 'optimism': 'OPTIMISM',
+            'gnosis': 'GNOSIS', 'base': 'BASE', 'pulsechain': 'PULSE', 'linea': 'LINEA',
+            'moonbeam': 'MOONBEAM', 'solana': 'SOL'
+        }
 
     def _load_audit_keys(self):
         if not KEYS_FILE.exists(): return None, None
@@ -605,19 +629,32 @@ class WalletAuditor:
             elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: self.calc[c] -= r['amount']
 
         with open(WALLETS_FILE) as f: wallets = json.load(f)
-        for coin, addrs in wallets.items():
-            if coin.startswith("_"): continue
-            valid = [a for a in addrs if "PASTE_" not in a]
+        for key, value in wallets.items():
+            if key.startswith("_"): continue
+            
+            # Handle nested format: {"ethereum": {"addresses": [...]}}
+            if isinstance(value, dict) and 'addresses' in value:
+                addrs = value['addresses']
+                blockchain_name = key.lower()
+            # Handle flat format: {"ETH": [...]}
+            else:
+                addrs = value if isinstance(value, list) else [value]
+                blockchain_name = key.lower()
+            
+            # Convert blockchain name to coin symbol (e.g., "ethereum" -> "ETH")
+            coin_key = self.BLOCKCHAIN_TO_SYMBOL.get(blockchain_name, blockchain_name.upper())
+            
+            valid = [a for a in addrs if isinstance(a, str) and "PASTE_" not in a]
             if not valid: continue
-            logger.info(f"   Checking {coin}...")
+            logger.info(f"   Checking {coin_key}...")
             tot = 0.0
             for addr in valid:
                 try:
-                    if coin in self.MORALIS_CHAINS: tot += self.check_moralis(coin, addr)
-                    elif coin in self.BLOCKCHAIR_CHAINS: tot += self.check_blockchair(coin, addr)
+                    if coin_key in self.MORALIS_CHAINS: tot += self.check_moralis(coin_key, addr)
+                    elif coin_key in self.BLOCKCHAIR_CHAINS: tot += self.check_blockchair(coin_key, addr)
                 except Exception as e: logger.warning(f"      [!] Failed: {addr[:6]}... ({e})")
                 if GLOBAL_CONFIG['performance']['respect_free_tier_limits']: time.sleep(1.0)
-            self.real[coin] = tot
+            self.real[coin_key] = tot
         self.print_report()
 
     def _calculate_fbar_max(self):

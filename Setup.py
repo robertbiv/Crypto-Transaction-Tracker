@@ -157,39 +157,39 @@ def main():
 
     # --- 2. Wallets (All Chains) ---
     wallet_data = {
-        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. To add multiple wallets for the same coin, provide a JSON array of addresses, e.g. \"\"\"\n{\n  \"ETH\": [\"0xFirstAddr\", \"0xSecondAddr\"]\n}\n\"\"\"\nDo NOT paste private keys.",
+        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. To add multiple wallets for the same blockchain, provide a JSON array of addresses. Do NOT paste private keys.",
         
         # --- UTXO CHAINS (Blockchair) ---
-        "BTC": ["PASTE_BTC_ADDRESS"],
-        "LTC": ["PASTE_LTC_ADDRESS"],
-        "DOGE": ["PASTE_DOGE_ADDRESS"],
-        "BCH": ["PASTE_BCH_ADDRESS"],
-        "DASH": ["PASTE_DASH_ADDRESS"],
-        "ZEC": ["PASTE_ZEC_ADDRESS"],
-        "XMR": ["PASTE_XMR_ADDRESS"], 
-        "XRP": ["PASTE_XRP_ADDRESS"],
-        "ADA": ["PASTE_ADA_ADDRESS"],
-        "XLM": ["PASTE_XLM_ADDRESS"],
-        "EOS": ["PASTE_EOS_ADDRESS"],
-        "TRX": ["PASTE_TRX_ADDRESS"],
+        "bitcoin": {"addresses": ["PASTE_BTC_ADDRESS"]},
+        "litecoin": {"addresses": ["PASTE_LTC_ADDRESS"]},
+        "dogecoin": {"addresses": ["PASTE_DOGE_ADDRESS"]},
+        "bitcoincash": {"addresses": ["PASTE_BCH_ADDRESS"]},
+        "dash": {"addresses": ["PASTE_DASH_ADDRESS"]},
+        "zcash": {"addresses": ["PASTE_ZEC_ADDRESS"]},
+        "monero": {"addresses": ["PASTE_XMR_ADDRESS"]},
+        "ripple": {"addresses": ["PASTE_XRP_ADDRESS"]},
+        "cardano": {"addresses": ["PASTE_ADA_ADDRESS"]},
+        "stellar": {"addresses": ["PASTE_XLM_ADDRESS"]},
+        "eos": {"addresses": ["PASTE_EOS_ADDRESS"]},
+        "tron": {"addresses": ["PASTE_TRX_ADDRESS"]},
 
         # --- EVM CHAINS (Moralis) ---
-        "ETH": ["PASTE_ETH_ADDRESS"],
-        "MATIC": ["PASTE_MATIC_ADDRESS"],
-        "BNB": ["PASTE_BSC_ADDRESS"],
-        "AVAX": ["PASTE_AVAX_ADDRESS"],
-        "FTM": ["PASTE_FANTOM_ADDRESS"],
-        "CRO": ["PASTE_CRONOS_ADDRESS"],
-        "ARBITRUM": ["PASTE_ARBITRUM_ADDRESS"],
-        "OPTIMISM": ["PASTE_OPTIMISM_ADDRESS"],
-        "GNOSIS": ["PASTE_GNOSIS_ADDRESS"],
-        "BASE": ["PASTE_BASE_ADDRESS"],
-        "PULSE": ["PASTE_PULSE_ADDRESS"],
-        "LINEA": ["PASTE_LINEA_ADDRESS"],
-        "MOONBEAM": ["PASTE_MOONBEAM_ADDRESS"],
+        "ethereum": {"addresses": ["PASTE_ETH_ADDRESS"]},
+        "polygon": {"addresses": ["PASTE_MATIC_ADDRESS"]},
+        "binance": {"addresses": ["PASTE_BSC_ADDRESS"]},
+        "avalanche": {"addresses": ["PASTE_AVAX_ADDRESS"]},
+        "fantom": {"addresses": ["PASTE_FANTOM_ADDRESS"]},
+        "cronos": {"addresses": ["PASTE_CRONOS_ADDRESS"]},
+        "arbitrum": {"addresses": ["PASTE_ARBITRUM_ADDRESS"]},
+        "optimism": {"addresses": ["PASTE_OPTIMISM_ADDRESS"]},
+        "gnosis": {"addresses": ["PASTE_GNOSIS_ADDRESS"]},
+        "base": {"addresses": ["PASTE_BASE_ADDRESS"]},
+        "pulsechain": {"addresses": ["PASTE_PULSE_ADDRESS"]},
+        "linea": {"addresses": ["PASTE_LINEA_ADDRESS"]},
+        "moonbeam": {"addresses": ["PASTE_MOONBEAM_ADDRESS"]},
 
         # --- SOLANA (Moralis) ---
-        "SOL": ["PASTE_SOL_ADDRESS"]
+        "solana": {"addresses": ["PASTE_SOL_ADDRESS"]}
     }
     validate_json(WALLETS_FILE, wallet_data)
 
