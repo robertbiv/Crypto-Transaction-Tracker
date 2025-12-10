@@ -61,7 +61,7 @@ The script automatically builds and maintains this structure:
 ├── Setup.py                       # [USER] Run once to initialize folders/files
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
-├── test_suite.py                  # [USER] Verification suite (Chaos/Compliance tests)
+├── unit_test.py                   # [USER] Verification suite (148 tests, 45 test classes)
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
 ├── wallets.json                   # [USER] Your Public Addresses (For Audit)
@@ -184,7 +184,11 @@ To run the comprehensive test suite and verify the math is perfect before filing
 python unit_test.py
 ```
 
-This runs 50+ test cases including edge cases, random scenarios, and graceful error handling.
+This runs **148 test methods** across **45 test classes** including edge cases, random scenarios, US tax compliance verification, and graceful error handling.
+
+**For detailed test coverage information**, see:
+- `TEST_COVERAGE_SUMMARY.md` - Comprehensive breakdown of all 148 tests by component and tax rule
+- `FINAL_STATUS.md` - Executive summary and production readiness checklist
 
 ## **📂 Output Files (outputs/Year_YYYY/)**
 
