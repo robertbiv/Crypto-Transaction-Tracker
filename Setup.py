@@ -55,6 +55,11 @@ def validate_json(fp, default):
                 if k not in existing:
                     existing[k] = v
                     updated = True
+                elif isinstance(v, dict): # Nested merge for config sections
+                    for sk, sv in v.items():
+                        if sk not in existing[k]:
+                            existing[k][sk] = sv
+                            updated = True
             if updated:
                 with open(fp, 'w') as f: json.dump(existing, f, indent=4)
                 print(f"   [UPDATED] {fp.name} (Added new templates)")
@@ -69,15 +74,13 @@ def validate_json(fp, default):
     print(f"   [CREATED] {fp.name}")
 
 def main():
-    print("--- SETUP (V21) ---\n")
+    print("--- SETUP (V30: US Tax Compliance + HIFO Support) ---\n")
     check_dependencies()
     check_folders()
     
-    # --- 1. API Keys (Full List) ---
-    # Includes Moralis (Required for EVM/Solana audit) and Blockchair (Optional)
-    # Plus every Certified/Supported Exchange
+    # --- 1. API Keys ---
     api_data = {
-        "_INSTRUCTIONS": "Enter READ-ONLY API keys for each service. For exchanges provide 'apiKey' and 'secret'. Some exchanges also require 'password' (e.g., OKX, KuCoin). ALWAYS create keys with read-only or withdrawal-disabled permissions. Moralis is REQUIRED for EVM/Solana audit (get a free key from https://moralis.io). Blockchair is OPTIONAL for UTXO chains. Do NOT paste private keys or secrets from unknown sources.",
+        "_INSTRUCTIONS": "Enter Read-Only keys. Moralis is REQUIRED for EVM/Solana audit. Blockchair is OPTIONAL (BTC/UTXO). If you don't have a key, leave as 'PASTE_KEY' or empty string.",
         
         # --- AUDIT PROVIDERS ---
         "moralis": {"apiKey": "PASTE_MORALIS_KEY_HERE"},
@@ -154,7 +157,7 @@ def main():
 
     # --- 2. Wallets (All Chains) ---
     wallet_data = {
-        "_INSTRUCTIONS": "Paste PUBLIC wallet addresses per chain as lists. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. Do NOT paste private keys. For Monero (XMR) a view key may be required by some explorers; see project docs.",
+        "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. Do NOT paste private keys.",
         
         # --- UTXO CHAINS (Blockchair) ---
         "BTC": ["PASTE_BTC_ADDRESS"],
@@ -163,7 +166,7 @@ def main():
         "BCH": ["PASTE_BCH_ADDRESS"],
         "DASH": ["PASTE_DASH_ADDRESS"],
         "ZEC": ["PASTE_ZEC_ADDRESS"],
-        "XMR": ["PASTE_XMR_ADDRESS"], # Note: XMR Audit often requires view key, basic explorer might fail
+        "XMR": ["PASTE_XMR_ADDRESS"], 
         "XRP": ["PASTE_XRP_ADDRESS"],
         "ADA": ["PASTE_ADA_ADDRESS"],
         "XLM": ["PASTE_XLM_ADDRESS"],
@@ -190,12 +193,15 @@ def main():
     }
     validate_json(WALLETS_FILE, wallet_data)
 
-    # --- 3. User Config ---
+    # --- 3. User Config (Updated for V30) ---
     config_data = {
-        "_INSTRUCTIONS": "General runtime options and API timeouts. Key fields: 'general.run_audit' (True/False to enable chain audits), 'general.create_db_backups' (True/False), 'performance.respect_free_tier_limits' (pause between requests), 'performance.api_timeout_seconds' (network timeout seconds), 'logging.compress_older_than_days' (compress logs older than this many days). Ensure Moralis key is present in api_keys.json to enable EVM/Solana audits.",
+        "_INSTRUCTIONS": "General runtime options. 'accounting.method': 'FIFO' (Default) or 'HIFO'. 'general.run_audit': True/False.",
         "general": {
             "run_audit": True,
             "create_db_backups": True
+        },
+        "accounting": {
+            "method": "FIFO" 
         },
         "performance": {
             "respect_free_tier_limits": True,

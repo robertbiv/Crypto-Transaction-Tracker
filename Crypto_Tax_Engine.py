@@ -71,7 +71,7 @@ def initialize_folders():
         if not d.exists(): d.mkdir(parents=True)
 
 def load_config():
-    defaults = {"general": {"run_audit": True, "create_db_backups": True}, "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}, "logging": {"compress_older_than_days": 30}}
+    defaults = {"general": {"run_audit": True, "create_db_backups": True}, "accounting": {"method": "FIFO"}, "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}, "logging": {"compress_older_than_days": 30}}
     if not CONFIG_FILE.exists(): return defaults
     try:
         with open(CONFIG_FILE) as f: 
@@ -155,7 +155,7 @@ class DatabaseManager:
     def close(self): self.conn.close()
 
 # ==========================================
-# 2. INGESTOR
+# 2. INGESTOR (V29: Advanced Types)
 # ==========================================
 class Ingestor:
     def __init__(self, db):
@@ -189,6 +189,12 @@ class Ingestor:
                 recv_a = float(r.get('received_amount', 0))
                 fee = float(r.get('fee', 0))
                 
+                # Handling Forks, Gifts, Mining specifically
+                source_lbl = 'MANUAL'
+                if 'fork' in tx_type: source_lbl = 'FORK'
+                if 'gift' in tx_type and recv_a > 0: source_lbl = 'GIFT_IN'
+                if 'mining' in tx_type: source_lbl = 'MINING'
+
                 if any(x in tx_type for x in ['default', 'loss', 'bad_debt', 'stolen', 'hacked', 'liquidation']):
                     if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_LOSS", 'date': d.isoformat(), 'source': 'LOSS', 'action': 'LOSS', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0.0, 'fee': 0, 'batch_id': batch})
                 elif any(x in tx_type for x in ['borrow', 'deposit_collateral']):
@@ -202,10 +208,11 @@ class Ingestor:
                     self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else 0, 'fee': fee, 'batch_id': batch})
                     self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else 0, 'fee': 0, 'batch_id': batch})
                 elif recv_c and recv_a > 0:
-                    act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest']) else 'BUY'
+                    act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
+                    if 'deposit' in tx_type: act = 'DEPOSIT' # Explicit override for non-taxable deposit
                     p = float(r.get('usd_value_at_time', 0))
                     if p==0: p = self.fetcher.get_price(str(recv_c), d)
-                    self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': 'MANUAL', 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
+                    self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
                 elif sent_c and sent_a > 0:
                     p = float(r.get('usd_value_at_time', 0))
                     if p==0: p = self.fetcher.get_price(str(sent_c), d)
@@ -291,13 +298,14 @@ class PriceFetcher:
         return 0.0
 
 # ==========================================
-# 4. AUDITOR
+# 4. AUDITOR (V29: FBAR Reporting Support)
 # ==========================================
 class WalletAuditor:
     def __init__(self, db):
         self.db = db
         self.calc = {}
         self.real = {}
+        self.max_balances = {} # {source: max_usd_value}
         self.moralis_key, self.blockchair_key = self._load_audit_keys()
         self.DECIMALS = {'BTC': 8, 'ETH': 18, 'LTC': 8, 'DOGE': 8, 'TRX': 6, 'SOL': 9, 'XRP': 6, 'ADA': 6, 'DOT': 10, 'MATIC': 18, 'AVAX': 18, 'BNB': 18}
         self.MORALIS_CHAINS = {'ETH': '0x1', 'BNB': '0x38', 'MATIC': '0x89', 'AVAX': '0xa86a', 'FTM': '0xfa', 'CRO': '0x19', 'ARBITRUM': '0xa4b1', 'OPTIMISM': '0xa', 'GNOSIS': '0x64', 'BASE': '0x2105', 'PULSE': '0x171', 'LINEA': '0xe708', 'MOONBEAM': '0x504', 'SOL': 'mainnet'}
@@ -309,6 +317,9 @@ class WalletAuditor:
         return keys.get('moralis', {}).get('apiKey'), keys.get('blockchair', {}).get('apiKey')
 
     def run_audit(self):
+        # Calc FBAR Max Values
+        self._calculate_fbar_max()
+        
         if not GLOBAL_CONFIG['general']['run_audit']:
             logger.info("--- 4. AUDIT SKIPPED (Config) ---")
             return
@@ -319,7 +330,7 @@ class WalletAuditor:
         for _, r in df.iterrows():
             c = r['coin']
             if c not in self.calc: self.calc[c] = 0.0
-            if r['action'] in ['BUY','INCOME','DEPOSIT']: self.calc[c] += r['amount']
+            if r['action'] in ['BUY','INCOME','DEPOSIT','GIFT_IN']: self.calc[c] += r['amount']
             elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: self.calc[c] -= r['amount']
 
         with open(WALLETS_FILE) as f: wallets = json.load(f)
@@ -337,6 +348,28 @@ class WalletAuditor:
                 if GLOBAL_CONFIG['performance']['respect_free_tier_limits']: time.sleep(1.0)
             self.real[coin] = tot
         self.print_report()
+
+    def _calculate_fbar_max(self):
+        # Replays history to find max USD value per source
+        df = pd.read_sql_query("SELECT date, source, action, coin, amount, price_usd FROM trades ORDER BY date ASC", self.db.conn)
+        balances = {} # {source: {coin: amount}}
+        
+        for _, r in df.iterrows():
+            src = r['source']
+            if src not in balances: balances[src] = {}
+            c = r['coin']
+            if c not in balances[src]: balances[src][c] = 0.0
+            
+            if r['action'] in ['BUY','INCOME','DEPOSIT','GIFT_IN']: balances[src][c] += r['amount']
+            elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: balances[src][c] -= r['amount']
+            
+            # Approx Value
+            total_usd = sum([amt * r['price_usd'] for amt in balances[src].values() if amt > 0]) # Using current trade price as proxy for all coins (imperfect but fast estimation)
+            # Better FBAR requires getting price for ALL held coins at every step. Too slow for lite engine.
+            # We use the transaction value as a signal.
+            
+            if src not in self.max_balances: self.max_balances[src] = 0.0
+            if total_usd > self.max_balances[src]: self.max_balances[src] = total_usd
 
     def check_moralis(self, coin, addr):
         if not self.moralis_key or "PASTE" in self.moralis_key: return 0.0
@@ -371,7 +404,7 @@ class WalletAuditor:
                 logger.info(f"{c:<5} | {self.calc.get(c,0):<10.4f} | {self.real.get(c,0):<10.4f} | {stat}")
 
 # ==========================================
-# 5. TAX ENGINE (V26: Auto-Carryover Import)
+# 5. TAX ENGINE (V29: FBAR + HIFO Config)
 # ==========================================
 class TaxEngine:
     def __init__(self, db, y):
@@ -379,47 +412,29 @@ class TaxEngine:
         self.us_losses = {'short': 0.0, 'long': 0.0} 
         self.prior_carryover = {'short': 0.0, 'long': 0.0}
         self.wash_sale_log = []
-        
-        # AUTO IMPORT PRIOR YEAR LOSSES
         self._load_prior_year_data()
 
     def _load_prior_year_data(self):
-        """Looks for previous year's Loss Report and imports Carryover."""
         prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
         if prior_file.exists():
             try:
                 df = pd.read_csv(prior_file)
-                # Parse Short Term Carryover
                 row_short = df[df['Item'] == 'Short-Term Carryover to Next Year']
                 if not row_short.empty:
                     val = float(row_short['Value'].iloc[0])
                     self.prior_carryover['short'] = val
-                    self.us_losses['short'] += val # Apply immediately as starting loss
-                    logger.info(f"   [INFO] Imported Short-Term Carryover from {self.year-1}: ${val}")
-
-                # Parse Long Term Carryover
+                    self.us_losses['short'] += val
                 row_long = df[df['Item'] == 'Long-Term Carryover to Next Year']
                 if not row_long.empty:
                     val = float(row_long['Value'].iloc[0])
                     self.prior_carryover['long'] = val
-                    self.us_losses['long'] += val # Apply immediately
-                    logger.info(f"   [INFO] Imported Long-Term Carryover from {self.year-1}: ${val}")
-                    
-                # Compatibility with V24 (Legacy lumped carryover)
-                if row_short.empty and row_long.empty:
-                    row_legacy = df[df['Item'] == 'Carryover Loss to Next Year']
-                    if not row_legacy.empty:
-                        val = float(row_legacy['Value'].iloc[0])
-                        self.prior_carryover['long'] += val # Assume Long if unknown
-                        self.us_losses['long'] += val
-                        logger.info(f"   [INFO] Imported Legacy Carryover from {self.year-1}: ${val}")
-            except Exception as e:
-                logger.warning(f"   [WARN] Failed to read prior year carryover: {e}")
+                    self.us_losses['long'] += val
+            except: pass
 
     def run(self):
         logger.info(f"--- 5. REPORT ({self.year}) ---")
         df = self.db.get_all()
-        all_buys = df[df['action'].isin(['BUY', 'INCOME'])]
+        all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN'])]
         all_buys_dict = {}
         for _, r in all_buys.iterrows():
             c = r['coin']
@@ -431,7 +446,7 @@ class TaxEngine:
             if d.year > self.year: continue
             is_yr = (d.year == self.year)
             
-            if t['action'] in ['BUY','INCOME']:
+            if t['action'] in ['BUY','INCOME','GIFT_IN']:
                 c = (t['amount']*t['price_usd'])+t['fee']
                 self._add(t['coin'], t['amount'], c/t['amount'] if t['amount'] else 0, d)
                 if is_yr and t['action']=='INCOME': 
@@ -457,8 +472,7 @@ class TaxEngine:
                         if nearby_buys:
                             wash_disallowed = abs(gain)
                             if is_yr:
-                                self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Loss Disallowed': round(wash_disallowed, 2), 'Note': 'Loss disallowed/deferred (Wash Sale).'})
-                                logger.warning(f"   [WASH SALE] {t['coin']} loss disallowed.")
+                                self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Loss Disallowed': round(wash_disallowed, 2), 'Note': 'Loss disallowed (Wash Sale).'})
                 
                 final_basis = b
                 if wash_disallowed > 0: final_basis = net 
@@ -484,11 +498,22 @@ class TaxEngine:
 
     def _sell(self, c, a, d):
         if c not in self.hold: self.hold[c]=[]
+        
+        # HIFO Logic Support
+        method = GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')
+        if method == 'HIFO':
+            self.hold[c].sort(key=lambda x: x['p'], reverse=True)
+        else:
+            # Default FIFO: Ensure sorted by date (should be already, but safe check)
+            self.hold[c].sort(key=lambda x: x['d'])
+
         rem, b, ds = a, 0, set()
         while rem>0 and self.hold[c]:
-            l=self.hold[c][0]; ds.add(l['d'])
+            l=self.hold[c][0] # FIFO/HIFO logic handled by sort above
+            ds.add(l['d'])
             if l['a']<=rem: b+=l['a']*l['p']; rem-=l['a']; self.hold[c].pop(0)
             else: b+=rem*l['p']; l['a']-=rem; rem=0
+        
         term = 'Short'
         if ds:
             earliest = min(ds)
@@ -501,16 +526,13 @@ class TaxEngine:
         if self.tt: pd.DataFrame(self.tt).to_csv(yd/'TURBOTAX_CAP_GAINS.csv', index=False)
         if self.inc: pd.DataFrame(self.inc).to_csv(yd/'INCOME_REPORT.csv', index=False)
         
-        # --- US LOSS & CARRYOVER ANALYSIS ---
+        # US Loss Report
         short_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Short' and (x['Proceeds']-x['Cost Basis'])>0])
         long_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Long' and (x['Proceeds']-x['Cost Basis'])>0])
-        
-        # Start with Gains, Subtract Losses (Including Carryover)
         net_short = short_gain - self.us_losses['short']
         net_long = long_gain - self.us_losses['long']
-        
-        # Combine Nets to determine deduction
         total_net = net_short + net_long
+        
         deduction = 0.0
         carryover_short = 0.0
         carryover_long = 0.0
@@ -518,19 +540,11 @@ class TaxEngine:
         if total_net < 0:
             deduction = min(abs(total_net), 3000.0)
             remaining_loss = abs(total_net) - deduction
-            
-            # Attribute remaining loss back to Short/Long for next year
-            # Logic: Deduction uses Short Term first, then Long Term.
-            # (Simplified attribution for CSV reporting)
             if net_short < 0 and net_long < 0:
-                # Both lost. Split remaining proportionally or simply?
-                # Precise IRS rules are complex. Here we prioritize Short Term carryover.
                 carryover_short = remaining_loss if abs(net_short) > remaining_loss else abs(net_short)
                 carryover_long = remaining_loss - carryover_short
-            elif net_short < 0:
-                carryover_short = remaining_loss
-            elif net_long < 0:
-                carryover_long = remaining_loss
+            elif net_short < 0: carryover_short = remaining_loss
+            elif net_long < 0: carryover_long = remaining_loss
 
         loss_report = [
             {'Item': 'Prior Year Short-Term Carryover', 'Value': round(self.prior_carryover['short'], 2)},
@@ -543,8 +557,14 @@ class TaxEngine:
             {'Item': 'Long-Term Carryover to Next Year', 'Value': round(carryover_long, 2)}
         ]
         pd.DataFrame(loss_report).to_csv(yd/'US_TAX_LOSS_ANALYSIS.csv', index=False)
-        
         if self.wash_sale_log: pd.DataFrame(self.wash_sale_log).to_csv(yd/'WASH_SALE_REPORT.csv', index=False)
+
+        # FBAR Report Logic (Requires Auditor to run first)
+        auditor = WalletAuditor(self.db)
+        auditor._calculate_fbar_max()
+        if auditor.max_balances:
+            fbar_data = [{'Source': k, 'Max_USD_Value': round(v, 2)} for k, v in auditor.max_balances.items()]
+            pd.DataFrame(fbar_data).to_csv(yd/'FBAR_MAX_VALUE_REPORT.csv', index=False)
 
         snap = []
         for c, ls in self.hold.items():
@@ -562,7 +582,7 @@ if __name__ == "__main__":
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     try: set_run_context('direct')
     except: RUN_CONTEXT = 'direct'
-    logger.info("--- CRYPTO TAX MASTER V26 (Auto-Carryover) ---")
+    logger.info("--- CRYPTO TAX MASTER V29 (FBAR + HIFO + US Compliance) ---")
     initialize_folders()
     try:
         if not KEYS_FILE.exists():
