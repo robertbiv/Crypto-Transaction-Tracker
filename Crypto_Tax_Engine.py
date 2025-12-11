@@ -354,11 +354,38 @@ class Ingestor:
                 self._archive(fp)
             if not found: logger.info("   No new CSV files.")
             self.db.remove_safety_backup()
-        except: self.db.restore_safety_backup()
+        except ValueError:
+            # Re-raise validation errors so users see clear error messages
+            self.db.restore_safety_backup()
+            raise
+        except:
+            self.db.restore_safety_backup()
 
     def _proc_csv_smart(self, fp, batch):
         df = pd.read_csv(fp)
         df.columns = [c.lower().strip() for c in df.columns]
+        
+        # Validate CSV has at least some recognizable columns
+        recognized_cols = {'date', 'timestamp', 'coin', 'sent_coin', 'received_coin', 'sent_asset', 'received_asset', 
+                          'amount', 'sent_amount', 'received_amount', 'type', 'kind'}
+        actual_cols = set(df.columns)
+        
+        if not actual_cols.intersection(recognized_cols):
+            error_msg = f"CSV validation failed for {fp.name}: No recognized columns found. Expected at least one of: {', '.join(sorted(recognized_cols))}. Found: {', '.join(sorted(actual_cols))}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Check for date column
+        if 'date' not in actual_cols and 'timestamp' not in actual_cols:
+            error_msg = f"CSV validation failed for {fp.name}: Missing required date/timestamp column. Found columns: {', '.join(sorted(actual_cols))}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Warn if no price column found (will fallback to price fetching)
+        price_cols = {'price', 'price_usd', 'usd_value_at_time'}
+        if not actual_cols.intersection(price_cols):
+            logger.warning(f"CSV {fp.name} has no price column ({', '.join(price_cols)}). Will attempt to fetch prices from APIs (may be slow).")
+        
         for idx, r in df.iterrows():
             try:
                 d = pd.to_datetime(r.get('date', r.get('timestamp', datetime.now())))

@@ -1658,16 +1658,17 @@ class TestCSVParsingAndIngestion(unittest.TestCase):
             self.fail(f"Malformed CSV caused crash: {e}")
     
     def test_csv_wrong_delimiter(self):
-        """Test: CSV with wrong delimiter (semicolon instead of comma)"""
+        """Test: CSV with wrong delimiter (semicolon instead of comma) raises ValueError"""
         csv_path = app.INPUT_DIR / 'wrong_delim.csv'
         csv_path.write_text("Date;Coin;Amount;Price\n2023-01-01;BTC;1.0;10000\n")
         
-        try:
-            ingest = app.Ingestor(self.db)
+        ingest = app.Ingestor(self.db)
+        # CSV parser will see "Date;Coin;Amount;Price" as a single column
+        # Our validation should catch this and raise ValueError
+        with self.assertRaises(ValueError) as ctx:
             ingest.run_csv_scan()
-            self.assertTrue(True)
-        except Exception as e:
-            self.fail(f"Wrong delimiter crashed: {e}")
+        
+        self.assertIn("No recognized columns", str(ctx.exception))
     
     def test_csv_duplicate_detection(self):
         """Test: Duplicate trades across CSVs are detected"""
@@ -1709,6 +1710,44 @@ class TestCSVParsingAndIngestion(unittest.TestCase):
             self.assertTrue(True)
         except Exception as e:
             self.fail(f"Incomplete CSV crashed: {e}")
+    
+    def test_csv_completely_invalid_columns(self):
+        """Test: CSV with no recognized columns raises ValueError"""
+        csv_path = app.INPUT_DIR / 'invalid.csv'
+        csv_path.write_text("Foo,Bar,Baz\n1,2,3\n4,5,6\n")
+        
+        ingest = app.Ingestor(self.db)
+        with self.assertRaises(ValueError) as ctx:
+            ingest.run_csv_scan()
+        
+        self.assertIn("No recognized columns", str(ctx.exception))
+        self.assertIn("invalid.csv", str(ctx.exception))
+    
+    def test_csv_missing_date_column(self):
+        """Test: CSV without date/timestamp column raises ValueError"""
+        csv_path = app.INPUT_DIR / 'no_date.csv'
+        csv_path.write_text("Coin,Amount,Price\nBTC,1.0,50000\n")
+        
+        ingest = app.Ingestor(self.db)
+        with self.assertRaises(ValueError) as ctx:
+            ingest.run_csv_scan()
+        
+        self.assertIn("Missing required date/timestamp column", str(ctx.exception))
+        self.assertIn("no_date.csv", str(ctx.exception))
+    
+    def test_csv_without_price_column_warns(self):
+        """Test: CSV without price columns logs warning but continues"""
+        csv_path = app.INPUT_DIR / 'no_price.csv'
+        csv_path.write_text("Date,Coin,Amount\n2023-01-01,BTC,1.0\n")
+        
+        # Should not raise, but will warn and attempt price fetch
+        ingest = app.Ingestor(self.db)
+        try:
+            ingest.run_csv_scan()
+            # Successfully processed despite no price column
+            self.assertTrue(True)
+        except Exception as e:
+            self.fail(f"CSV without price column crashed: {e}")
 
 # --- 15. PRICE FETCHING & FALLBACK TESTS ---
 class TestPriceFetchingAndFallback(unittest.TestCase):
