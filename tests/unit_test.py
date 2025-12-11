@@ -23,6 +23,15 @@ import Auto_Runner
 import Migration_2025 as mig
 from contextlib import redirect_stdout
 
+# Print test suite information
+print("\n" + "="*70)
+print("CRYPTO TAX ENGINE - UNIT TEST SUITE")
+print("="*70)
+print("Total test count: 173 tests across 20+ test classes")
+print("Progress indicators will show which test is currently running.")
+print("Some tests (marked with timing notes) may take 2-8 seconds.")
+print("="*70 + "\n")
+
 # --- 1. SHADOW CALCULATOR (Standard FIFO) ---
 class ShadowFIFO:
     def __init__(self):
@@ -61,6 +70,7 @@ class ShadowFIFO:
 # --- 2. ADVANCED ACCOUNTING & COMPLIANCE TESTS ---
 class TestAdvancedUSCompliance(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
@@ -389,6 +399,7 @@ class TestLendingLoss(unittest.TestCase):
 
 class TestConfigHandling(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
@@ -596,6 +607,7 @@ class TestUserErrors(unittest.TestCase):
 
 class TestChaosEngine(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}] (This test may take 2-3 seconds)", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
@@ -932,6 +944,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
 # --- 8. RANDOM SCENARIO GENERATORS - MONTE CARLO TESTING ---
 class TestRandomScenarioMonteCarloSimulation(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
@@ -1119,6 +1132,7 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
 # --- 10. EXTREME ERROR SCENARIOS - GRACEFUL DEGRADATION ---
 class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}] (This test may take 5-8 seconds)", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
