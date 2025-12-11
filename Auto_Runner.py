@@ -71,6 +71,11 @@ def run_automation():
         now = datetime.now()
         current_year = now.year
         prev_year = current_year - 1
+        # Allow tests to control snapshot naming without touching global clock
+        try:
+            tax_app.CURRENT_YEAR_OVERRIDE = current_year
+        except Exception:
+            tax_app.CURRENT_YEAR_OVERRIDE = None
         
         # 5. CHECK PREVIOUS YEAR (The "Final Run")
         prev_folder = tax_app.OUTPUT_DIR / f"Year_{prev_year}"
