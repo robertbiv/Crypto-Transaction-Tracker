@@ -60,7 +60,10 @@ The script automatically builds and maintains this structure:
 ├── docs/                          # [DOCS] Supporting documentation
 │   ├── Supported Blockchains.md   # [DOCS] List of supported chains
 │   ├── Supported Exchanges.md     # [DOCS] List of supported exchanges
-│   └── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
+│   ├── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
+│   ├── LEDGER_STAKING_SETUP.md    # [DOCS] Complete Ledger staking guide
+│   ├── LEDGER_STAKING_QUICK_START.md # [DOCS] 10-minute quick setup
+│   └── LEDGER_STAKING_EXAMPLES.md # [DOCS] Real-world staking scenarios
 ├── tests/                         # [USER] Test suite & documentation
 │   ├── unit_test.py               # [USER] Verification suite (148 tests, 45 test classes)
 │   ├── test_wallet_compatibility.py # [USER] Wallet format compatibility tests
@@ -69,6 +72,7 @@ The script automatically builds and maintains this structure:
 │
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
+├── Migration_2025.py              # [TOOL] Safe-harbor allocator for per-wallet basis
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
 ├── wallets.json                   # [USER] Your Public Addresses (For Audit)
