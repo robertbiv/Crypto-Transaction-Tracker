@@ -31,6 +31,10 @@ KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 CONFIG_FILE = BASE_DIR / 'config.json'
 
+# 2025+ compliance flags
+# Strict broker mode prevents cross-wallet basis fallback for custodial sources (1099-DA alignment)
+# Will be initialized after GLOBAL_CONFIG
+
 logger = logging.getLogger("crypto_tax_engine")
 logger.setLevel(logging.INFO)
 RUN_CONTEXT = 'imported'
@@ -74,7 +78,19 @@ def initialize_folders():
         if not d.exists(): d.mkdir(parents=True)
 
 def load_config():
-    defaults = {"general": {"run_audit": True, "create_db_backups": True}, "accounting": {"method": "FIFO"}, "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30}, "logging": {"compress_older_than_days": 30}}
+    defaults = {
+        "general": {"run_audit": True, "create_db_backups": True},
+        "accounting": {"method": "FIFO"},
+        "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30},
+        "logging": {"compress_older_than_days": 30},
+        "compliance": {
+            "strict_broker_mode": True,
+            "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
+            "staking_taxable_on_receipt": True,
+            "collectible_prefixes": ["NFT-", "ART-"],
+            "collectible_tokens": ["NFT", "PUNK", "BAYC"]
+        }
+    }
     if not CONFIG_FILE.exists(): return defaults
     try:
         with open(CONFIG_FILE) as f: 
@@ -88,6 +104,20 @@ def load_config():
     except: return defaults
 
 GLOBAL_CONFIG = load_config()
+
+# Initialize 2025+ compliance flags from config
+STRICT_BROKER_MODE = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
+BROKER_SOURCES = set(GLOBAL_CONFIG.get('compliance', {}).get('broker_sources', ['COINBASE','KRAKEN','GEMINI','BINANCE','ROBINHOOD','ETORO']))
+STAKING_TAXABLE_ON_RECEIPT = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+COLLECTIBLE_PREFIXES = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_prefixes', ['NFT-','ART-']))
+COLLECTIBLE_TOKENS = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_tokens', ['NFT','PUNK','BAYC']))
+
+# Compliance warning messages (centralized for maintainability)
+COMPLIANCE_WARNINGS = {
+    'HIFO': '[CONFIG] Accounting method HIFO selected. This is not recommended and may not align with broker 1099-DA reporting.',
+    'STRICT_BROKER_DISABLED': '[CONFIG] strict_broker_mode is disabled. Cross-wallet basis fallback can cause 1099-DA mismatches.',
+    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_taxable_on_receipt=False. Constructive receipt deferral is aggressive and may be challenged by IRS.'
+}
 
 # ==========================================
 # UTILITY FUNCTIONS FOR DECIMAL ARITHMETIC
@@ -1037,6 +1067,18 @@ class TaxEngine:
         self.wash_sale_log = []
         self.sale_log = []  # used for 1099-DA style reconciliation (grouped by source)
         self._load_prior_year_data()
+        # Warn on non-recommended or risky configurations
+        try:
+            acct_method = GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')
+            if str(acct_method).upper() == 'HIFO':
+                logger.warning(COMPLIANCE_WARNINGS['HIFO'])
+            comp = GLOBAL_CONFIG.get('compliance', {})
+            if not comp.get('strict_broker_mode', True):
+                logger.warning(COMPLIANCE_WARNINGS['STRICT_BROKER_DISABLED'])
+            if comp.get('staking_taxable_on_receipt', True) is False:
+                logger.warning(COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'])
+        except Exception:
+            pass
 
     def _load_prior_year_data(self):
         prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
@@ -1057,6 +1099,10 @@ class TaxEngine:
 
     def run(self):
         logger.info(f"--- 5. REPORT ({self.year}) ---")
+        # Read dynamic compliance flags at run-time to respect test changes to GLOBAL_CONFIG
+        staking_on_receipt = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+        strict_mode = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
+        broker_sources = set(GLOBAL_CONFIG.get('compliance', {}).get('broker_sources', list(BROKER_SOURCES)))
         df = self.db.get_all()
         all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN'])]
         all_buys_dict = {}
@@ -1077,12 +1123,16 @@ class TaxEngine:
                 amt = to_decimal(t['amount'])
                 price = to_decimal(t['price_usd'])
                 fee = to_decimal(t['fee'])
-                c = (amt * price) + fee
-                cost_basis = c / amt if amt > 0 else Decimal('0')
-                self._add(t['coin'], amt, cost_basis, d, src)
-                if is_yr and t['action']=='INCOME': 
-                    usd_value = amt * price
-                    self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(usd_value, 2))})
+                if t['action'] == 'INCOME' and not staking_on_receipt:
+                    # Constructive receipt disabled: add zero-basis lot, do not record income
+                    self._add(t['coin'], amt, Decimal('0'), d, src)
+                else:
+                    c = (amt * price) + fee
+                    cost_basis = c / amt if amt > 0 else Decimal('0')
+                    self._add(t['coin'], amt, cost_basis, d, src)
+                    if is_yr and t['action']=='INCOME': 
+                        usd_value = amt * price
+                        self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(usd_value, 2))})
 
             elif t['action'] == 'DEPOSIT':
                 self._add(t['coin'], to_decimal(t['amount']), Decimal('0'), d, src) 
@@ -1095,6 +1145,9 @@ class TaxEngine:
                 net = (amt * price) - fee
                 if t['action'] == 'LOSS': net = Decimal('0')
                 
+                # Pass strict mode context to _sell via instance attributes
+                self._strict_mode = strict_mode
+                self._broker_sources = broker_sources
                 b, term, acq = self._sell(t['coin'], amt, d, src)
                 
                 gain = net - b
@@ -1124,6 +1177,8 @@ class TaxEngine:
                     desc = f"{float(round_decimal(amt, 8))} {t['coin']}" + (" (Fee)" if t['source']=='TRANSFER_FEE' else "")
                     if t['action'] == 'LOSS': desc = f"LOSS: {desc}"
                     if wash_disallowed > 0: desc += " (WASH SALE)"
+                    # Collectibles tag
+                    collectible = self._is_collectible_symbol(t['coin'])
                     
                     realized_gain = net - final_basis
                     if realized_gain < 0:
@@ -1136,8 +1191,19 @@ class TaxEngine:
                     basis_places = 8 if abs(final_basis) < 1 else 2
                     proceeds_f = float(round_decimal(net, proceeds_places))
                     cost_basis_f = float(round_decimal(final_basis, basis_places))
-                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':proceeds_f, 'Cost Basis':cost_basis_f, 'Term': term, 'Source': src})
-                    self.sale_log.append({'Source': src, 'Coin': t['coin'], 'Proceeds': proceeds_f, 'Cost Basis': cost_basis_f, 'Gain': proceeds_f - cost_basis_f})
+                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':proceeds_f, 'Cost Basis':cost_basis_f, 'Term': term, 'Source': src, 'Collectible': collectible})
+                    self.sale_log.append({
+                        'Source': src,
+                        'Coin': t['coin'],
+                        'Amount': float(round_decimal(amt,8)),
+                        'Proceeds': proceeds_f,
+                        'Cost Basis': cost_basis_f,
+                        'Gain': proceeds_f - cost_basis_f,
+                        'Term': term,
+                        'Collectible': collectible,
+                        'Wash_Disallowed_By_Engine': float(round_decimal(wash_disallowed,2)),
+                        'TxId': t.get('id', '')
+                    })
 
             elif t['action'] == 'WITHDRAWAL':
                 self._sell(t['coin'], to_decimal(t['amount']), d, src)
@@ -1149,6 +1215,7 @@ class TaxEngine:
                     logger.warning(f"TRANSFER missing destination for {t.get('coin','?')} on {d.date()}; skipping move.")
                     continue
                 self._transfer(t['coin'], amt, src, dst, d)
+            
 
         # Build flattened holdings view for backward compatibility (coin -> list of lots)
         self.hold_flat = {}
@@ -1165,6 +1232,14 @@ class TaxEngine:
         if coin not in self.holdings_by_source: self.holdings_by_source[coin] = {}
         if source not in self.holdings_by_source[coin]: self.holdings_by_source[coin][source] = []
         return self.holdings_by_source[coin][source]
+
+    def _is_collectible_symbol(self, symbol: str) -> bool:
+        s = str(symbol).upper()
+        if any(s.startswith(p) for p in COLLECTIBLE_PREFIXES):
+            return True
+        if s in COLLECTIBLE_TOKENS:
+            return True
+        return False
 
     def _add(self, c, a, p, d, source):
         """Add buy/income record to inventory bucket for the given source."""
@@ -1199,26 +1274,44 @@ class TaxEngine:
 
         # Fallback: if preferred source insufficient, draw from other sources (global FIFO/HIFO)
         if rem > 0:
-            all_lots = []
-            for src, bkt in self.holdings_by_source.get(c, {}).items():
-                for lot in bkt:
-                    all_lots.append((src, lot))
-
-            if method == 'HIFO':
-                all_lots.sort(key=lambda x: x[1]['p'], reverse=True)
+            # 2025 strict broker mode: do NOT borrow basis from other sources for custodial sales
+            active_strict = getattr(self, '_strict_mode', STRICT_BROKER_MODE)
+            active_brokers = getattr(self, '_broker_sources', BROKER_SOURCES)
+            if active_strict and (str(source).upper() in active_brokers):
+                # Record critical warning and tag as unmatched sell (zero-basis treatment for remainder)
+                msg = (f"MISSING BASIS: {rem} {c} sold from {source} without sufficient local lots. "
+                       "Strict broker mode prevents cross-wallet fallback. Consider reconciling via transfer.")
+                try:
+                    logger.critical(msg)
+                except Exception:
+                    pass
+                # Treat remaining as zero-basis to avoid crash, but mark separately
+                ds.add(d)
+                b += Decimal('0')
+                # mark on sale_log later via export granularity
+                # rem is consumed virtually; tax calc will reflect zero basis
+                rem = Decimal('0')
             else:
-                all_lots.sort(key=lambda x: x[1]['d'])
+                all_lots = []
+                for src2, bkt in self.holdings_by_source.get(c, {}).items():
+                    for lot in bkt:
+                        all_lots.append((src2, lot))
 
-            for src, lot in all_lots:
-                if rem <= 0:
-                    break
-                if lot['a'] <= Decimal('0'):
-                    continue
-                ds.add(lot['d'])
-                move_amt = lot['a'] if lot['a'] <= rem else rem
-                b += move_amt * lot['p']
-                lot['a'] -= move_amt
-                rem -= move_amt
+                if method == 'HIFO':
+                    all_lots.sort(key=lambda x: x[1]['p'], reverse=True)
+                else:
+                    all_lots.sort(key=lambda x: x[1]['d'])
+
+                for src2, lot in all_lots:
+                    if rem <= 0:
+                        break
+                    if lot['a'] <= Decimal('0'):
+                        continue
+                    ds.add(lot['d'])
+                    move_amt = lot['a'] if lot['a'] <= rem else rem
+                    b += move_amt * lot['p']
+                    lot['a'] -= move_amt
+                    rem -= move_amt
 
         term = 'Short'
         acq = 'N/A'
@@ -1267,6 +1360,21 @@ class TaxEngine:
                 Tx_Count=('Gain','count')
             ).reset_index()
             grouped.to_csv(yd/'1099_RECONCILIATION.csv', index=False)
+            # Detailed reconciliation with unmatched sells and wash sale comparison placeholders
+            detailed_cols = ['Source','Coin','Amount','Proceeds','Cost Basis','Gain','Term','Collectible','Wash_Disallowed_By_Engine','Wash_Disallowed_By_Broker','TxId']
+            df_detail = df1099.copy()
+            df_detail['Wash_Disallowed_By_Broker'] = 'PENDING'
+            # Flag unmatched sells: zero basis with strict broker mode when source is broker and local lots missing
+            def _unmatched_flag(row):
+                if STRICT_BROKER_MODE and str(row['Source']).upper() in BROKER_SOURCES and row.get('Cost Basis', 0.0) == 0.0:
+                    return 'YES'
+                return 'NO'
+            df_detail['Unmatched_Sell'] = df_detail.apply(_unmatched_flag, axis=1)
+            # Reorder/ensure columns
+            for col in detailed_cols:
+                if col not in df_detail.columns:
+                    df_detail[col] = ''
+            df_detail[detailed_cols + ['Unmatched_Sell']].to_csv(yd/'1099_RECONCILIATION_DETAILED.csv', index=False)
         
         # US Loss Report
         short_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Short' and (x['Proceeds']-x['Cost Basis'])>0])
@@ -1288,11 +1396,17 @@ class TaxEngine:
             elif net_short < 0: carryover_short = remaining_loss
             elif net_long < 0: carryover_long = remaining_loss
 
+        # Split long-term into standard vs collectibles for 28% worksheet support
+        lt_standard = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Long' and not x.get('Collectible') and (x['Proceeds']-x['Cost Basis'])>0])
+        lt_collectible = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Long' and x.get('Collectible') and (x['Proceeds']-x['Cost Basis'])>0])
+
         loss_report = [
             {'Item': 'Prior Year Short-Term Carryover', 'Value': round(self.prior_carryover['short'], 2)},
             {'Item': 'Prior Year Long-Term Carryover', 'Value': round(self.prior_carryover['long'], 2)},
             {'Item': 'Current Year Net Short-Term', 'Value': round(net_short, 2)},
             {'Item': 'Current Year Net Long-Term', 'Value': round(net_long, 2)},
+            {'Item': 'Current Year Long-Term (Standard)', 'Value': round(lt_standard, 2)},
+            {'Item': 'Current Year Long-Term (Collectibles 28%)', 'Value': round(lt_collectible, 2)},
             {'Item': 'Total Net Capital Gain/Loss', 'Value': round(total_net, 2)},
             {'Item': 'Allowable Deduction (Form 1040)', 'Value': round(deduction * -1, 2)},
             {'Item': 'Short-Term Carryover to Next Year', 'Value': round(carryover_short, 2)},

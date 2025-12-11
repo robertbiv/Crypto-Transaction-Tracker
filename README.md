@@ -45,6 +45,16 @@ The engine supports **HIFO** (Highest-In, First-Out) via configuration, but be w
 * **Compliance:** While this software generates logs that *can* serve as these records, relying on HIFO is riskier than FIFO. If you cannot produce the specific logs during an audit, the IRS may force you to recalculate everything using FIFO, potentially leading to back taxes and penalties.  
 * **Default:** We strongly recommend sticking to the default **FIFO** method unless you are an advanced user prepared to maintain detailed records.
 
+## **⚠️ Compliance Controls & Non‑Recommended Options**
+
+Certain configuration options can increase audit risk or create mismatches with broker 1099‑DA reporting. The engine will warn at runtime when these are enabled:
+
+- **strict_broker_mode (Recommended=True):** When disabled, the engine may borrow cost basis across wallets to satisfy sales from custodial sources (e.g., Coinbase). This can cause Form 8949 to diverge from broker‑issued Form 1099‑DA. Keep this enabled for 2025+ compliance.
+- **staking_taxable_on_receipt (Recommended=True):** Setting this to False applies a “constructive receipt” deferral for staking/mining rewards (no income recorded until sale). This is an aggressive position and may be challenged by the IRS under Rev. Rul. 2023‑14. Use only if you understand the risks.
+- **HIFO (Not Recommended):** While supported, HIFO increases audit friction unless you maintain specific identification records. FIFO remains the safest default.
+
+See `config.json` for detailed instructions. The setup script annotates non‑recommended options and the engine logs a warning when they are enabled.
+
 ## **📂 The Ecosystem**
 
 The script automatically builds and maintains this structure:
