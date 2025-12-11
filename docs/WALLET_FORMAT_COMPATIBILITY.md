@@ -3,7 +3,7 @@
 ### Summary
 ✅ **YES - StakeTaxCSV will be able to read and use the wallets.json format created by Setup.py**
 
-The updated system now supports **both nested and flat wallet formats**, ensuring full compatibility with StakeTaxCSV and backward compatibility with older configurations.
+The updated system now supports **both nested and flat wallet formats**, ensuring full compatibility with StakeTaxCSV and backward compatibility with older configurations. Auditor maps symbols (e.g., BTC) to full Blockchair paths (e.g., bitcoin).
 
 ---
 

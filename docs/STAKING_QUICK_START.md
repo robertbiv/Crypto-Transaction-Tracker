@@ -1,6 +1,6 @@
-# Ledger Staking Rewards - Quick Setup (10 minutes)
+# Staking Rewards - Quick Setup (10 minutes)
 
-## TL;DR: Get Staking Rewards Tax Reports from Your Ledger Wallets
+## TL;DR: Get Staking Rewards Tax Reports from your wallets
 
 ```bash
 # 1. Get API keys (5 min)
@@ -16,7 +16,7 @@ cat > api_keys.json << 'EOF'
 EOF
 
 # 3. Add your wallet addresses to wallets.json
-# Copy from Ledger Live: Settings → Accounts → Copy Address
+# Copy from your wallet app: Settings → Accounts → Copy Address
 cat > wallets.json << 'EOF'
 {
   "ethereum": {"addresses": ["0x1234..."]},
@@ -81,11 +81,11 @@ Total 2024 Staking Income: $6,316.12
 5. Paste into api_keys.json
 ```
 
-### 2️⃣ Get Your Ledger Wallet Addresses
+### 2️⃣ Get Your Wallet Addresses
 
-**From Ledger Live:**
+**From your wallet app:**
 ```
-1. Open Ledger Live
+1. Open your wallet app
 2. Click an account (Ethereum, Solana, Cardano, etc.)
 3. Click "Receive"
 4. Copy the address
@@ -155,7 +155,7 @@ python Auto_Runner.py
 ```
 
 **What It Does:**
-1. ✅ Scans your Ledger addresses on blockchain
+1. ✅ Scans your wallet addresses on blockchain
 2. ✅ Finds all staking rewards (INCOME transactions)
 3. ✅ Gets price data for each reward date
 4. ✅ Creates tax reports
@@ -217,12 +217,12 @@ python Auto_Runner.py
 
 **Fix:**
 1. Note discrepancy from audit
-2. Check Ledger Live for missing deposits/withdrawals
+2. Check your wallet app for missing deposits/withdrawals
 3. Add to `inputs/manual_transactions.csv`:
 ```csv
 date,coin,action,amount,price_usd,fee,source
-2024-03-15,ETH,DEPOSIT,5.0,1700,0,LEDGER_TRANSFER
-2024-03-15,SOL,DEPOSIT,50.0,25.50,0,LEDGER_TRANSFER
+2024-03-15,ETH,DEPOSIT,5.0,1700,0,WALLET_TRANSFER
+2024-03-15,SOL,DEPOSIT,50.0,25.50,0,WALLET_TRANSFER
 ```
 
 ---
@@ -232,14 +232,14 @@ date,coin,action,amount,price_usd,fee,source
 **Create `inputs/manual_transactions.csv`:**
 ```csv
 date,coin,action,amount,price_usd,fee,source
-2024-01-15,ETH,INCOME,0.025,1800,0,LEDGER_STAKING
-2024-02-15,ETH,INCOME,0.026,1850,0,LEDGER_STAKING
-2024-03-15,SOL,INCOME,0.5,25.50,0,LEDGER_STAKING
-2024-04-15,ADA,INCOME,12.5,0.85,0,LEDGER_STAKING
+2024-01-15,ETH,INCOME,0.025,1800,0,STAKING
+2024-02-15,ETH,INCOME,0.026,1850,0,STAKING
+2024-03-15,SOL,INCOME,0.5,25.50,0,STAKING
+2024-04-15,ADA,INCOME,12.5,0.85,0,STAKING
 ```
 
 **Get dates/amounts from:**
-- Ledger Live → Accounts → Transaction history
+- Your wallet app → Accounts → Transaction history
 - etherscan.io, solscan.io, cardanoscan.io (blockchain explorers)
 - Export from staking provider (Lido, Jito, etc.)
 
@@ -290,8 +290,8 @@ date,coin,action,amount,price_usd,fee,source
 {
   "ethereum": {
     "addresses": [
-      "0xLedger1...",
-      "0xLedger2...",
+      "0xWallet1...",
+      "0xWallet2...",
       "0xMainnet..."
     ]
   },
@@ -306,7 +306,7 @@ date,coin,action,amount,price_usd,fee,source
 ## Need Help?
 
 **Setup Questions:**
-- Ledger Live: https://support.ledger.com
+- Wallet app documentation
 - API Issues: Check Moralis/Blockchair status pages
 
 **Tax Questions:**
