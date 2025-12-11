@@ -1,14 +1,14 @@
-# Ledger Staking Rewards - Tax Reporting Setup Guide
+# Staking Rewards - Tax Reporting Setup Guide
 
 ## Overview
 
-This guide explains how to use the Crypto Tax Engine to **automatically detect and report staking rewards** from your Ledger wallet across multiple blockchains (Ethereum, Solana, Cardano, Polygon, etc.).
+This guide explains how to use the Crypto Tax Engine to **automatically detect and report staking rewards** from your wallets across multiple blockchains (Ethereum, Solana, Cardano, Polygon, etc.).
 
 **Key Benefits:**
 - ✅ Automatic staking reward detection via blockchain analysis
 - ✅ No need to manually track staking transactions
 - ✅ IRS-compliant income reporting (staking = taxable income at receipt date)
-- ✅ Integration with your Ledger wallet addresses
+- ✅ Integration with your wallet addresses
 - ✅ Support for 15+ staking blockchains
 
 ---
@@ -78,11 +78,11 @@ Create or update `api_keys.json` in your project root:
 
 ---
 
-## Step 3: Add Your Ledger Wallet Addresses to `wallets.json`
+## Step 3: Add Your Wallet Addresses to `wallets.json`
 
-### Find Your Ledger Addresses
+### Find Your Wallet Addresses
 
-1. **Open Ledger Live**
+1. **Open your wallet app**
 2. For each coin you've staked:
    - Click on the asset (ETH, SOL, ADA, etc.)
    - Click "Receive"
@@ -161,7 +161,7 @@ python Auto_Runner.py
 
 This will:
 1. Import trades from your exchange CSVs
-2. **Detect staking rewards** from your Ledger wallets
+2. **Detect staking rewards** from your wallet addresses
 3. Generate tax reports
 4. Validate that calculated balances match real balances
 
@@ -202,7 +202,7 @@ Example output:
      ✓ Found 18 reward epochs (2023)
 ```
 
-### 4. Validates Against Your Ledger
+### 4. Validates Against Your Wallet
 - **CRITICAL**: If audit shows balance mismatch, check for missing trades
 - Discrepancies = missing buys/sells/deposits/withdrawals
 - Add missing trades to `inputs/manual_transactions.csv`
@@ -249,9 +249,9 @@ If API access isn't working, you can manually add staking rewards:
 
 ```csv
 date,coin,action,amount,price_usd,fee,source
-2023-05-15,ETH,INCOME,0.025,1800,0,LEDGER_STAKING
-2023-05-22,ETH,INCOME,0.025,1850,0,LEDGER_STAKING
-2023-06-10,SOL,INCOME,0.5,25.50,0,LEDGER_STAKING
+2023-05-15,ETH,INCOME,0.025,1800,0,STAKING
+2023-05-22,ETH,INCOME,0.025,1850,0,STAKING
+2023-06-10,SOL,INCOME,0.5,25.50,0,STAKING
 ```
 
 **Column Definitions:**
@@ -259,17 +259,17 @@ date,coin,action,amount,price_usd,fee,source
 - `coin`: BTC, ETH, SOL, ADA, etc.
 - `action`: Always "INCOME" for staking rewards
 - `amount`: How much you received (decimals OK: 0.025, 0.5, 0.001)
-- `price_usd`: USD price of the coin on that date (use CoinGecko or Ledger's price)
+- `price_usd`: USD price of the coin on that date (e.g., CoinGecko)
 - `fee`: Almost always 0 for staking rewards
-- `source`: "LEDGER_STAKING" or "LEDGER_REWARDS"
+- `source`: "STAKING" or "REWARDS"
 
 ---
 
 ## Finding Historical Staking Rewards
 
-### From Ledger Live
+### From Your Wallet App
 
-1. Open Ledger Live
+1. Open your wallet application
 2. Click on your account (ETH, SOL, etc.)
 3. Look for "Rewards" tab or filter by transaction type
 4. Export (if available) or manually note down:
@@ -319,10 +319,10 @@ date,coin,action,amount,price_usd,fee,source
 
 **Solution:**
 1. Note the discrepancy from audit output
-2. Check Ledger Live for missing deposits/withdrawals
+2. Check your wallet app for missing deposits/withdrawals
 3. Add to `inputs/manual_transactions.csv`:
    ```csv
-   2023-03-15,ETH,DEPOSIT,5.0,1700,0,LEDGER_TRANSFER
+   2023-03-15,ETH,DEPOSIT,5.0,1700,0,WALLET_TRANSFER
    ```
 
 ### "Staking Rewards Not Found"
@@ -340,16 +340,16 @@ date,coin,action,amount,price_usd,fee,source
 
 ## Supported Staking Blockchains
 
-| Blockchain | Min Stake | Ledger Support | Tax Treatment | Notes |
+| Blockchain | Min Stake | Wallet Support | Tax Treatment | Notes |
 |-----------|----------|---|---|---|
-| **Ethereum (Staking)** | 0.0001 ETH | ✅ Ledger Live | Income | Rewards on-chain |
-| **Solana** | 0.000001 SOL | ✅ Ledger Live | Income | Tracked per validator |
-| **Cardano** | 1 ADA | ✅ Ledger Live | Income | Rewards per epoch |
-| **Polygon** | None (PoS validator) | ✅ Via Ledger | Income | Requires 1M MATIC min |
-| **Avalanche** | None | ✅ Via Ledger | Income | Delegation rewards |
-| **Polkadot** | 1.6 DOT | ✅ Ledger Live | Income | Nominators + validators |
-| **Cosmos** | 1 ATOM | ✅ Ledger Live | Income | Delegation rewards |
-| **Tezos** | 1 XTZ | ✅ Ledger Live | Income | Baker rewards |
+| **Ethereum (Staking)** | 0.0001 ETH | ✅ Wallets | Income | Rewards on-chain |
+| **Solana** | 0.000001 SOL | ✅ Wallets | Income | Tracked per validator |
+| **Cardano** | 1 ADA | ✅ Wallets | Income | Rewards per epoch |
+| **Polygon** | None (PoS validator) | ✅ Wallets | Income | Requires 1M MATIC min |
+| **Avalanche** | None | ✅ Wallets | Income | Delegation rewards |
+| **Polkadot** | 1.6 DOT | ✅ Wallets | Income | Nominators + validators |
+| **Cosmos** | 1 ATOM | ✅ Wallets | Income | Delegation rewards |
+| **Tezos** | 1 XTZ | ✅ Wallets | Income | Baker rewards |
 
 ---
 
@@ -377,7 +377,7 @@ Form 8949 (Capital Gains/Losses):
 
 1. ✅ Get API keys (Moralis + Blockchair)
 2. ✅ Add API keys to `api_keys.json`
-3. ✅ Add Ledger addresses to `wallets.json`
+3. ✅ Add wallet addresses to `wallets.json`
 4. ✅ Set `run_audit: true` in `config.json`
 5. ✅ Run `python Auto_Runner.py`
 6. ✅ Review audit output for missing trades

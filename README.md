@@ -8,17 +8,20 @@ A professional-grade, self-hosted Python system for tracking cryptocurrency taxe
 
 ### **🇺🇸 US Tax Compliance**
 
-* **FIFO Accounting:** Uses "First-In, First-Out" as the default cost basis method (IRS default).  
-* **Wash Sale Rule:** Automatically detects if you sell at a loss and buy back a "substantially identical" asset within 30 days. Disallows the loss and defers it to the replacement asset.  
+* **FIFO/HIFO Accounting:** Uses FIFO by default, with optional HIFO. HIFO sorts lots by highest price for sells.  
+* **Wash Sale Rule:** Detects buys within 30 days before and after a loss sale. Disallows the proportional loss and flags affected TT rows.  
 * **Annual Loss Limit:** Caps net capital loss deductions at **$3,000** against ordinary income.  
-* **Auto-Carryover:** Automatically imports unused losses from the previous year's report to offset current year gains.  
+* **Auto-Carryover:** Imports prior-year carryovers and computes next-year carryover fields.  
 * **Holding Periods:** Distinguishes between **Short-Term** (< 1 year) and **Long-Term** (> 1 year) capital gains.
+* **Collectibles Reporting:** Splits long-term collectibles (28%) in loss analysis.
 
 ### **💼 Advanced Reporting**
 
 * **FBAR Report:** Tracks the **maximum USD value** held on foreign exchanges (e.g., Binance, KuCoin) at any point in the year to assist with FinCEN Form 114 filing.  
-* **Income Classification:** Separates Mining, Staking, Airdrops, and Hard Forks as **Ordinary Income** (not Capital Gains).  
+* **Income Classification:** Separates Mining, Staking, Airdrops, Gifts (IN) and Hard Forks as **Ordinary Income** (not Capital Gains). Constructive receipt toggle supported.  
 * **Gas Fees:** Treats gas spent on transfers as a taxable disposition of the underlying asset (e.g., selling ETH to pay for a transaction).
+* **1099 Reconciliation:** Aggregates proceeds, basis, net gain, and transaction counts per source/coin. Detailed CSV includes unmatched and wash placeholders.
+* **Snapshots:** Exports per-source holdings with a `Holdings` column and minimal `TAX_REPORT.csv` marker.
 
 ### **🛡️ System Resilience**
 
@@ -49,7 +52,7 @@ The engine supports **HIFO** (Highest-In, First-Out) via configuration, but be w
 
 Certain configuration options can increase audit risk or create mismatches with broker 1099‑DA reporting. The engine will warn at runtime when these are enabled:
 
-- **strict_broker_mode (Recommended=True):** When disabled, the engine may borrow cost basis across wallets to satisfy sales from custodial sources (e.g., Coinbase). This can cause Form 8949 to diverge from broker‑issued Form 1099‑DA. Keep this enabled for 2025+ compliance.
+- **strict_broker_mode (Recommended=True):** When disabled, the engine may borrow cost basis across wallets to satisfy sales from custodial sources (e.g., Coinbase). This can cause Form 8949 to diverge from broker‑issued Form 1099‑DA. Keep this enabled for 2025+ compliance. When enabled, unmatched sells are flagged in the detailed reconciliation CSV.
 - **staking_taxable_on_receipt (Recommended=True):** Setting this to False applies a “constructive receipt” deferral for staking/mining rewards (no income recorded until sale). This is an aggressive position and may be challenged by the IRS under Rev. Rul. 2023‑14. Use only if you understand the risks.
 - **HIFO (Not Recommended):** While supported, HIFO increases audit friction unless you maintain specific identification records. FIFO remains the safest default.
 
@@ -71,9 +74,9 @@ The script automatically builds and maintains this structure:
 │   ├── Supported Blockchains.md   # [DOCS] List of supported chains
 │   ├── Supported Exchanges.md     # [DOCS] List of supported exchanges
 │   ├── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
-│   ├── LEDGER_STAKING_SETUP.md    # [DOCS] Complete Ledger staking guide
-│   ├── LEDGER_STAKING_QUICK_START.md # [DOCS] 10-minute quick setup
-│   └── LEDGER_STAKING_EXAMPLES.md # [DOCS] Real-world staking scenarios
+│   ├── STAKING_SETUP.md           # [DOCS] Staking rewards tax reporting guide
+│   ├── STAKING_QUICK_START.md     # [DOCS] 10-minute quick setup
+│   └── STAKING_EXAMPLES.md        # [DOCS] Real-world staking scenarios
 ├── tests/                         # [USER] Test suite & documentation
 │   ├── unit_test.py               # [USER] Verification suite (148 tests, 45 test classes)
 │   ├── test_wallet_compatibility.py # [USER] Wallet format compatibility tests
@@ -98,7 +101,16 @@ The script automatically builds and maintains this structure:
 └── outputs/
    ├── logs/                      # [AUTO] Timestamped text logs of every run
    ├── Year_2024/                 # [AUTO] Finalized Tax Reports
-   └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
+      └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
+         ├── TURBOTAX_CAP_GAINS.csv
+         ├── INCOME_REPORT.csv
+         ├── US_TAX_LOSS_ANALYSIS.csv
+         ├── WASH_SALE_REPORT.csv
+         ├── 1099_RECONCILIATION.csv
+         ├── 1099_RECONCILIATION_DETAILED.csv
+         ├── CURRENT_HOLDINGS_DRAFT.csv
+         ├── EOY_HOLDINGS_SNAPSHOT.csv
+         └── TAX_REPORT.csv
 ```
 
 ## **🔗 APIs Used & Privacy Policies**
@@ -198,6 +210,12 @@ python Auto_Runner.py
 ```
 
 ### **5. Verify (Unit Tests)**
+
+The current release passes 197 tests covering accounting, compliance, auditor, ingestor, and reporting.
+
+```bash
+pytest -q
+```
 
 To run the comprehensive test suite and verify the math is perfect before filing:
 
@@ -343,16 +361,11 @@ date,coin,amount,protocol,usd_value_at_time
 **Optional Fields:**
 - You can also include: `timestamp`, `type` (set to "staking"), `source` (set to "manual_staking")
 
-#### **Example: Figment Ledger Staking**
 
-If you're staking SOL through Figment's Ledger and receive rewards:
+
 
 ```csv
 date,coin,amount,protocol,usd_value_at_time
-2024-01-15,SOL,0.5,figment_ledger,170.00
-2024-02-10,SOL,0.5,figment_ledger,165.00
-2024-03-05,SOL,0.5,figment_ledger,155.00
-2024-04-12,SOL,0.5,figment_ledger,145.00
 ```
 
 **Step-by-Step:**

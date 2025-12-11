@@ -1,4 +1,4 @@
-# Ledger Staking Examples - Real-World Scenarios
+# Staking Examples - Real-World Scenarios
 
 Ready-to-use configurations for common staking setups. Copy and adapt to your situation.
 
@@ -7,7 +7,7 @@ Ready-to-use configurations for common staking setups. Copy and adapt to your si
 ## Scenario 1: Basic Ethereum Staker (Solo)
 
 **Your Setup:**
-- Ethereum mainnet, solo staking with Ledger
+- Ethereum mainnet, solo staking via wallet
 - Want to track staking rewards only
 - Single wallet address
 
@@ -62,7 +62,7 @@ Checking ETH...
 
 **Your Setup:**
 - Stake with multiple validators (Jito, Marinade, etc.)
-- Multiple Ledger accounts
+- Multiple wallet accounts
 - Want reward tracking per validator
 
 **Files to Create:**
@@ -118,7 +118,7 @@ Checking SOL...
 
 **Your Setup:**
 - Delegated to multiple stake pools
-- Cardano mainnet via Ledger
+- Cardano mainnet via wallet
 - Multiple accounts
 
 **Files to Create:**
@@ -166,7 +166,7 @@ Checking ADA...
 - Solana staking
 - Cardano delegation
 - Polygon validator stake
-- All via Ledger
+- All via wallet
 
 **Files to Create:**
 
@@ -245,10 +245,10 @@ Schedule 1, Line 8: Cryptocurrency Staking Income
 
 ---
 
-## Scenario 5: Ledger + Manual Exchange Imports
+## Scenario 5: Wallet + Manual Exchange Imports
 
 **Your Setup:**
-- Staking rewards via Ledger (auto-detect)
+- Staking rewards via wallet (auto-detect)
 - Exchange trades via CSV imports (Binance, Kraken, etc.)
 - Want combined tax report
 
@@ -320,7 +320,7 @@ python Auto_Runner.py --year 2024
 
 **Your Setup:**
 - Professional staking operation
-- Many Ledger accounts
+- Many wallet accounts
 - Multiple chains
 - High-frequency rewards
 
@@ -407,7 +407,7 @@ python Auto_Runner.py --year 2024
 
 **Validate Results:**
 1. Check outputs/Year_2024/INCOME_REPORT.csv
-2. Verify dates match Ledger Live
+2. Verify dates match your wallet app
 3. Verify amounts (within 0.0001 tolerance)
 
 ---
@@ -430,7 +430,7 @@ python Auto_Runner.py --year 2024
 
 ### "Cardano showing wrong balance"
 **Check:**
-- Address is in Ledger Live (copy exactly)
+- Address is in your wallet app (copy exactly)
 - Cardano blockchain explorer confirms balance
 - Run `--year 2024` to limit to current year
 - Try with `api_timeout_seconds: 90`
@@ -456,7 +456,7 @@ Or upgrade to paid API tier.
 After running any scenario:
 
 - [ ] ✅ Check INCOME_REPORT.csv for all staking rewards
-- [ ] ✅ Verify dates match Ledger Live history
+- [ ] ✅ Verify dates match your wallet app history
 - [ ] ✅ Verify amounts match blockchain explorer
 - [ ] ✅ Check TURBOTAX_CAP_GAINS.csv for sold rewards (capital gains)
 - [ ] ✅ Review WALLET_AUDIT.csv (current balances correct?)

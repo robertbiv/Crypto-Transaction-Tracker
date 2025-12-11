@@ -10,7 +10,7 @@ Usage:
 
 Inputs:
 - Database: crypto_master.db (full history)
-- Targets JSON: {"BTC": {"COINBASE": 1.5, "LEDGER": 0.8}, ...}
+- Targets JSON: {"BTC": {"COINBASE": 1.5, "WALLET": 0.8}, ...}
   (represents real-world balances per wallet/account as of 12/31/2024)
 
 Output:
