@@ -163,80 +163,82 @@ class DatabaseManager:
         logger.error("[!] Database corrupted. Created fresh DB.")
     
     def _migrate_to_text_precision(self):
-        """CRITICAL MIGRATION: Convert REAL fields to TEXT for precision.
+        """CRITICAL MIGRATION: Convert REAL fields to TEXT for precision and add destination column.
         
         This migration is needed for databases created before the Decimal precision fix.
         It safely converts amount, price_usd, and fee from REAL (float) to TEXT (string).
+        It also ensures the trades table has the destination column used for per-wallet transfers.
         
         Safety: If migration fails, old database is backed up and fresh DB created.
         """
         try:
-            # Check if migration is needed (look for REAL type in schema)
-            schema = self.cursor.execute(
-                "PRAGMA table_info(trades)"
-            ).fetchall()
-            
-            # Check if amount is still REAL (old schema)
+            schema = self.cursor.execute("PRAGMA table_info(trades)").fetchall()
             amount_info = [col for col in schema if col[1] == 'amount']
-            if not amount_info or amount_info[0][2] != 'REAL':
-                # Already migrated or new schema, skip
+            destination_missing = not any(col[1] == 'destination' for col in schema)
+            migration_needed = amount_info and amount_info[0][2] == 'REAL'
+
+            # If schema already uses TEXT and has destination, nothing to do
+            if not migration_needed and not destination_missing:
                 return
-            
-            logger.info("[MIGRATION] Converting database to TEXT-based precision...")
-            
-            # Create backup before migration
-            self.conn.commit()
-            backup_file = BASE_DIR / f"trades_backup_before_migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-            shutil.copy(DB_FILE, backup_file)
-            logger.info(f"[MIGRATION] Backup created: {backup_file}")
-            
-            # Create new table with TEXT schema
-            self.cursor.execute('''CREATE TABLE trades_new (
-                id TEXT PRIMARY KEY,
-                date TEXT,
-                source TEXT,
-                action TEXT,
-                coin TEXT,
-                amount TEXT,
-                price_usd TEXT,
-                fee TEXT,
-                batch_id TEXT
-            )''')
-            
-            # Copy data, converting REAL values to TEXT strings via Decimal
-            self.cursor.execute('''
-                INSERT INTO trades_new
-                SELECT 
-                    id, date, source, action, coin,
-                    CAST(amount AS TEXT) as amount,
-                    CAST(price_usd AS TEXT) as price_usd,
-                    CAST(fee AS TEXT) as fee,
-                    batch_id
-                FROM trades
-            ''')
-            
-            # Drop old table and rename new one
-            self.cursor.execute("DROP TABLE trades")
-            self.cursor.execute("ALTER TABLE trades_new RENAME TO trades")
-            
-            self.conn.commit()
-            logger.info("[MIGRATION] ✅ Successfully migrated to TEXT-based precision schema")
-            
+
+            if migration_needed:
+                logger.info("[MIGRATION] Converting database to TEXT-based precision and adding destination column...")
+
+                self.conn.commit()
+                backup_file = BASE_DIR / f"trades_backup_before_migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+                shutil.copy(DB_FILE, backup_file)
+                logger.info(f"[MIGRATION] Backup created: {backup_file}")
+
+                # Create new table with TEXT schema + destination
+                self.cursor.execute('''CREATE TABLE trades_new (
+                    id TEXT PRIMARY KEY,
+                    date TEXT,
+                    source TEXT,
+                    destination TEXT,
+                    action TEXT,
+                    coin TEXT,
+                    amount TEXT,
+                    price_usd TEXT,
+                    fee TEXT,
+                    batch_id TEXT
+                )''')
+
+                self.cursor.execute('''
+                    INSERT INTO trades_new
+                    SELECT 
+                        id, date, source, NULL as destination, action, coin,
+                        CAST(amount AS TEXT) as amount,
+                        CAST(price_usd AS TEXT) as price_usd,
+                        CAST(fee AS TEXT) as fee,
+                        batch_id
+                    FROM trades
+                ''')
+
+                self.cursor.execute("DROP TABLE trades")
+                self.cursor.execute("ALTER TABLE trades_new RENAME TO trades")
+                self.conn.commit()
+                logger.info("[MIGRATION] ✅ Successfully migrated to TEXT-based precision schema")
+                return
+
+            # For already-migrated TEXT schema missing destination, add column in place
+            if destination_missing:
+                self.cursor.execute("ALTER TABLE trades ADD COLUMN destination TEXT")
+                self.conn.commit()
+                logger.info("[MIGRATION] ✅ Added destination column to existing TEXT schema")
+                return
+
         except Exception as e:
             logger.error(f"[MIGRATION] Failed: {e}. Creating recovery backup...")
-            # Backup current database for manual inspection
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             failed_file = BASE_DIR / f"migration_failed_{ts}.db"
             try:
                 self.conn.close()
                 shutil.copy(DB_FILE, failed_file)
-                # Recover from backup if available
                 if DB_BACKUP.exists():
                     shutil.copy(DB_BACKUP, DB_FILE)
                 logger.error(f"[MIGRATION] Failed database backed up to: {failed_file}")
             except:
                 pass
-            # Recreate connection
             self.conn = sqlite3.connect(str(DB_FILE))
             self.cursor = self.conn.cursor()
 
@@ -248,6 +250,7 @@ class DatabaseManager:
             id TEXT PRIMARY KEY, 
             date TEXT, 
             source TEXT, 
+            destination TEXT,
             action TEXT, 
             coin TEXT, 
             amount TEXT,          -- PRECISION: TEXT instead of REAL to avoid float rounding
@@ -295,12 +298,12 @@ class DatabaseManager:
         self.conn.commit()
     
     def get_all(self): 
-        """Read all trades, converting TEXT back to Decimal for precise calculations."""
+        """Read all trades, keeping TEXT as Decimal for precise calculations (no float conversion)."""
         df = pd.read_sql_query("SELECT * FROM trades ORDER BY date ASC", self.conn)
-        # Convert precision-critical fields from TEXT to Decimal
+        # Convert precision-critical fields from TEXT to Decimal (NOT float, to preserve exact arithmetic)
         for col in ['amount', 'price_usd', 'fee']:
             if col in df.columns:
-                df[col] = df[col].apply(lambda x: float(to_decimal(x)) if x else 0.0)
+                df[col] = df[col].apply(lambda x: to_decimal(x) if x else Decimal('0'))
         return df
     
     def get_zeros(self): 
@@ -923,10 +926,12 @@ class WalletAuditor:
 # ==========================================
 class TaxEngine:
     def __init__(self, db, y):
+        # hold structure: {coin: {source: [ {'a': Decimal, 'p': Decimal, 'd': datetime} ]}}
         self.db, self.year, self.tt, self.inc, self.hold = db, int(y), [], [], {}
         self.us_losses = {'short': 0.0, 'long': 0.0} 
         self.prior_carryover = {'short': 0.0, 'long': 0.0}
         self.wash_sale_log = []
+        self.sale_log = []  # used for 1099-DA style reconciliation (grouped by source)
         self._load_prior_year_data()
 
     def _load_prior_year_data(self):
@@ -960,85 +965,125 @@ class TaxEngine:
             d = pd.to_datetime(t['date'])
             if d.year > self.year: continue
             is_yr = (d.year == self.year)
+            src = t['source'] if 'source' in t and pd.notna(t['source']) else 'DEFAULT'
+            dst = t['destination'] if 'destination' in t and pd.notna(t['destination']) else None
             
             if t['action'] in ['BUY','INCOME','GIFT_IN']:
-                c = (t['amount']*t['price_usd'])+t['fee']
-                self._add(t['coin'], t['amount'], c/t['amount'] if t['amount'] else 0, d)
+                # Use Decimal arithmetic throughout (no float conversion)
+                amt = to_decimal(t['amount'])
+                price = to_decimal(t['price_usd'])
+                fee = to_decimal(t['fee'])
+                c = (amt * price) + fee
+                cost_basis = c / amt if amt > 0 else Decimal('0')
+                self._add(t['coin'], amt, cost_basis, d, src)
                 if is_yr and t['action']=='INCOME': 
-                    self.inc.append({'Date':d.date(),'Coin':t['coin'],'Amt':t['amount'],'USD':round(t['amount']*t['price_usd'],2)})
+                    usd_value = amt * price
+                    self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(usd_value, 2))})
 
             elif t['action'] == 'DEPOSIT':
-                self._add(t['coin'], t['amount'], 0, d) 
+                self._add(t['coin'], to_decimal(t['amount']), Decimal('0'), d, src) 
 
             elif t['action'] in ['SELL','SPEND','LOSS']:
-                net = (t['amount']*t['price_usd'])-t['fee']
-                if t['action'] == 'LOSS': net = 0.0
+                # Use Decimal arithmetic throughout
+                amt = to_decimal(t['amount'])
+                price = to_decimal(t['price_usd'])
+                fee = to_decimal(t['fee'])
+                net = (amt * price) - fee
+                if t['action'] == 'LOSS': net = Decimal('0')
                 
-                b, term, acq = self._sell(t['coin'], t['amount'], d)
+                b, term, acq = self._sell(t['coin'], amt, d, src)
                 
                 gain = net - b
-                wash_disallowed = 0.0
+                wash_disallowed = Decimal('0')
                 
                 if gain < 0:
+                    # IRS Wash Sale Rule: 30 days BEFORE or AFTER the sale date (not just after)
                     window_start = d - timedelta(days=30)
                     window_end = d + timedelta(days=30)
                     if t['coin'] in all_buys_dict:
                         nearby_buys = [bd for bd in all_buys_dict[t['coin']] if window_start <= bd <= window_end and bd != d]
                         if nearby_buys:
                             # IRS Wash Sale Rule: Loss is disallowed only to the extent of replacement shares (proportional)
-                            # Get replacement quantity within 30 days after sale
-                            replacement_qty = 0.0
+                            # Count replacement quantity within 30 days BEFORE or AFTER sale
+                            replacement_qty = Decimal('0')
                             for buy_date in nearby_buys:
-                                if buy_date > d:  # Only count buys AFTER the sale
+                                # Count both pre-buy (30 days before) and post-buy (30 days after) replacements
+                                if window_start <= buy_date <= window_end and buy_date != d:
                                     buy_records = df[(df['coin'] == t['coin']) & (pd.to_datetime(df['date']) == buy_date) & (df['action'].isin(['BUY', 'INCOME', 'GIFT_IN']))]
-                                    replacement_qty += buy_records['amount'].sum()
+                                    replacement_qty += to_decimal(buy_records['amount'].sum())
                             
                             # Calculate proportional loss disallowance
-                            if replacement_qty > 0.0:
-                                proportion = min(replacement_qty / t['amount'], 1.0)  # Cap at 1.0 (100%)
+                            if replacement_qty > 0:
+                                proportion = min(replacement_qty / amt, Decimal('1.0'))  # Cap at 1.0 (100%)
                                 wash_disallowed = abs(gain) * proportion
                                 if is_yr:
-                                    self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Amount Sold': round(t['amount'], 8), 'Replacement Qty': round(replacement_qty, 8), 'Loss Disallowed': round(wash_disallowed, 2), 'Note': f'Loss disallowed proportionally ({proportion:.2%}) per IRS Wash Sale rules.'})
+                                    self.wash_sale_log.append({'Date': d.date(), 'Coin': t['coin'], 'Amount Sold': float(round_decimal(amt, 8)), 'Replacement Qty': float(round_decimal(replacement_qty, 8)), 'Loss Disallowed': float(round_decimal(wash_disallowed, 2)), 'Note': f'Loss disallowed proportionally ({float(proportion):.2%}) per IRS Wash Sale rules.'})
                 
                 final_basis = b
                 if wash_disallowed > 0: final_basis = net 
                 
                 if is_yr: 
-                    desc = f"{t['amount']} {t['coin']}" + (" (Fee)" if t['source']=='TRANSFER_FEE' else "")
+                    desc = f"{float(round_decimal(amt, 8))} {t['coin']}" + (" (Fee)" if t['source']=='TRANSFER_FEE' else "")
                     if t['action'] == 'LOSS': desc = f"LOSS: {desc}"
                     if wash_disallowed > 0: desc += " (WASH SALE)"
                     
                     realized_gain = net - final_basis
                     if realized_gain < 0:
-                        if term == 'Short': self.us_losses['short'] += abs(realized_gain)
-                        else: self.us_losses['long'] += abs(realized_gain)
+                        loss_amt = float(abs(realized_gain))
+                        if term == 'Short': self.us_losses['short'] += loss_amt
+                        else: self.us_losses['long'] += loss_amt
 
-                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':round(net,2), 'Cost Basis':round(final_basis,2), 'Term': term})
+                    proceeds_f = float(round_decimal(net,2))
+                    cost_basis_f = float(round_decimal(final_basis,2))
+                    self.tt.append({'Description':desc, 'Date Acquired':acq, 'Date Sold':d.strftime('%m/%d/%Y'), 'Proceeds':proceeds_f, 'Cost Basis':cost_basis_f, 'Term': term, 'Source': src})
+                    self.sale_log.append({'Source': src, 'Coin': t['coin'], 'Proceeds': proceeds_f, 'Cost Basis': cost_basis_f, 'Gain': proceeds_f - cost_basis_f})
 
             elif t['action'] == 'WITHDRAWAL':
-                self._sell(t['coin'], t['amount'], d)
+                self._sell(t['coin'], to_decimal(t['amount']), d, src)
 
-    def _add(self, c, a, p, d):
-        if c not in self.hold: self.hold[c]=[]
-        self.hold[c].append({'a':a,'p':p,'d':d})
+            elif t['action'] == 'TRANSFER':
+                amt = to_decimal(t['amount'])
+                # Destination field flexibility for backward compatibility
+                if not dst:
+                    logger.warning(f"TRANSFER missing destination for {t.get('coin','?')} on {d.date()}; skipping move.")
+                    continue
+                self._transfer(t['coin'], amt, src, dst, d)
 
-    def _sell(self, c, a, d):
-        if c not in self.hold: self.hold[c]=[]
-        
-        # HIFO Logic Support
+    def _get_bucket(self, coin, source):
+        if coin not in self.hold: self.hold[coin] = {}
+        if source not in self.hold[coin]: self.hold[coin][source] = []
+        return self.hold[coin][source]
+
+    def _add(self, c, a, p, d, source):
+        """Add buy/income record to inventory bucket for the given source."""
+        bucket = self._get_bucket(c, source)
+        bucket.append({'a': to_decimal(a), 'p': to_decimal(p), 'd': d})
+
+    def _sell(self, c, a, d, source):
+        """Sell quantity a of coin c from a specific source bucket."""
+        bucket = self._get_bucket(c, source)
+
+        # HIFO Logic Support within the source bucket
         method = GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')
         if method == 'HIFO':
-            self.hold[c].sort(key=lambda x: x['p'], reverse=True)
+            bucket.sort(key=lambda x: x['p'], reverse=True)
         else:
-            # Default FIFO: Ensure sorted by date (should be already, but safe check)
-            self.hold[c].sort(key=lambda x: x['d'])
+            bucket.sort(key=lambda x: x['d'])
 
-        rem, b, ds = a, 0, set()
-        while rem>0 and self.hold[c]:
-            l=self.hold[c][0] # FIFO/HIFO logic handled by sort above
+        rem = to_decimal(a)
+        b = Decimal('0')
+        ds = set()
+        while rem > 0 and bucket:
+            l = bucket[0]
             ds.add(l['d'])
-            if l['a']<=rem: b+=l['a']*l['p']; rem-=l['a']; self.hold[c].pop(0)
-            else: b+=rem*l['p']; l['a']-=rem; rem=0
+            if l['a'] <= rem:
+                b += l['a'] * l['p']
+                rem -= l['a']
+                bucket.pop(0)
+            else:
+                b += rem * l['p']
+                l['a'] -= rem
+                rem = Decimal('0')
         
         term = 'Short'
         if ds:
@@ -1046,11 +1091,45 @@ class TaxEngine:
             if (d - earliest).days > 365: term = 'Long'
         return b, term, list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
 
+    def _transfer(self, c, a, from_src, to_src, d):
+        """Move cost basis lots between sources without creating a tax event."""
+        if a <= 0:
+            return
+        from_bucket = self._get_bucket(c, from_src)
+        to_bucket = self._get_bucket(c, to_src)
+
+        method = GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')
+        if method == 'HIFO':
+            from_bucket.sort(key=lambda x: x['p'], reverse=True)
+        else:
+            from_bucket.sort(key=lambda x: x['d'])
+
+        rem = to_decimal(a)
+        while rem > 0 and from_bucket:
+            lot = from_bucket[0]
+            move_amt = lot['a'] if lot['a'] <= rem else rem
+            # Clone lot with same basis and date
+            to_bucket.append({'a': move_amt, 'p': lot['p'], 'd': lot['d']})
+            lot['a'] -= move_amt
+            rem -= move_amt
+            if lot['a'] <= Decimal('0.00000001'):
+                from_bucket.pop(0)
+        # Note: if rem > 0 here, the transfer tried to move more than available; we silently move what exists.
+
     def export(self):
         yd = OUTPUT_DIR/f"Year_{self.year}"
         if not yd.exists(): yd.mkdir(parents=True)
         if self.tt: pd.DataFrame(self.tt).to_csv(yd/'TURBOTAX_CAP_GAINS.csv', index=False)
         if self.inc: pd.DataFrame(self.inc).to_csv(yd/'INCOME_REPORT.csv', index=False)
+        if self.sale_log:
+            df1099 = pd.DataFrame(self.sale_log)
+            grouped = df1099.groupby(['Source','Coin']).agg(
+                Total_Proceeds=('Proceeds','sum'),
+                Total_Cost_Basis=('Cost Basis','sum'),
+                Total_Gain=('Gain','sum'),
+                Tx_Count=('Gain','count')
+            ).reset_index()
+            grouped.to_csv(yd/'1099_RECONCILIATION.csv', index=False)
         
         # US Loss Report
         short_gain = sum([x['Proceeds']-x['Cost Basis'] for x in self.tt if x['Term']=='Short' and (x['Proceeds']-x['Cost Basis'])>0])
@@ -1093,9 +1172,10 @@ class TaxEngine:
             pd.DataFrame(fbar_data).to_csv(yd/'FBAR_MAX_VALUE_REPORT.csv', index=False)
 
         snap = []
-        for c, ls in self.hold.items():
-            t = sum(l['a'] for l in ls)
-            if t>0.000001: snap.append({'Coin':c, 'Holdings':round(t,8), 'Value':round(sum(l['a']*l['p'] for l in ls),2)})
+        for c, buckets in self.hold.items():
+            for src, ls in buckets.items():
+                t = sum(l['a'] for l in ls)
+                if t>0.000001: snap.append({'Coin':c, 'Source': src, 'Holdings':round(t,8), 'Value':round(sum(l['a']*l['p'] for l in ls),2)})
         if snap:
             fn = 'EOY_HOLDINGS_SNAPSHOT.csv' if self.year < datetime.now().year else 'CURRENT_HOLDINGS_DRAFT.csv'
             pd.DataFrame(snap).to_csv(yd/fn, index=False)
