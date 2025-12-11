@@ -346,10 +346,10 @@ class Ingestor:
                 d = pd.to_datetime(r.get('date', r.get('timestamp', datetime.now())))
                 tx_type = str(r.get('type', r.get('kind', 'trade'))).lower()
                 sent_c = r.get('sent_coin', r.get('sent_asset', r.get('coin', None)))
-                sent_a = float(r.get('sent_amount', r.get('amount', 0)))
+                sent_a = to_decimal(r.get('sent_amount', r.get('amount', 0)))
                 recv_c = r.get('received_coin', r.get('received_asset', None))
-                recv_a = float(r.get('received_amount', 0))
-                fee = float(r.get('fee', 0))
+                recv_a = to_decimal(r.get('received_amount', 0))
+                fee = to_decimal(r.get('fee', 0))
                 
                 # Handling Forks, Gifts, Mining specifically
                 source_lbl = 'MANUAL'
@@ -365,19 +365,25 @@ class Ingestor:
                 elif 'repay' in tx_type:
                     if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_REP", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'WITHDRAWAL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
                 elif sent_c and recv_c and sent_a > 0 and recv_a > 0:
-                    p = float(r.get('usd_value_at_time', 0))
-                    if p==0: p = self.fetcher.get_price(str(sent_c), d) * sent_a
-                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else 0, 'fee': fee, 'batch_id': batch})
-                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else 0, 'fee': 0, 'batch_id': batch})
+                    p = to_decimal(r.get('usd_value_at_time', 0))
+                    if p == 0:
+                        fetched = self.fetcher.get_price(str(sent_c), d)
+                        p = fetched * sent_a if fetched else Decimal('0')
+                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else Decimal('0'), 'fee': fee, 'batch_id': batch})
+                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else Decimal('0'), 'fee': 0, 'batch_id': batch})
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
                     if 'deposit' in tx_type: act = 'DEPOSIT' # Explicit override for non-taxable deposit
-                    p = float(r.get('usd_value_at_time', 0))
-                    if p==0: p = self.fetcher.get_price(str(recv_c), d)
+                    p = to_decimal(r.get('usd_value_at_time', 0))
+                    if p == 0:
+                        fetched = self.fetcher.get_price(str(recv_c), d)
+                        p = fetched if fetched else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
                 elif sent_c and sent_a > 0:
-                    p = float(r.get('usd_value_at_time', 0))
-                    if p==0: p = self.fetcher.get_price(str(sent_c), d)
+                    p = to_decimal(r.get('usd_value_at_time', 0))
+                    if p == 0:
+                        fetched = self.fetcher.get_price(str(sent_c), d)
+                        p = fetched if fetched else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_OUT", 'date': d.isoformat(), 'source': 'MANUAL', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
             except Exception as e: logger.warning(f"   [SKIP] Row {idx} failed: {e}")
         self.db.commit()
