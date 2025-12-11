@@ -2135,7 +2135,7 @@ class TestAPIKeyHandling(unittest.TestCase):
         with open(app.KEYS_FILE, 'w') as f:
             json.dump({"moralis": {"apiKey": ""}}, f)
         
-        auditor = app.Auditor(self.db)
+        auditor = app.WalletAuditor(self.db)
         try:
             auditor.run_audit()
             # Should skip audit, not crash
@@ -2148,7 +2148,7 @@ class TestAPIKeyHandling(unittest.TestCase):
         with open(app.KEYS_FILE, 'w') as f:
             json.dump({"moralis": {"apiKey": "INVALID_KEY_FORMAT"}}, f)
         
-        auditor = app.Auditor(self.db)
+        auditor = app.WalletAuditor(self.db)
         try:
             # Would fail on actual API call, but shouldn't crash
             auditor.run_audit()
@@ -2162,7 +2162,7 @@ class TestAPIKeyHandling(unittest.TestCase):
         with open(app.KEYS_FILE, 'w') as f:
             json.dump({"moralis": {"apiKey": "PASTE_KEY_HERE"}}, f)
         
-        auditor = app.Auditor(self.db)
+        auditor = app.WalletAuditor(self.db)
         try:
             auditor.run_audit()
             self.assertTrue(True)
@@ -2405,7 +2405,7 @@ class TestAuditWalletValidation(unittest.TestCase):
             json.dump(wallets, f)
         
         try:
-            auditor = app.Auditor(self.db)
+            auditor = app.WalletAuditor(self.db)
             auditor.run_audit()
             # Should skip invalid address gracefully
             self.assertTrue(True)
@@ -2420,7 +2420,7 @@ class TestAuditWalletValidation(unittest.TestCase):
             json.dump(wallets, f)
         
         try:
-            auditor = app.Auditor(self.db)
+            auditor = app.WalletAuditor(self.db)
             auditor.run_audit()
             self.assertTrue(True)
         except Exception as e:
@@ -2433,7 +2433,7 @@ class TestAuditWalletValidation(unittest.TestCase):
             json.dump(wallets, f)
         
         try:
-            auditor = app.Auditor(self.db)
+            auditor = app.WalletAuditor(self.db)
             auditor.run_audit()
             # Should deduplicate
             self.assertTrue(True)
