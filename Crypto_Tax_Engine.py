@@ -837,6 +837,20 @@ class TaxEngine:
             pd.DataFrame(holdings_rows).to_csv(yd/'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
         # Minimal TAX_REPORT presence
         pd.DataFrame({'Summary':['Generated'], 'Year':[self.year]}).to_csv(yd/'TAX_REPORT.csv', index=False)
+    
+    def run_manual_review(self, db):
+        """Run post-processing review for audit risks"""
+        try:
+            from Tax_Reviewer import TaxReviewer
+            reviewer = TaxReviewer(db, self.year, tax_engine=self)
+            report = reviewer.run_review()
+            # Export to year folder
+            yd = OUTPUT_DIR / f"Year_{self.year}"
+            reviewer.export_report(yd)
+            return report
+        except Exception as e:
+            logger.warning(f"Review assistant not available: {e}")
+            return None
 
 if __name__ == "__main__":
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -858,6 +872,8 @@ if __name__ == "__main__":
             eng = TaxEngine(db, y)
             eng.run()
             eng.export()
+            # Run manual review
+            eng.run_manual_review(db)
         db.close()
     except Exception as e:
         logger.exception(f"Error: {e}")

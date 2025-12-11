@@ -4583,6 +4583,628 @@ class TestMultiCoinFeeHandling(unittest.TestCase):
         self.assertTrue(True, "Backward compat: fee_coin=None correctly defaulted to transfer coin")
 
 
+class TestTaxReviewerHeuristics(unittest.TestCase):
+    """Comprehensive tests for Tax_Reviewer manual review assistant"""
+    
+    def setUp(self):
+        """Set up test database for each test"""
+        # Delete existing DB for clean state
+        if app.DB_FILE.exists():
+            try:
+                app.DB_FILE.unlink()
+            except:
+                pass
+        
+        self.db = app.DatabaseManager()
+        
+        # Mock price fetcher
+        def mock_get_price(coin, date):
+            prices = {
+                'BTC': Decimal('40000'),
+                'WBTC': Decimal('40000'),
+                'ETH': Decimal('2000'),
+                'WETH': Decimal('2000'),
+                'STETH': Decimal('2000'),
+                'USDC': Decimal('1.0'),
+                'BAYC#1234': Decimal('50000'),
+                'CRYPTOPUNK#123': Decimal('100000'),
+                'OBSCURECOIN': Decimal('0')
+            }
+            return prices.get(coin.upper(), Decimal('1.0'))
+        
+        self.pf_patcher = patch.object(app.PriceFetcher, 'get_price', side_effect=mock_get_price)
+        self.pf_patcher.start()
+    
+    def tearDown(self):
+        """Clean up after tests"""
+        self.pf_patcher.stop()
+        if app.DB_FILE.exists():
+            try:
+                self.db.close()
+                app.DB_FILE.unlink()
+            except:
+                pass
+    
+    def test_nft_detection_with_hash_symbol(self):
+        """Test NFT detection for assets with # in name"""
+        from Tax_Reviewer import TaxReviewer
+        
+        self.db.save_trade({
+            'id': 'nft1',
+            'date': '2024-06-15',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'BAYC#1234',
+            'amount': 1,
+            'price_usd': 50000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        # Should detect NFT
+        nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
+        self.assertEqual(len(nft_warnings), 1)
+        self.assertIn('BAYC#1234', str(nft_warnings[0]['items']))
+    
+    def test_nft_detection_with_indicator_words(self):
+        """Test NFT detection for assets with indicator words"""
+        from Tax_Reviewer import TaxReviewer
+        
+        test_nfts = [
+            'CRYPTOPUNK#123',
+            'AZUKIBEAN',
+            'DOODLES-PASS',
+            'OTHERDEED-EXPANDED',
+            'MUTANTAPE'
+        ]
+        
+        for i, nft in enumerate(test_nfts):
+            self.db.save_trade({
+                'id': f'nft_{i}',
+                'date': '2024-06-15',
+                'source': 'OPENSEA',
+                'action': 'BUY',
+                'coin': nft,
+                'amount': 1,
+                'price_usd': 10000,
+                'fee': 0,
+                'batch_id': f'test_{i}'
+            })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
+        self.assertEqual(len(nft_warnings), 1)
+        self.assertEqual(nft_warnings[0]['count'], len(test_nfts))
+    
+    def test_nft_with_proper_prefix_not_flagged(self):
+        """Test that NFTs with proper prefix are not flagged"""
+        from Tax_Reviewer import TaxReviewer
+        
+        self.db.save_trade({
+            'id': 'nft1',
+            'date': '2024-06-15',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'NFT-BAYC#1234',  # Properly prefixed
+            'amount': 1,
+            'price_usd': 50000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
+        self.assertEqual(len(nft_warnings), 0)
+    
+    def test_btc_wbtc_wash_sale_within_30_days(self):
+        """Test BTC/WBTC wash sale detection within 30-day window"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Buy BTC
+        self.db.save_trade({
+            'id': 'btc_buy',
+            'date': '2024-01-01',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 45000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Sell BTC at loss
+        self.db.save_trade({
+            'id': 'btc_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 30000,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        
+        # Buy WBTC within 30 days
+        self.db.save_trade({
+            'id': 'wbtc_buy',
+            'date': '2024-06-15',  # 14 days later
+            'source': 'UNISWAP',
+            'action': 'BUY',
+            'coin': 'WBTC',
+            'amount': 1,
+            'price_usd': 30500,
+            'fee': 0,
+            'batch_id': 'test3'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
+        self.assertEqual(len(wash_warnings), 1)
+        self.assertIn('BTC', str(wash_warnings[0]['items']))
+        self.assertIn('WBTC', str(wash_warnings[0]['items']))
+    
+    def test_eth_steth_wash_sale_prebuy_window(self):
+        """Test ETH/STETH wash sale with pre-buy window"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Buy STETH before the loss sale
+        self.db.save_trade({
+            'id': 'steth_buy',
+            'date': '2024-05-15',  # 17 days before sell
+            'source': 'LIDO',
+            'action': 'BUY',
+            'coin': 'STETH',
+            'amount': 10,
+            'price_usd': 2100,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Buy ETH
+        self.db.save_trade({
+            'id': 'eth_buy',
+            'date': '2024-01-01',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': 10,
+            'price_usd': 2500,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        
+        # Sell ETH at loss
+        self.db.save_trade({
+            'id': 'eth_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'ETH',
+            'amount': 10,
+            'price_usd': 2000,
+            'fee': 0,
+            'batch_id': 'test3'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
+        self.assertGreater(len(wash_warnings), 0)
+        items_str = str(wash_warnings[0]['items'])
+        self.assertIn('ETH', items_str)
+        self.assertIn('STETH', items_str)
+    
+    def test_wash_sale_outside_30_day_window_not_flagged(self):
+        """Test that wash sales outside 30-day window are not flagged"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Sell BTC at loss
+        self.db.save_trade({
+            'id': 'btc_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 30000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Buy WBTC 31 days later (outside window)
+        self.db.save_trade({
+            'id': 'wbtc_buy',
+            'date': '2024-07-03',  # 32 days later
+            'source': 'UNISWAP',
+            'action': 'BUY',
+            'coin': 'WBTC',
+            'amount': 1,
+            'price_usd': 30500,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
+        self.assertEqual(len(wash_warnings), 0)
+    
+    def test_same_coin_wash_sale_not_flagged(self):
+        """Test that same-coin wash sales are not flagged (handled by main engine)"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Sell BTC at loss
+        self.db.save_trade({
+            'id': 'btc_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 30000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Buy BTC again (same coin, main engine handles this)
+        self.db.save_trade({
+            'id': 'btc_buy',
+            'date': '2024-06-10',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 30500,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        # Should not flag same-coin wash sales (main engine handles these)
+        wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
+        self.assertEqual(len(wash_warnings), 0)
+    
+    def test_defi_lp_token_detection(self):
+        """Test DeFi/LP token detection"""
+        from Tax_Reviewer import TaxReviewer
+        
+        lp_tokens = [
+            'UNI-V2-ETH-USDC-LP',
+            'SUSHI-LP-WBTC-ETH',
+            'CURVE-3POOL',
+            'BALANCER-80BAL-20WETH',
+            'AAVE-USDC'
+        ]
+        
+        for i, token in enumerate(lp_tokens):
+            self.db.save_trade({
+                'id': f'lp_{i}',
+                'date': '2024-07-01',
+                'source': 'UNISWAP',
+                'action': 'DEPOSIT',
+                'coin': token,
+                'amount': 100,
+                'price_usd': 1000,
+                'fee': 0,
+                'batch_id': f'test_{i}'
+            })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        defi_suggestions = [s for s in report['suggestions'] if s['category'] == 'DEFI_COMPLEXITY']
+        self.assertEqual(len(defi_suggestions), 1)
+        self.assertEqual(defi_suggestions[0]['count'], len(lp_tokens))
+    
+    def test_missing_price_detection(self):
+        """Test missing price detection"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Transaction with zero price
+        self.db.save_trade({
+            'id': 'missing1',
+            'date': '2024-08-01',
+            'source': 'UNKNOWN',
+            'action': 'BUY',
+            'coin': 'OBSCURECOIN',
+            'amount': 1000,
+            'price_usd': 0,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Transaction with None price (will be 0 after conversion)
+        self.db.save_trade({
+            'id': 'missing2',
+            'date': '2024-08-02',
+            'source': 'UNKNOWN',
+            'action': 'SELL',
+            'coin': 'ANOTHERCOIN',
+            'amount': 500,
+            'price_usd': 0,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        price_warnings = [w for w in report['warnings'] if w['category'] == 'MISSING_PRICES']
+        self.assertEqual(len(price_warnings), 1)
+        self.assertEqual(price_warnings[0]['count'], 2)
+    
+    def test_constructive_sales_same_day_offsetting_trades(self):
+        """Test constructive sales detection for same-day offsetting trades"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Buy 10 BTC in morning
+        self.db.save_trade({
+            'id': 'buy1',
+            'date': '2024-06-15',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 10,
+            'price_usd': 40000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Sell 10 BTC in afternoon (offsetting)
+        self.db.save_trade({
+            'id': 'sell1',
+            'date': '2024-06-15',
+            'source': 'BINANCE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 10,
+            'price_usd': 40100,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        constructive_suggestions = [s for s in report['suggestions'] if s['category'] == 'CONSTRUCTIVE_SALES']
+        self.assertGreater(len(constructive_suggestions), 0)
+    
+    def test_no_warnings_for_clean_portfolio(self):
+        """Test that clean portfolio generates no warnings"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Normal buy/sell with proper prices
+        self.db.save_trade({
+            'id': 'buy1',
+            'date': '2024-01-01',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 40000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Sell after 40 days (no wash sale)
+        self.db.save_trade({
+            'id': 'sell1',
+            'date': '2024-02-15',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 45000,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        self.assertEqual(report['summary']['total_warnings'], 0)
+        self.assertEqual(report['summary']['total_suggestions'], 0)
+    
+    def test_multiple_issues_in_single_portfolio(self):
+        """Test detection of multiple different issues simultaneously"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Issue 1: NFT without prefix
+        self.db.save_trade({
+            'id': 'nft1',
+            'date': '2024-06-15',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'BAYC#1234',
+            'amount': 1,
+            'price_usd': 50000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Issue 2: BTC/WBTC wash sale
+        self.db.save_trade({
+            'id': 'btc_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'BTC',
+            'amount': 1,
+            'price_usd': 30000,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        
+        self.db.save_trade({
+            'id': 'wbtc_buy',
+            'date': '2024-06-10',
+            'source': 'UNISWAP',
+            'action': 'BUY',
+            'coin': 'WBTC',
+            'amount': 1,
+            'price_usd': 30500,
+            'fee': 0,
+            'batch_id': 'test3'
+        })
+        
+        # Issue 3: DeFi LP token
+        self.db.save_trade({
+            'id': 'lp1',
+            'date': '2024-07-01',
+            'source': 'UNISWAP',
+            'action': 'DEPOSIT',
+            'coin': 'UNI-V2-ETH-USDC-LP',
+            'amount': 100,
+            'price_usd': 1000,
+            'fee': 0,
+            'batch_id': 'test4'
+        })
+        
+        # Issue 4: Missing price
+        self.db.save_trade({
+            'id': 'missing1',
+            'date': '2024-08-01',
+            'source': 'UNKNOWN',
+            'action': 'BUY',
+            'coin': 'OBSCURECOIN',
+            'amount': 1000,
+            'price_usd': 0,
+            'fee': 0,
+            'batch_id': 'test5'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        # Should detect all 4 categories
+        self.assertGreaterEqual(report['summary']['total_warnings'], 3)  # NFT, Wash Sale, Missing Price
+        self.assertGreaterEqual(report['summary']['total_suggestions'], 1)  # DeFi
+    
+    def test_wrong_year_not_flagged(self):
+        """Test that issues in different tax year are not flagged"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # NFT in 2023
+        self.db.save_trade({
+            'id': 'nft1',
+            'date': '2023-06-15',  # Different year
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'BAYC#1234',
+            'amount': 1,
+            'price_usd': 50000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        self.db.commit()
+        
+        # Review 2024
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        # Should not flag 2023 trades
+        nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
+        self.assertEqual(len(nft_warnings), 0)
+    
+    def test_export_report_creates_csv_files(self):
+        """Test that export creates CSV files"""
+        from Tax_Reviewer import TaxReviewer
+        import tempfile
+        
+        # Create issue to export
+        self.db.save_trade({
+            'id': 'nft1',
+            'date': '2024-06-15',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'BAYC#1234',
+            'amount': 1,
+            'price_usd': 50000,
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        # Export to temp directory
+        temp_dir = Path(tempfile.mkdtemp())
+        reviewer.export_report(temp_dir)
+        
+        # Check files were created
+        self.assertTrue((temp_dir / 'REVIEW_WARNINGS.csv').exists())
+        
+        # Clean up
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    def test_usdc_variant_wash_sale(self):
+        """Test USDC/USDC.E wash sale detection"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Sell USDC at loss (unlikely but possible if bought at premium)
+        self.db.save_trade({
+            'id': 'usdc_sell',
+            'date': '2024-06-01',
+            'source': 'COINBASE',
+            'action': 'SELL',
+            'coin': 'USDC',
+            'amount': 10000,
+            'price_usd': 0.99,  # Small loss
+            'fee': 0,
+            'batch_id': 'test1'
+        })
+        
+        # Buy USDC.E (bridged version)
+        self.db.save_trade({
+            'id': 'usdce_buy',
+            'date': '2024-06-10',
+            'source': 'POLYGON',
+            'action': 'BUY',
+            'coin': 'USDC.E',
+            'amount': 10000,
+            'price_usd': 1.0,
+            'fee': 0,
+            'batch_id': 'test2'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
+        self.assertGreater(len(wash_warnings), 0)
+
+
 if __name__ == '__main__':
-    print("--- RUNNING ULTIMATE COMPREHENSIVE SUITE V39 (199 Tests + Multi-Coin Fee) ---")
+    print("--- RUNNING ULTIMATE COMPREHENSIVE SUITE V39 (199 Tests + Multi-Coin Fee + Tax Reviewer) ---")
     unittest.main()
+

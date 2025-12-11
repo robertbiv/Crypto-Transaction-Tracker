@@ -22,6 +22,12 @@ A professional-grade, self-hosted Python system for tracking cryptocurrency taxe
 * **Multi-Coin Fees:** Supports `fee_coin` field for transfers with fees in different coins (e.g., ERC-20 token transfers with ETH gas fees). Backward compatible with legacy single-coin fees.
 * **1099 Reconciliation:** Aggregates proceeds, basis, net gain, and transaction counts per source/coin. Detailed CSV includes unmatched and wash placeholders.
 * **Snapshots:** Exports per-source holdings with a `Holdings` column and minimal `TAX_REPORT.csv` marker.
+* **Manual Review Assistant:** Automatic heuristic-based scan that flags potential audit risks including:
+  - NFTs without collectible prefixes (28% tax rate risk)
+  - Substantially identical wash sales (BTC/WBTC)
+  - Potential constructive sales patterns
+  - Complex DeFi/LP transactions needing verification
+  - Missing prices or unmatched sells
 
 ### **🛡️ System Resilience**
 
@@ -86,6 +92,7 @@ The script automatically builds and maintains this structure:
 │
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
+├── Tax_Reviewer.py                # [CORE] Manual review assistant (heuristic audit scanner)
 ├── Migration_2025.py              # [TOOL] Safe-harbor allocator for per-wallet basis
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
@@ -111,7 +118,9 @@ The script automatically builds and maintains this structure:
          ├── 1099_RECONCILIATION_DETAILED.csv
          ├── CURRENT_HOLDINGS_DRAFT.csv
          ├── EOY_HOLDINGS_SNAPSHOT.csv
-         └── TAX_REPORT.csv
+         ├── TAX_REPORT.csv
+         ├── REVIEW_WARNINGS.csv        # [AUTO] High-priority audit risks
+         └── REVIEW_SUGGESTIONS.csv     # [AUTO] Medium/low-priority items for review
 ```
 
 ## **🔗 APIs Used & Privacy Policies**
@@ -239,7 +248,92 @@ This runs **148 test methods** across **45 test classes** including edge cases, 
 | **US_TAX_LOSS_ANALYSIS.csv** | Summary of Net Short/Long positions, Allowable Deduction ($3k), and Carryovers. |
 | **WASH_SALE_REPORT.csv** | Detailed list of losses disallowed due to the Wash Sale rule. |
 | **FBAR_MAX_VALUE_REPORT.csv** | Shows the peak USD balance for every exchange to help with FBAR filing. |
+| **REVIEW_WARNINGS.csv** | High-priority audit risks (NFTs, missing prices, unmatched sells). |
+| **REVIEW_SUGGESTIONS.csv** | Medium/low-priority items (DeFi complexity, wash sale variants, hedging). |
 | **EOY_HOLDINGS_SNAPSHOT.csv** | Your closing portfolio balance on Dec 31st. |
+
+## **🔍 Manual Review Assistant (Heuristic Scanner)**
+
+After generating tax reports, the system automatically runs a **heuristic-based manual review** that flags potential audit risks. This helps catch issues that automated tax software might miss.
+
+### **What It Detects**
+
+The reviewer scans for:
+
+1. **NFTs Without Collectible Prefixes** (🚨 HIGH)
+   - Finds assets like "BAYC#1234" or "CRYPTOPUNK" that aren't marked with NFT- prefix
+   - **Risk:** Long-term NFT gains should be taxed at 28% (collectibles rate), not 20%
+   - **Action:** Rename assets with NFT- prefix or add to config.json collectible list
+
+2. **Substantially Identical Wash Sales** (⚠️ MEDIUM)
+   - Detects trades between wrapped assets (BTC → WBTC, ETH → WETH) within 30-day window
+   - **Risk:** IRS may treat BTC/WBTC as "substantially identical" even with different tickers
+   - **Action:** Review these trades; consider adjusting cost basis if selling at loss
+
+3. **Potential Constructive Sales** (💡 LOW)
+   - Flags same-day offsetting trades (buy + sell) that could be hedging strategies
+   - **Risk:** "Shorting against the box" triggers immediate taxation under IRC § 1259
+   - **Action:** Rare for most users; review if you use advanced trading strategies
+
+4. **DeFi/LP Token Complexity** (💡 MEDIUM)
+   - Identifies liquidity pool tokens (UNI-V2, CURVE-LP) and DeFi protocol tokens
+   - **Risk:** LP deposits may be taxable swaps; impermanent loss not auto-calculated
+   - **Action:** Verify deposits/withdrawals; ensure yield is marked as INCOME
+
+5. **Missing Prices or Unmatched Sells** (🚨 HIGH)
+   - Finds transactions with zero USD prices or sells without sufficient basis
+   - **Risk:** Incorrect gain calculations; broker mismatch in strict mode
+   - **Action:** Run Auto_Runner to fetch prices; check for missing import data
+
+### **How to Use**
+
+The review runs automatically when you execute:
+
+```bash
+python Auto_Runner.py
+```
+
+Or when running the main engine directly:
+
+```bash
+python Crypto_Tax_Engine.py
+```
+
+**Review output appears:**
+- **Console:** Formatted report with warnings, suggestions, and recommended actions
+- **CSV Files:** `REVIEW_WARNINGS.csv` and `REVIEW_SUGGESTIONS.csv` in your Year_XXXX folder
+
+### **Example Review Output**
+
+```
+================================================================================
+TAX REVIEW REPORT - MANUAL VERIFICATION REQUIRED
+================================================================================
+
+📊 SUMMARY:
+   🚨 High Priority Warnings: 2
+   ⚠️  Medium Priority: 1
+   💡 Suggestions: 1
+
+================================================================================
+🚨 HIGH: Potential NFTs Not Marked as Collectibles
+================================================================================
+Count: 3 items
+Found assets that appear to be NFTs but are not prefixed with NFT-, ART-, or
+COLLECTIBLE-. If these are collectibles, they should be taxed at 28% long-term
+rate (not 20%).
+
+📋 Sample Items:
+   1. BAYC#1234 (bought 06/15/2024)
+   2. CRYPTOPUNK#5822 (sold 08/20/2024)
+   3. AZUKI#9999 (transferred 11/01/2024)
+
+✅ RECOMMENDED ACTION:
+Review these assets. If they are NFTs:
+  1. Edit your CSV to rename them with NFT- prefix (e.g., "BAYC#1234" → "NFT-BAYC#1234")
+  2. Or add them to config.json "collectible_tokens" list
+  3. Re-run the tax calculation
+```
 
 ## **⚖️ Disclaimer**
 
