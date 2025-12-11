@@ -60,3 +60,27 @@ After fixing 176+ tests, the following issues remain. These are complex and requ
 - Some tests may have unrealistic expectations
 - Windows-specific issues won't affect Linux CI
 - Tax logic tests need domain expert review
+
+## Update: Additional Test Analysis
+
+### test_chaos_market - Critical Issue Identified
+**Status**: Test fundamentally incompatible with test mode optimizations
+
+**Root Cause**: The chaos test uses randomized transactions with price data. When `RUN_CONTEXT == 'imported'`, price fetching returns None, causing:
+- Shadow calculator uses transaction prices directly
+- Tax engine gets None for prices, resulting in 0.0 calculations
+- Massive divergence: 71142 vs 170947 (140% difference)
+
+**Options**:
+1. Skip this test in test mode (mark with `@unittest.skipIf`)
+2. Revert test mode price skipping for chaos tests
+3. Mock prices consistently for both Shadow and TaxEngine
+
+**Recommendation**: Skip in CI, run manually for integration testing
+
+### Test Mode Trade-offs
+The `RUN_CONTEXT == 'imported'` optimization speeds up tests dramatically but breaks tests that:
+- Rely on actual price fetching behavior
+- Compare shadow calculations with engine calculations
+- Use randomized data requiring consistent price handling
+
