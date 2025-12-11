@@ -30,6 +30,9 @@ print("="*70)
 print("Total test count: 173 tests across 20+ test classes")
 print("Progress indicators will show which test is currently running.")
 print("Some tests (marked with timing notes) may take 2-8 seconds.")
+print("")
+print("NOTE: Large-scale tests (100k iterations) are reduced to 1k for CI.")
+print("      Set STRESS_TEST=1 environment variable to run full tests.")
 print("="*70 + "\n")
 
 # --- 1. SHADOW CALCULATOR (Standard FIFO) ---
@@ -2478,6 +2481,7 @@ class TestReportGenerationAndExport(unittest.TestCase):
 # --- 26. LARGE-SCALE DATA INGESTION TESTS ---
 class TestLargeScaleDataIngestion(unittest.TestCase):
     def setUp(self):
+        print(f"\n[Running: {self._testMethodName}] (Reduced to 1k iterations for CI speed)", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
         self.orig_base = app.BASE_DIR
@@ -2493,13 +2497,17 @@ class TestLargeScaleDataIngestion(unittest.TestCase):
         app.BASE_DIR = self.orig_base
     
     def test_massive_csv_import_100k_rows(self):
-        """Test: Importing 100,000 row CSV file"""
+        """Test: Importing large CSV file (reduced to 1k rows for CI speed)"""
         csv_path = app.INPUT_DIR / 'massive.csv'
         
         # Create CSV header
+        # Note: Reduced from 100k to 1k rows for CI performance
+        # Set STRESS_TEST=1 env var to run full 100k test
+        row_count = 100000 if os.environ.get('STRESS_TEST') == '1' else 1000
+        
         with open(csv_path, 'w') as f:
             f.write("Date,Coin,Amount,Price\n")
-            for i in range(100000):
+            for i in range(row_count):
                 date = (datetime(2023, 1, 1) + timedelta(minutes=i)).strftime('%Y-%m-%d %H:%M:%S')
                 f.write(f"{date},BTC,0.001,{50000 + (i % 5000)}\n")
         
@@ -2513,10 +2521,14 @@ class TestLargeScaleDataIngestion(unittest.TestCase):
             self.assertIsNotNone(e)
     
     def test_massive_database_100k_transactions(self):
-        """Test: Processing 100k transactions in database"""
+        """Test: Processing many transactions in database (reduced to 1k for CI speed)"""
         base_date = datetime(2023, 1, 1)
         
-        for i in range(100000):
+        # Note: Reduced from 100k to 1k transactions for CI performance
+        # Set STRESS_TEST=1 env var to run full 100k test
+        tx_count = 100000 if os.environ.get('STRESS_TEST') == '1' else 1000
+        
+        for i in range(tx_count):
             action = 'BUY' if i % 3 == 0 else 'SELL' if i % 3 == 1 else 'INCOME'
             self.db.save_trade({
                 'id': f'BULK_{i}',
@@ -2529,7 +2541,7 @@ class TestLargeScaleDataIngestion(unittest.TestCase):
                 'fee': i % 100,
                 'batch_id': f'BULK_{i}'
             })
-            if i % 10000 == 0:
+            if i % 10000 == 0 and i > 0:
                 self.db.commit()
         
         self.db.commit()
