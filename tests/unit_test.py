@@ -33,7 +33,7 @@ class ShadowFIFO:
         if coin not in self.queues: self.queues[coin] = []
         self.queues[coin].append({'amt': amount, 'price': price, 'date': date})
         self.queues[coin].sort(key=lambda x: x['date'])
-        if is_income: self.income_log.append({'coin': coin, 'amt': amount, 'usd': amount * price})
+        if is_income: self.income_log.append({'coin': coin, 'amt': amount, 'usd': amount * price, 'date': date})
     def sell(self, coin, amount, price, date, fee=0):
         if coin not in self.queues: self.queues[coin] = []
         rem_sell = amount
