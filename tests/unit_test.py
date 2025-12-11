@@ -557,7 +557,7 @@ class TestUserErrors(unittest.TestCase):
         app.BASE_DIR = self.orig_base
     def test_missing_setup(self):
         if app.KEYS_FILE.exists(): os.remove(app.KEYS_FILE)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(app.ApiAuthError) as cm:
             if not app.KEYS_FILE.exists(): raise app.ApiAuthError("Missing keys")
         self.assertTrue(True)
     def test_bad_csv_data(self):
