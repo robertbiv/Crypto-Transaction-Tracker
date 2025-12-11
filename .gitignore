@@ -4,6 +4,7 @@
 api_keys.json
 wallets.json
 config.json
+*.json
 
 # Data: Local databases and caches
 crypto_master.db

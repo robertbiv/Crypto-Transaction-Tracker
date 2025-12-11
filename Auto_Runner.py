@@ -98,6 +98,14 @@ def run_automation():
         engine_curr.run()
         engine_curr.export()
         log(f"   [SUCCESS] Updated 'Draft' reports for {current_year}.")
+        
+        # 7. RUN MANUAL REVIEW ASSISTANT
+        log(f">>> STEP 5: RUNNING MANUAL REVIEW ASSISTANT")
+        log("   Scanning for potential audit risks...")
+        try:
+            engine_curr.run_manual_review(db)
+        except Exception as e:
+            log(f"   [SKIP] Review assistant not available: {e}", level="warning")
 
         db.close()
         log("=========================================")
