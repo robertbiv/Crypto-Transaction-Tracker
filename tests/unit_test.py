@@ -99,6 +99,10 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
+        # Reset compliance toggles to defaults to avoid cross-test contamination
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = True
+        app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
 
     def test_hifo_accounting_method(self):
         """
@@ -184,6 +188,77 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.assertEqual(engine.inc[0]['USD'], 500.0)
         btc_hold = engine.hold['BTC'][0]
         self.assertEqual(btc_hold['p'], 1000.0)
+
+    def test_strict_broker_mode_blocks_cross_wallet_basis(self):
+        # Configure compliance flags via config
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+        app.GLOBAL_CONFIG['compliance']['broker_sources'] = ['COINBASE']
+
+        # Buy on LEDGER, sell on COINBASE without local basis -> should not borrow basis
+        self.db.save_trade({'id':'1', 'date':'2025-01-01', 'source':'LEDGER', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':50000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'COINBASE', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        eng = app.TaxEngine(self.db, 2025)
+        eng.run()
+        sale = eng.tt[0]
+        # Basis should be 0.0 (no cross-wallet fallback) and proceeds 60000
+        self.assertEqual(sale['Cost Basis'], 0.0)
+        self.assertEqual(sale['Proceeds'], 60000.0)
+
+    def test_collectibles_split_reporting(self):
+        # Long-term standard and collectibles separation
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['collectible_tokens'] = ['PUNK']
+        # Buy PUNK and hold > 1 year, then sell
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'PUNK', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2024-02-02', 'source':'M', 'action':'SELL', 'coin':'PUNK', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        eng = app.TaxEngine(self.db, 2024)
+        eng.run()
+        eng.export()
+        loss_csv = app.OUTPUT_DIR / 'Year_2024' / 'US_TAX_LOSS_ANALYSIS.csv'
+        self.assertTrue(loss_csv.exists())
+        df = pd.read_csv(loss_csv)
+        val_collectible = float(df[df['Item']=='Current Year Long-Term (Collectibles 28%)']['Value'].iloc[0])
+        self.assertEqual(val_collectible, 10000.0)
+
+    def test_1099_detailed_reconciliation_unmatched_and_wash_placeholders(self):
+        # Trigger an unmatched sell under strict broker mode and check detailed reconciliation
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+        app.GLOBAL_CONFIG['compliance']['broker_sources'] = ['KRAKEN']
+        self.db.save_trade({'id':'1', 'date':'2025-01-01', 'source':'LEDGER', 'action':'BUY', 'coin':'ETH', 'amount':2.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
+        self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'KRAKEN', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':1500.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        eng = app.TaxEngine(self.db, 2025)
+        eng.run()
+        eng.export()
+        detailed = app.OUTPUT_DIR / 'Year_2025' / '1099_RECONCILIATION_DETAILED.csv'
+        self.assertTrue(detailed.exists())
+        df = pd.read_csv(detailed)
+        row = df[(df['Source']=='KRAKEN') & (df['Coin']=='ETH')].iloc[0]
+        self.assertEqual(row['Unmatched_Sell'], 'YES')
+        self.assertEqual(row['Wash_Disallowed_By_Broker'], 'PENDING')
+
+    def test_staking_constructive_receipt_toggle(self):
+        # When disabled, staking income should not be logged; lot added at zero basis
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = False
+        self.db.save_trade({'id':'1', 'date':'2025-03-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':0.1, 'price_usd':30000.0, 'fee':0, 'batch_id':'1'})
+        self.db.commit()
+        eng = app.TaxEngine(self.db, 2025)
+        eng.run()
+        # No income rows recorded
+        self.assertEqual(len(eng.inc), 0)
+        # Selling the reward should realize full proceeds as gain (zero basis)
+        self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.1, 'price_usd':35000.0, 'fee':0, 'batch_id':'2'})
+        self.db.commit()
+        eng2 = app.TaxEngine(self.db, 2025)
+        eng2.run()
+        sale = eng2.tt[0]
+        self.assertEqual(sale['Cost Basis'], 0.0)
+        self.assertEqual(sale['Proceeds'], 3500.0)
 
 # --- 3. US TAX & LOSS TESTS (Core Pillars) ---
 class TestUSLosses(unittest.TestCase):
@@ -3861,6 +3936,51 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         # Wash disallowed = $20k * 50% = $10k
         self.assertAlmostEqual(ws['Loss Disallowed'], 10000, delta=1.0,
             msg="$10k loss should be disallowed (50% replacement)")
+
+class TestRiskyOptionWarnings(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'warn_test.db'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+        # Minimal trade to ensure engine.run() flows
+        self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
+        self.db.commit()
+
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+
+    def test_warn_on_hifo(self):
+        app.GLOBAL_CONFIG.setdefault('accounting', {})
+        app.GLOBAL_CONFIG['accounting']['method'] = 'HIFO'
+        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
+            _ = app.TaxEngine(self.db, 2023)
+            self.assertTrue(any(app.COMPLIANCE_WARNINGS['HIFO'] in m for m in cm.output))
+        app.GLOBAL_CONFIG['accounting']['method'] = 'FIFO'
+
+    def test_warn_on_disable_strict_broker_mode(self):
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = False
+        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
+            _ = app.TaxEngine(self.db, 2023)
+            self.assertTrue(any(app.COMPLIANCE_WARNINGS['STRICT_BROKER_DISABLED'] in m for m in cm.output))
+        app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+
+    def test_warn_on_constructive_receipt_false(self):
+        app.GLOBAL_CONFIG.setdefault('compliance', {})
+        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = False
+        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
+            _ = app.TaxEngine(self.db, 2023)
+            self.assertTrue(any(app.COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'] in m for m in cm.output))
+        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = True
     
     def test_wash_sale_outside_30day_window_not_triggered(self):
         """
