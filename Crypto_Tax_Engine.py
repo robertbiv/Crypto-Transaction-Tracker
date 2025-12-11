@@ -201,29 +201,30 @@ class DatabaseManager:
             schema = self.cursor.execute("PRAGMA table_info(trades)").fetchall()
             amount_info = [col for col in schema if col[1] == 'amount']
             destination_missing = not any(col[1] == 'destination' for col in schema)
+            fee_coin_missing = not any(col[1] == 'fee_coin' for col in schema)
             migration_needed = amount_info and amount_info[0][2] == 'REAL'
 
-            if not migration_needed and not destination_missing: return
+            if not migration_needed and not destination_missing and not fee_coin_missing: return
 
             logger.info("[MIGRATION] Updating database schema...")
             self.conn.commit()
             
             self.cursor.execute('''CREATE TABLE trades_new (
                 id TEXT PRIMARY KEY, date TEXT, source TEXT, destination TEXT,
-                action TEXT, coin TEXT, amount TEXT, price_usd TEXT, fee TEXT, batch_id TEXT
+                action TEXT, coin TEXT, amount TEXT, price_usd TEXT, fee TEXT, fee_coin TEXT, batch_id TEXT
             )''')
 
             self.cursor.execute(f'''
                 INSERT INTO trades_new
                 SELECT id, date, source, {'destination' if not destination_missing else 'NULL'}, action, coin,
-                CAST(amount AS TEXT), CAST(price_usd AS TEXT), CAST(fee AS TEXT), batch_id
+                CAST(amount AS TEXT), CAST(price_usd AS TEXT), CAST(fee AS TEXT), {'fee_coin' if not fee_coin_missing else 'NULL'}, batch_id
                 FROM trades
             ''')
 
             self.cursor.execute("DROP TABLE trades")
             self.cursor.execute("ALTER TABLE trades_new RENAME TO trades")
             self.conn.commit()
-            logger.info("[MIGRATION] ✅ Schema updated to TEXT precision.")
+            logger.info("[MIGRATION] ✅ Schema updated to TEXT precision and fee_coin support.")
 
         except Exception as e:
             logger.error(f"[MIGRATION] Failed: {e}")
@@ -231,7 +232,7 @@ class DatabaseManager:
     def _init_tables(self):
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (
             id TEXT PRIMARY KEY, date TEXT, source TEXT, destination TEXT,
-            action TEXT, coin TEXT, amount TEXT, price_usd TEXT, fee TEXT, batch_id TEXT
+            action TEXT, coin TEXT, amount TEXT, price_usd TEXT, fee TEXT, fee_coin TEXT, batch_id TEXT
         )''')
         self.conn.commit()
         self._migrate_to_text_precision()
@@ -249,12 +250,13 @@ class DatabaseManager:
                 else: t_copy[field] = str(to_decimal(val))
 
             if 'destination' not in t_copy: t_copy['destination'] = None
+            if 'fee_coin' not in t_copy: t_copy['fee_coin'] = None
             
-            cols = ['id', 'date', 'source', 'destination', 'action', 'coin', 'amount', 'price_usd', 'fee', 'batch_id']
+            cols = ['id', 'date', 'source', 'destination', 'action', 'coin', 'amount', 'price_usd', 'fee', 'fee_coin', 'batch_id']
             values = [t_copy.get(col) for col in cols]
 
             self.cursor.execute(
-                "INSERT OR IGNORE INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, batch_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, fee_coin, batch_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 values
             )
         except Exception as e:
@@ -313,7 +315,7 @@ class Ingestor:
         # Recognized columns set
         recognized = {
             'date','timestamp','time','datetime','coin','amount','price','price_usd','usd_value_at_time',
-            'received_coin','received_amount','sent_coin','sent_amount','type','kind','fee','destination','source'
+            'received_coin','received_amount','sent_coin','sent_amount','type','kind','fee','fee_coin','destination','source'
         }
         if not any(c in recognized for c in cols):
             raise ValueError(f"No recognized columns in {fp.name}")
@@ -677,15 +679,19 @@ class TaxEngine:
 
             elif t['action'] == 'TRANSFER':
                 # Fee on transfer = Taxable Disposition (Spend)
+                # NEW: Uses fee_coin if specified; falls back to transfer coin for backward compatibility
                 amt, fee, price = to_decimal(t['amount']), to_decimal(t['fee']), to_decimal(t['price_usd'])
+                fee_coin = t.get('fee_coin') if pd.notna(t.get('fee_coin')) else t['coin']  # Use fee_coin if present, else transfer coin
                 if fee > 0:
                     self._strict_mode = strict_mode
-                    fb, fterm, facq = self._sell(t['coin'], fee, d, src)
+                    # Get price for the actual fee coin
+                    fee_price = price if fee_coin == t['coin'] else self.pf.get_price(fee_coin, d)
+                    fb, fterm, facq = self._sell(fee_coin, fee, d, src)
                     if is_yr:
-                        f_proc = fee * price
+                        f_proc = fee * fee_price
                         f_gain = f_proc - fb
                         if f_gain < 0: self.us_losses[fterm.lower()] += float(abs(f_gain))
-                        self.tt.append({'Description':f"{float(round_decimal(fee,8))} {t['coin']} (Fee)", 'Date Acquired':facq, 'Date Sold':d.strftime('%m/%d/%Y'),
+                        self.tt.append({'Description':f"{float(round_decimal(fee,8))} {fee_coin} (Fee)", 'Date Acquired':facq, 'Date Sold':d.strftime('%m/%d/%Y'),
                                         'Proceeds':float(round_decimal(f_proc)), 'Cost Basis':float(round_decimal(fb)), 
                                         'Term': fterm, 'Source': src, 'Collectible': False})
                 
