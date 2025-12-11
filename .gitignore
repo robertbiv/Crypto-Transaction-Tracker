@@ -24,3 +24,5 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+
+How to run tests.md

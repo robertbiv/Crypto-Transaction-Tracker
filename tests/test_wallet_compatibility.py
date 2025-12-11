@@ -58,12 +58,6 @@ def test_wallet_extraction():
         }
     ]
     
-    print("=" * 70)
-    print("WALLET EXTRACTION COMPATIBILITY TEST")
-    print("=" * 70)
-    
-    all_passed = True
-    
     for test in test_cases:
         # Simulate the extraction logic from StakeTaxCSVManager._get_wallets_from_file()
         wallet_data = test["data"]
@@ -88,30 +82,9 @@ def test_wallet_extraction():
                 wallets.append(value)
         
         result = set(wallets)
-        passed = result == test["expected"]
-        all_passed = all_passed and passed
-        
-        status = "✓ PASS" if passed else "✗ FAIL"
-        print(f"\n{status}: {test['name']}")
-        print(f"   Extracted: {result}")
-        if not passed:
-            print(f"   Expected:  {test['expected']}")
-            missing = test['expected'] - result
-            extra = result - test['expected']
-            if missing:
-                print(f"   Missing:   {missing}")
-            if extra:
-                print(f"   Extra:     {extra}")
-    
-    print("\n" + "=" * 70)
-    if all_passed:
-        print("✓ ALL TESTS PASSED - StakeTaxCSV format is compatible!")
-    else:
-        print("✗ SOME TESTS FAILED - Format compatibility issue")
-    print("=" * 70)
-    
-    return all_passed
+        assert result == test["expected"], (
+            f"{test['name']}: extracted {result}, expected {test['expected']}"
+        )
 
 if __name__ == "__main__":
-    success = test_wallet_extraction()
-    exit(0 if success else 1)
+    test_wallet_extraction()
