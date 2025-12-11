@@ -383,7 +383,8 @@ class Ingestor:
                 elif 'repay' in tx_type:
                     if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_REP", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'WITHDRAWAL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
                 elif sent_c and recv_c and sent_a > 0 and recv_a > 0:
-                    raw_p = r.get('usd_value_at_time', 0)
+                    # Support multiple column names: usd_value_at_time, price_usd, price
+                    raw_p = r.get('usd_value_at_time', r.get('price_usd', r.get('price', 0)))
                     p = to_decimal(raw_p)
                     if raw_p in [None, '', 0, '0'] or p <= 0:
                         fetched = PriceFetcher.get_price(self.fetcher, str(sent_c), d)
@@ -393,14 +394,16 @@ class Ingestor:
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
                     if 'deposit' in tx_type: act = 'DEPOSIT' # Explicit override for non-taxable deposit
-                    raw_p = r.get('usd_value_at_time', 0)
+                    # Support multiple column names: usd_value_at_time, price_usd, price
+                    raw_p = r.get('usd_value_at_time', r.get('price_usd', r.get('price', 0)))
                     p = to_decimal(raw_p)
                     if raw_p in [None, '', 0, '0'] or p <= 0:
                         fetched = PriceFetcher.get_price(self.fetcher, str(recv_c), d)
                         p = to_decimal(fetched) if fetched is not None else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
                 elif sent_c and sent_a > 0:
-                    raw_p = r.get('usd_value_at_time', 0)
+                    # Support multiple column names: usd_value_at_time, price_usd, price
+                    raw_p = r.get('usd_value_at_time', r.get('price_usd', r.get('price', 0)))
                     p = to_decimal(raw_p)
                     if raw_p in [None, '', 0, '0'] or p <= 0:
                         fetched = PriceFetcher.get_price(self.fetcher, str(sent_c), d)
