@@ -19,7 +19,7 @@ A professional-grade, self-hosted Python system for tracking cryptocurrency taxe
 
 * **FBAR Report:** Tracks the **maximum USD value** held on foreign exchanges (e.g., Binance, KuCoin) at any point in the year to assist with FinCEN Form 114 filing.  
 * **Income Classification:** Separates Mining, Staking, Airdrops, Gifts (IN) and Hard Forks as **Ordinary Income** (not Capital Gains). Constructive receipt toggle supported.  
-* **Gas Fees:** Treats gas spent on transfers as a taxable disposition of the underlying asset (e.g., selling ETH to pay for a transaction).
+* **Multi-Coin Fees:** Supports `fee_coin` field for transfers with fees in different coins (e.g., ERC-20 token transfers with ETH gas fees). Backward compatible with legacy single-coin fees.
 * **1099 Reconciliation:** Aggregates proceeds, basis, net gain, and transaction counts per source/coin. Detailed CSV includes unmatched and wash placeholders.
 * **Snapshots:** Exports per-source holdings with a `Holdings` column and minimal `TAX_REPORT.csv` marker.
 
@@ -74,6 +74,7 @@ The script automatically builds and maintains this structure:
 │   ├── Supported Blockchains.md   # [DOCS] List of supported chains
 │   ├── Supported Exchanges.md     # [DOCS] List of supported exchanges
 │   ├── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
+│   ├── KNOWN_LIMITATIONS.md       # [DOCS] Architectural limitations & workarounds
 │   ├── STAKING_SETUP.md           # [DOCS] Staking rewards tax reporting guide
 │   ├── STAKING_QUICK_START.md     # [DOCS] 10-minute quick setup
 │   └── STAKING_EXAMPLES.md        # [DOCS] Real-world staking scenarios
