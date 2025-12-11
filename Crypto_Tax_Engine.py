@@ -151,11 +151,16 @@ class DatabaseManager:
 
     def _ensure_integrity(self):
         if not DB_FILE.exists(): return
+        c = None
         try:
             c = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True)
             c.execute("PRAGMA integrity_check")
             c.close()
-        except: self._recover_db()
+        except:
+            try:
+                if c: c.close()
+            finally:
+                self._recover_db()
 
     def _recover_db(self):
         ts = datetime.now().strftime("%Y%m%d")
@@ -286,10 +291,18 @@ class DatabaseManager:
                     else:
                         # Convert float/int to string via Decimal to avoid IEEE 754 errors
                         t_copy[field] = str(to_decimal(val))
-            
+
+            # Destination is optional; ensure it is present so INSERT matches table schema
+            if 'destination' not in t_copy:
+                t_copy['destination'] = None
+
+            # Explicit column order to avoid schema/order mismatches
+            cols = ['id', 'date', 'source', 'destination', 'action', 'coin', 'amount', 'price_usd', 'fee', 'batch_id']
+            values = [t_copy.get(col) for col in cols]
+
             self.cursor.execute(
-                "INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?)", 
-                list(t_copy.values())
+                "INSERT OR IGNORE INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, batch_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                values
             )
         except Exception as e:
             logger.warning(f"Failed to save trade: {e}")
@@ -365,25 +378,28 @@ class Ingestor:
                 elif 'repay' in tx_type:
                     if sent_c and sent_a > 0: self.db.save_trade({'id': f"{batch}_{idx}_REP", 'date': d.isoformat(), 'source': 'LOAN', 'action': 'WITHDRAWAL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': 0, 'fee': 0, 'batch_id': batch})
                 elif sent_c and recv_c and sent_a > 0 and recv_a > 0:
-                    p = to_decimal(r.get('usd_value_at_time', 0))
-                    if p == 0:
-                        fetched = self.fetcher.get_price(str(sent_c), d)
-                        p = fetched * sent_a if fetched else Decimal('0')
+                    raw_p = r.get('usd_value_at_time', 0)
+                    p = to_decimal(raw_p)
+                    if raw_p in [None, '', 0, '0'] or p <= 0:
+                        fetched = PriceFetcher.get_price(self.fetcher, str(sent_c), d)
+                        p = to_decimal(fetched) * sent_a if fetched else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else Decimal('0'), 'fee': fee, 'batch_id': batch})
                     self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else Decimal('0'), 'fee': 0, 'batch_id': batch})
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
                     if 'deposit' in tx_type: act = 'DEPOSIT' # Explicit override for non-taxable deposit
-                    p = to_decimal(r.get('usd_value_at_time', 0))
-                    if p == 0:
-                        fetched = self.fetcher.get_price(str(recv_c), d)
-                        p = fetched if fetched else Decimal('0')
+                    raw_p = r.get('usd_value_at_time', 0)
+                    p = to_decimal(raw_p)
+                    if raw_p in [None, '', 0, '0'] or p <= 0:
+                        fetched = PriceFetcher.get_price(self.fetcher, str(recv_c), d)
+                        p = to_decimal(fetched) if fetched is not None else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
                 elif sent_c and sent_a > 0:
-                    p = to_decimal(r.get('usd_value_at_time', 0))
-                    if p == 0:
-                        fetched = self.fetcher.get_price(str(sent_c), d)
-                        p = fetched if fetched else Decimal('0')
+                    raw_p = r.get('usd_value_at_time', 0)
+                    p = to_decimal(raw_p)
+                    if raw_p in [None, '', 0, '0'] or p <= 0:
+                        fetched = PriceFetcher.get_price(self.fetcher, str(sent_c), d)
+                        p = to_decimal(fetched) if fetched is not None else Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_OUT", 'date': d.isoformat(), 'source': 'MANUAL', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
             except Exception as e: logger.warning(f"   [SKIP] Row {idx} failed: {e}")
         self.db.commit()
@@ -868,24 +884,27 @@ class WalletAuditor:
     def _calculate_fbar_max(self):
         # Replays history to find max USD value per source
         df = pd.read_sql_query("SELECT date, source, action, coin, amount, price_usd FROM trades ORDER BY date ASC", self.db.conn)
-        balances = {} # {source: {coin: amount}}
+        balances = {} # {source: {coin: Decimal amount}}
         
         for _, r in df.iterrows():
             src = r['source']
             if src not in balances: balances[src] = {}
             c = r['coin']
-            if c not in balances[src]: balances[src][c] = 0.0
-            
-            if r['action'] in ['BUY','INCOME','DEPOSIT','GIFT_IN']: balances[src][c] += r['amount']
-            elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: balances[src][c] -= r['amount']
+            if c not in balances[src]: balances[src][c] = Decimal('0')
+
+            amt = to_decimal(r['amount'])
+            price = to_decimal(r['price_usd'])
+
+            if r['action'] in ['BUY','INCOME','DEPOSIT','GIFT_IN']: balances[src][c] += amt
+            elif r['action'] in ['SELL','SPEND','WITHDRAWAL','LOSS']: balances[src][c] -= amt
             
             # Approx Value
-            total_usd = sum([amt * r['price_usd'] for amt in balances[src].values() if amt > 0]) # Using current trade price as proxy for all coins (imperfect but fast estimation)
+            total_usd = sum([amt_val * price for amt_val in balances[src].values() if amt_val > 0]) # Using current trade price as proxy for all coins (imperfect but fast estimation)
             # Better FBAR requires getting price for ALL held coins at every step. Too slow for lite engine.
             # We use the transaction value as a signal.
             
             if src not in self.max_balances: self.max_balances[src] = 0.0
-            if total_usd > self.max_balances[src]: self.max_balances[src] = total_usd
+            if total_usd > self.max_balances[src]: self.max_balances[src] = float(total_usd)
 
     def check_moralis(self, coin, addr):
         if not self.moralis_key or "PASTE" in self.moralis_key: return 0.0
@@ -893,10 +912,10 @@ class WalletAuditor:
         chain_id = self.MORALIS_CHAINS[coin]
         if coin == 'SOL':
             url = f"https://solana-gateway.moralis.io/account/{chain_id}/{addr}/balance"
-            r = requests.get(url, headers=headers, timeout=10)
+            r = NetworkRetry.run(lambda: requests.get(url, headers=headers, timeout=10), retries=5, delay=0.1, context="Moralis")
             return float(r.json().get('solana', 0)) if r.status_code == 200 else 0.0
         url = f"https://deep-index.moralis.io/api/v2.2/{addr}/balance?chain={chain_id}"
-        r = requests.get(url, headers=headers, timeout=10)
+        r = NetworkRetry.run(lambda: requests.get(url, headers=headers, timeout=10), retries=5, delay=0.1, context="Moralis")
         return (float(r.json().get('balance', 0)) / 10**18) if r.status_code == 200 else 0.0
 
     def check_blockchair(self, coin, addr):
@@ -907,7 +926,7 @@ class WalletAuditor:
             url += f"?key={self.blockchair_key}"
         
         try:
-            r = requests.get(url, timeout=15)
+            r = NetworkRetry.run(lambda: requests.get(url, timeout=15), retries=5, delay=0.1, context="Blockchair")
             if r.status_code == 200:
                 bal = float(r.json().get('data', {}).get(addr, {}).get('address', {}).get('balance', 0))
                 return bal / (10 ** self.DECIMALS.get(coin, 8))
@@ -932,8 +951,13 @@ class WalletAuditor:
 # ==========================================
 class TaxEngine:
     def __init__(self, db, y):
-        # hold structure: {coin: {source: [ {'a': Decimal, 'p': Decimal, 'd': datetime} ]}}
-        self.db, self.year, self.tt, self.inc, self.hold = db, int(y), [], [], {}
+        # Per-source holdings and flattened holdings (for backward compatibility/tests)
+        # holdings_by_source: {coin: {source: [ {'a': Decimal, 'p': Decimal, 'd': datetime} ]}}
+        # hold (alias) remains a flattened view for consumers that expect coin -> list
+        self.db, self.year, self.tt, self.inc = db, int(y), [], []
+        self.holdings_by_source = {}
+        self.hold_flat = {}
+        self.hold = self.hold_flat
         self.us_losses = {'short': 0.0, 'long': 0.0} 
         self.prior_carryover = {'short': 0.0, 'long': 0.0}
         self.wash_sale_log = []
@@ -1055,10 +1079,21 @@ class TaxEngine:
                     continue
                 self._transfer(t['coin'], amt, src, dst, d)
 
+        # Build flattened holdings view for backward compatibility (coin -> list of lots)
+        self.hold_flat = {}
+        for coin, src_buckets in self.holdings_by_source.items():
+            flat = []
+            for ls in src_buckets.values():
+                for lot in ls:
+                    if lot['a'] > Decimal('0'):
+                        flat.append({'a': lot['a'], 'p': lot['p'], 'd': lot['d']})
+            self.hold_flat[coin] = flat
+        self.hold = self.hold_flat
+
     def _get_bucket(self, coin, source):
-        if coin not in self.hold: self.hold[coin] = {}
-        if source not in self.hold[coin]: self.hold[coin][source] = []
-        return self.hold[coin][source]
+        if coin not in self.holdings_by_source: self.holdings_by_source[coin] = {}
+        if source not in self.holdings_by_source[coin]: self.holdings_by_source[coin][source] = []
+        return self.holdings_by_source[coin][source]
 
     def _add(self, c, a, p, d, source):
         """Add buy/income record to inventory bucket for the given source."""
@@ -1090,12 +1125,37 @@ class TaxEngine:
                 b += rem * l['p']
                 l['a'] -= rem
                 rem = Decimal('0')
-        
+
+        # Fallback: if preferred source insufficient, draw from other sources (global FIFO/HIFO)
+        if rem > 0:
+            all_lots = []
+            for src, bkt in self.holdings_by_source.get(c, {}).items():
+                for lot in bkt:
+                    all_lots.append((src, lot))
+
+            if method == 'HIFO':
+                all_lots.sort(key=lambda x: x[1]['p'], reverse=True)
+            else:
+                all_lots.sort(key=lambda x: x[1]['d'])
+
+            for src, lot in all_lots:
+                if rem <= 0:
+                    break
+                if lot['a'] <= Decimal('0'):
+                    continue
+                ds.add(lot['d'])
+                move_amt = lot['a'] if lot['a'] <= rem else rem
+                b += move_amt * lot['p']
+                lot['a'] -= move_amt
+                rem -= move_amt
+
         term = 'Short'
+        acq = 'N/A'
         if ds:
             earliest = min(ds)
+            acq = earliest.strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
             if (d - earliest).days > 365: term = 'Long'
-        return b, term, list(ds)[0].strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
+        return b, term, acq
 
     def _transfer(self, c, a, from_src, to_src, d):
         """Move cost basis lots between sources without creating a tax event."""
@@ -1178,7 +1238,7 @@ class TaxEngine:
             pd.DataFrame(fbar_data).to_csv(yd/'FBAR_MAX_VALUE_REPORT.csv', index=False)
 
         snap = []
-        for c, buckets in self.hold.items():
+        for c, buckets in self.holdings_by_source.items():
             for src, ls in buckets.items():
                 t = sum(l['a'] for l in ls)
                 if t>0.000001: snap.append({'Coin':c, 'Source': src, 'Holdings':round(t,8), 'Value':round(sum(l['a']*l['p'] for l in ls),2)})
