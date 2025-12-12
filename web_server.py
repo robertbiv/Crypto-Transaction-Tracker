@@ -24,15 +24,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
 import bcrypt
 import jwt
 
-# Import the crypto tax engine
-sys.path.insert(0, str(Path(__file__).parent))
-from Crypto_Tax_Engine import CryptoDatabase, load_config
-
-# Configuration
+# Configuration paths - avoid importing full engine to reduce dependencies
 BASE_DIR = Path(__file__).parent
 TEMPLATE_DIR = BASE_DIR / 'web_templates'
 STATIC_DIR = BASE_DIR / 'web_static'
