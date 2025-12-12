@@ -1345,8 +1345,9 @@ def api_get_logs():
                     'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
                 })
         
-        encrypted_response = encrypt_data(logs)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(logs)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(logs)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
