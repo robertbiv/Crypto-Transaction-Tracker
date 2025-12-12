@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Wizard - Crypto Tax Generator</title>
+    
+    <!-- Material Design 3 -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        :root {
+            --md-sys-color-primary: #6750A4;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-primary-container: #EADDFF;
+            --md-sys-color-on-primary-container: #21005D;
+            --md-sys-color-secondary: #625B71;
+            --md-sys-color-on-secondary: #FFFFFF;
+            --md-sys-color-secondary-container: #E8DEF8;
+            --md-sys-color-on-secondary-container: #1D192B;
+            --md-sys-color-surface: #FFFBFE;
+            --md-sys-color-on-surface: #1C1B1F;
+            --md-sys-color-surface-variant: #E7E0EC;
+            --md-sys-color-on-surface-variant: #49454F;
+            --md-sys-color-error: #B3261E;
+            --md-sys-color-on-error: #FFFFFF;
+            --md-sys-color-success: #4CAF50;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-secondary) 100%);
+            color: var(--md-sys-color-on-surface);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .wizard-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 800px;
+            overflow: hidden;
+        }
+        
+        .wizard-header {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .wizard-header h1 {
+            font-size: 1.75rem;
+            margin-bottom: 8px;
+        }
+        
+        .wizard-header p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        
+        .progress-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 24px;
+            background: var(--md-sys-color-surface-variant);
+        }
+        
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            padding: 0 10px;
+        }
+        
+        .progress-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            top: 15px;
+            right: -50%;
+            width: 100%;
+            height: 2px;
+            background: #ddd;
+            z-index: 0;
+        }
+        
+        .progress-step.active:not(:last-child)::after {
+            background: var(--md-sys-color-primary);
+        }
+        
+        .progress-step.completed:not(:last-child)::after {
+            background: var(--md-sys-color-success);
+        }
+        
+        .step-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #ddd;
+            color: #666;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .progress-step.active .step-number {
+            background: var(--md-sys-color-primary);
+            color: white;
+        }
+        
+        .progress-step.completed .step-number {
+            background: var(--md-sys-color-success);
+            color: white;
+        }
+        
+        .step-label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .progress-step.active .step-label {
+            color: var(--md-sys-color-primary);
+            font-weight: 500;
+        }
+        
+        .wizard-content {
+            padding: 32px;
+            min-height: 400px;
+        }
+        
+        .step-content {
+            display: none;
+        }
+        
+        .step-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .step-title {
+            font-size: 1.5rem;
+            color: var(--md-sys-color-primary);
+            margin-bottom: 16px;
+        }
+        
+        .step-description {
+            color: var(--md-sys-color-on-surface-variant);
+            margin-bottom: 24px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--md-sys-color-surface-variant);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--md-sys-color-primary);
+        }
+        
+        .form-input.small {
+            width: auto;
+            display: inline-block;
+            min-width: 200px;
+        }
+        
+        textarea.form-input {
+            min-height: 100px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .password-strength {
+            margin-top: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .password-strength.weak {
+            background: #FFEBEE;
+            color: #C62828;
+            display: block;
+        }
+        
+        .password-strength.medium {
+            background: #FFF3E0;
+            color: #E65100;
+            display: block;
+        }
+        
+        .password-strength.strong {
+            background: #E8F5E9;
+            color: #2E7D32;
+            display: block;
+        }
+        
+        .wizard-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid var(--md-sys-color-surface-variant);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: var(--md-sys-color-surface-variant);
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #d0d0d0;
+        }
+        
+        .btn-primary {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .alert-error {
+            background: #FFEBEE;
+            color: #B71C1C;
+        }
+        
+        .alert-success {
+            background: #E8F5E9;
+            color: #1B5E20;
+        }
+        
+        .alert-info {
+            background: #E3F2FD;
+            color: #0D47A1;
+        }
+        
+        .alert-warning {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        
+        .security-note {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--md-sys-color-primary-container);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .security-note strong {
+            color: var(--md-sys-color-error);
+        }
+        
+        .api-key-group {
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--md-sys-color-surface-variant);
+            border-radius: 8px;
+        }
+        
+        .api-key-group h4 {
+            margin-bottom: 12px;
+            color: var(--md-sys-color-primary);
+        }
+        
+        .wallet-entry {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        
+        .wallet-entry input {
+            flex: 1;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .btn-add {
+            background: var(--md-sys-color-success);
+            color: white;
+            margin-top: 12px;
+        }
+        
+        .btn-remove {
+            background: var(--md-sys-color-error);
+            color: white;
+        }
+        
+        .output-box {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 32px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--md-sys-color-primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .config-section {
+            margin-bottom: 24px;
+        }
+        
+        .config-section h4 {
+            margin-bottom: 12px;
+            color: var(--md-sys-color-primary);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <div class="wizard-header">
+            <h1>🚀 Crypto Tax Generator Setup</h1>
+            <p>Let's get you started in just a few steps</p>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-label">Account</div>
+            </div>
+            <div class="progress-step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-label">Initialize</div>
+            </div>
+            <div class="progress-step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-label">API Keys</div>
+            </div>
+            <div class="progress-step" data-step="4">
+                <div class="step-number">4</div>
+                <div class="step-label">Wallets</div>
+            </div>
+            <div class="progress-step" data-step="5">
+                <div class="step-number">5</div>
+                <div class="step-label">Settings</div>
+            </div>
+        </div>
+        
+        <div class="wizard-content">
+            <div id="alertContainer"></div>
+            
+            <!-- Step 1: Create Account -->
+            <div class="step-content active" data-step="1">
+                <h2 class="step-title">Create Your Account</h2>
+                <p class="step-description">First, let's create your admin account to secure access to the application.</p>
+                
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" class="form-input" placeholder="Enter username" autofocus>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" class="form-input" placeholder="Enter password">
+                    <div id="passwordStrength" class="password-strength"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" class="form-input" placeholder="Confirm password">
+                </div>
+                
+                <div class="security-note">
+                    <strong>⚠️ Security Reminder:</strong>
+                    <ul style="margin-left: 20px; margin-top: 8px;">
+                        <li>Do NOT share your password with anyone</li>
+                        <li>Do NOT reuse passwords from other services</li>
+                        <li>Use a strong, unique password</li>
+                        <li>Consider using a password manager</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Step 2: Run Setup Script -->
+            <div class="step-content" data-step="2">
+                <h2 class="step-title">Initialize System</h2>
+                <p class="step-description">Running the setup script to create necessary folders and configuration files.</p>
+                
+                <div id="setupOutput" class="output-box">
+                    Waiting to start...
+                </div>
+                
+                <div class="alert alert-info" style="margin-top: 16px;">
+                    <strong>📋 What's happening:</strong>
+                    <ul style="margin-left: 20px; margin-top: 8px;">
+                        <li>Creating required directories (inputs, outputs, logs)</li>
+                        <li>Checking dependencies</li>
+                        <li>Generating configuration templates</li>
+                        <li>Setting up database structure</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Step 3: API Keys -->
+            <div class="step-content" data-step="3">
+                <h2 class="step-title">Configure API Keys</h2>
+                <p class="step-description">Add your exchange and blockchain API keys. You can skip this and add them later.</p>
+                
+                <div class="alert alert-info">
+                    <strong>💡 Tip:</strong> All API keys should be READ-ONLY. Never give write permissions. Moralis is required for EVM/Solana blockchain audits.
+                </div>
+                
+                <div id="apiKeysContainer">
+                    <!-- API keys will be loaded here -->
+                </div>
+            </div>
+            
+            <!-- Step 4: Wallets -->
+            <div class="step-content" data-step="4">
+                <h2 class="step-title">Add Wallet Addresses</h2>
+                <p class="step-description">Add your cryptocurrency wallet addresses for tracking. You can add more later.</p>
+                
+                <div class="alert alert-info">
+                    <strong>💡 Tip:</strong> Add wallet addresses for each blockchain you use. Format: {"BTC": ["address1"], "ETH": ["address2"]}
+                </div>
+                
+                <div id="walletsContainer">
+                    <!-- Wallets will be loaded here -->
+                </div>
+                
+                <button class="btn btn-add btn-small" onclick="addWallet()">
+                    <span class="material-icons" style="vertical-align: middle; font-size: 16px;">add</span>
+                    Add Wallet
+                </button>
+            </div>
+            
+            <!-- Step 5: Settings -->
+            <div class="step-content" data-step="5">
+                <h2 class="step-title">Configure Settings</h2>
+                <p class="step-description">Set your accounting preferences and tax settings.</p>
+                
+                <div class="config-section">
+                    <h4>Accounting Method</h4>
+                    <div class="form-group">
+                        <label class="form-label" for="accountingMethod">Cost Basis Method</label>
+                        <select id="accountingMethod" class="form-input">
+                            <option value="HIFO">HIFO (Highest In, First Out) - Minimizes taxes</option>
+                            <option value="FIFO">FIFO (First In, First Out)</option>
+                            <option value="LIFO">LIFO (Last In, First Out)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="config-section">
+                    <h4>Tax Settings</h4>
+                    <div class="form-group">
+                        <label class="form-label" for="taxYear">Tax Year</label>
+                        <input type="number" id="taxYear" class="form-input" value="2024" min="2020" max="2030">
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="longTermBenefit" checked>
+                        <label for="longTermBenefit">Use long-term capital gains benefits (>365 days)</label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="includeFees" checked>
+                        <label for="includeFees">Include fees in cost basis</label>
+                    </div>
+                </div>
+                
+                <div class="alert alert-success">
+                    <strong>✅ Almost done!</strong> Review your settings and click "Complete Setup" to finish.
+                </div>
+            </div>
+            
+            <div class="wizard-actions">
+                <button class="btn btn-secondary" id="prevBtn" onclick="previousStep()" style="display: none;">
+                    Previous
+                </button>
+                <button class="btn btn-primary" id="nextBtn" onclick="nextStep()">
+                    Next
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentStep = 1;
+        const totalSteps = 5;
+        let accountCreated = false;
+        let setupScriptRan = false;
+        
+        // Password strength checker
+        function checkPasswordStrength(password) {
+            const strengthDiv = document.getElementById('passwordStrength');
+            
+            if (password.length === 0) {
+                strengthDiv.style.display = 'none';
+                return 0;
+            }
+            
+            let strength = 0;
+            
+            if (password.length >= 8) strength++;
+            if (password.length >= 12) strength++;
+            if (password.length >= 16) strength++;
+            if (/[a-z]/.test(password)) strength++;
+            if (/[A-Z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+            
+            strengthDiv.className = 'password-strength';
+            
+            if (strength < 4) {
+                strengthDiv.classList.add('weak');
+                strengthDiv.textContent = '⚠️ Weak password - Add more characters and variety';
+            } else if (strength < 6) {
+                strengthDiv.classList.add('medium');
+                strengthDiv.textContent = '⚡ Medium password - Consider adding special characters';
+            } else {
+                strengthDiv.classList.add('strong');
+                strengthDiv.textContent = '✓ Strong password';
+            }
+            
+            return strength;
+        }
+        
+        document.getElementById('password').addEventListener('input', (e) => {
+            checkPasswordStrength(e.target.value);
+        });
+        
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = message;
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            // Auto-dismiss success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    container.innerHTML = '';
+                }, 3000);
+            }
+        }
+        
+        function updateProgress() {
+            document.querySelectorAll('.progress-step').forEach((step, index) => {
+                const stepNum = index + 1;
+                if (stepNum < currentStep) {
+                    step.classList.add('completed');
+                    step.classList.remove('active');
+                } else if (stepNum === currentStep) {
+                    step.classList.add('active');
+                    step.classList.remove('completed');
+                } else {
+                    step.classList.remove('active', 'completed');
+                }
+            });
+            
+            document.querySelectorAll('.step-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelector(`.step-content[data-step="${currentStep}"]`).classList.add('active');
+            
+            // Update buttons
+            document.getElementById('prevBtn').style.display = currentStep > 1 ? 'block' : 'none';
+            document.getElementById('nextBtn').textContent = currentStep === totalSteps ? 'Complete Setup' : 'Next';
+        }
+        
+        async function nextStep() {
+            const nextBtn = document.getElementById('nextBtn');
+            
+            // Validate current step
+            if (currentStep === 1) {
+                // Create account
+                if (accountCreated) {
+                    currentStep++;
+                    updateProgress();
+                    await runSetupScript();
+                    return;
+                }
+                
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                
+                if (!username) {
+                    showAlert('Username is required', 'error');
+                    return;
+                }
+                
+                if (password !== confirmPassword) {
+                    showAlert('Passwords do not match', 'error');
+                    return;
+                }
+                
+                if (password.length < 8) {
+                    showAlert('Password must be at least 8 characters', 'error');
+                    return;
+                }
+                
+                const strength = checkPasswordStrength(password);
+                if (strength < 4) {
+                    if (!confirm('Your password is weak. Are you sure you want to continue?')) {
+                        return;
+                    }
+                }
+                
+                nextBtn.disabled = true;
+                nextBtn.textContent = 'Creating account...';
+                
+                try {
+                    const response = await fetch('/api/wizard/create-account', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        accountCreated = true;
+                        showAlert('✅ Account created successfully!', 'success');
+                        currentStep++;
+                        updateProgress();
+                        await runSetupScript();
+                    } else {
+                        showAlert(data.error || 'Failed to create account', 'error');
+                        nextBtn.disabled = false;
+                        nextBtn.textContent = 'Next';
+                    }
+                } catch (error) {
+                    showAlert('Network error: ' + error.message, 'error');
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = 'Next';
+                }
+                return;
+            }
+            
+            if (currentStep === 2) {
+                if (!setupScriptRan) {
+                    showAlert('Please wait for setup script to complete', 'warning');
+                    return;
+                }
+                // Load API keys for next step
+                await loadApiKeys();
+            }
+            
+            if (currentStep === 3) {
+                // Save API keys
+                await saveApiKeys();
+                // Load wallets for next step
+                await loadWallets();
+            }
+            
+            if (currentStep === 4) {
+                // Save wallets
+                await saveWallets();
+                // Load config for next step
+                await loadConfig();
+            }
+            
+            if (currentStep === 5) {
+                // Save config and complete
+                await saveConfig();
+                await completeSetup();
+                return;
+            }
+            
+            currentStep++;
+            updateProgress();
+        }
+        
+        function previousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateProgress();
+            }
+        }
+        
+        async function runSetupScript() {
+            const outputBox = document.getElementById('setupOutput');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            outputBox.textContent = 'Starting setup script...\n';
+            nextBtn.disabled = true;
+            setupScriptRan = false;
+            
+            try {
+                const response = await fetch('/api/wizard/run-setup-script', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    outputBox.textContent = data.output || 'Setup completed successfully!';
+                    showAlert('✅ System initialized successfully!', 'success');
+                    setupScriptRan = true;
+                    nextBtn.disabled = false;
+                } else {
+                    outputBox.textContent = 'ERROR:\n' + (data.error || 'Setup failed');
+                    showAlert('❌ Setup script failed. Please check the output.', 'error');
+                    setupScriptRan = true; // Allow continuing anyway
+                    nextBtn.disabled = false;
+                }
+            } catch (error) {
+                outputBox.textContent = 'ERROR:\n' + error.message;
+                showAlert('❌ Failed to run setup script', 'error');
+                setupScriptRan = true; // Allow continuing anyway
+                nextBtn.disabled = false;
+            }
+        }
+        
+        async function loadApiKeys() {
+            const container = document.getElementById('apiKeysContainer');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading API keys...</div>';
+            
+            try {
+                const response = await fetch('/api/wizard/get-config?type=api_keys');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const apiKeys = data.data;
+                    container.innerHTML = '';
+                    
+                    // Group API keys by category
+                    const categories = {
+                        'Blockchain Providers': ['moralis', 'blockchair'],
+                        'Exchanges': Object.keys(apiKeys).filter(k => !['moralis', 'blockchair', '_INSTRUCTIONS'].includes(k))
+                    };
+                    
+                    for (const [category, keys] of Object.entries(categories)) {
+                        if (keys.length === 0) continue;
+                        
+                        const categoryDiv = document.createElement('div');
+                        categoryDiv.className = 'api-key-group';
+                        categoryDiv.innerHTML = `<h4>${category}</h4>`;
+                        
+                        keys.forEach(key => {
+                            if (key === '_INSTRUCTIONS') return;
+                            
+                            const keyData = apiKeys[key] || {};
+                            const fields = Object.keys(keyData);
+                            
+                            const keyDiv = document.createElement('div');
+                            keyDiv.style.marginBottom = '16px';
+                            keyDiv.innerHTML = `
+                                <label class="form-label">${key.toUpperCase()}</label>
+                                ${fields.map(field => `
+                                    <input type="text" 
+                                           class="form-input" 
+                                           style="margin-bottom: 8px;"
+                                           placeholder="${field}" 
+                                           data-api="${key}" 
+                                           data-field="${field}"
+                                           value="${keyData[field] || ''}">
+                                `).join('')}
+                            `;
+                            categoryDiv.appendChild(keyDiv);
+                        });
+                        
+                        container.appendChild(categoryDiv);
+                    }
+                } else {
+                    container.innerHTML = '<p>Could not load API keys. You can configure them later.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = '<p>Error loading API keys. You can configure them later.</p>';
+            }
+        }
+        
+        async function saveApiKeys() {
+            const inputs = document.querySelectorAll('#apiKeysContainer input[data-api]');
+            const apiKeys = {};
+            
+            inputs.forEach(input => {
+                const api = input.dataset.api;
+                const field = input.dataset.field;
+                const value = input.value.trim();
+                
+                if (!apiKeys[api]) apiKeys[api] = {};
+                apiKeys[api][field] = value;
+            });
+            
+            try {
+                await fetch('/api/wizard/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'api_keys', data: apiKeys })
+                });
+            } catch (error) {
+                console.error('Failed to save API keys:', error);
+            }
+        }
+        
+        async function loadWallets() {
+            const container = document.getElementById('walletsContainer');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading wallets...</div>';
+            
+            try {
+                const response = await fetch('/api/wizard/get-config?type=wallets');
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.wallets = data.data || {};
+                    renderWallets();
+                } else {
+                    window.wallets = {};
+                    renderWallets();
+                }
+            } catch (error) {
+                window.wallets = {};
+                renderWallets();
+            }
+        }
+        
+        function renderWallets() {
+            const container = document.getElementById('walletsContainer');
+            container.innerHTML = '';
+            
+            for (const [currency, addresses] of Object.entries(window.wallets)) {
+                if (!Array.isArray(addresses)) continue;
+                
+                addresses.forEach((address, index) => {
+                    const walletDiv = document.createElement('div');
+                    walletDiv.className = 'wallet-entry';
+                    walletDiv.innerHTML = `
+                        <input type="text" class="form-input small" value="${currency}" placeholder="Currency" data-wallet-currency="${currency}" data-wallet-index="${index}">
+                        <input type="text" class="form-input" value="${address}" placeholder="Address" data-wallet-address="${currency}" data-wallet-index="${index}">
+                        <button class="btn btn-remove btn-small" onclick="removeWallet('${currency}', ${index})">Remove</button>
+                    `;
+                    container.appendChild(walletDiv);
+                });
+            }
+            
+            if (Object.keys(window.wallets).length === 0) {
+                container.innerHTML = '<p class="step-description">No wallets added yet. Click "Add Wallet" to add one.</p>';
+            }
+        }
+        
+        function addWallet() {
+            const currency = prompt('Enter currency code (e.g., BTC, ETH):');
+            if (!currency) return;
+            
+            const address = prompt('Enter wallet address:');
+            if (!address) return;
+            
+            const upper = currency.toUpperCase();
+            if (!window.wallets[upper]) {
+                window.wallets[upper] = [];
+            }
+            window.wallets[upper].push(address);
+            
+            renderWallets();
+        }
+        
+        function removeWallet(currency, index) {
+            if (window.wallets[currency]) {
+                window.wallets[currency].splice(index, 1);
+                if (window.wallets[currency].length === 0) {
+                    delete window.wallets[currency];
+                }
+                renderWallets();
+            }
+        }
+        
+        async function saveWallets() {
+            // Get current values from inputs
+            const currencyInputs = document.querySelectorAll('[data-wallet-currency]');
+            const addressInputs = document.querySelectorAll('[data-wallet-address]');
+            
+            const wallets = {};
+            addressInputs.forEach(input => {
+                const currency = input.dataset.walletAddress;
+                const address = input.value.trim();
+                if (address) {
+                    if (!wallets[currency]) wallets[currency] = [];
+                    wallets[currency].push(address);
+                }
+            });
+            
+            try {
+                await fetch('/api/wizard/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'wallets', data: wallets })
+                });
+            } catch (error) {
+                console.error('Failed to save wallets:', error);
+            }
+        }
+        
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/wizard/get-config?type=config');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const config = data.data;
+                    document.getElementById('accountingMethod').value = config.accounting_method || 'HIFO';
+                    document.getElementById('taxYear').value = config.tax_year || new Date().getFullYear();
+                    document.getElementById('longTermBenefit').checked = config.long_term_benefit !== false;
+                    document.getElementById('includeFees').checked = config.include_fees !== false;
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+        
+        async function saveConfig() {
+            const config = {
+                accounting_method: document.getElementById('accountingMethod').value,
+                tax_year: parseInt(document.getElementById('taxYear').value),
+                long_term_benefit: document.getElementById('longTermBenefit').checked,
+                include_fees: document.getElementById('includeFees').checked
+            };
+            
+            try {
+                await fetch('/api/wizard/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'config', data: config })
+                });
+            } catch (error) {
+                console.error('Failed to save config:', error);
+            }
+        }
+        
+        async function completeSetup() {
+            const nextBtn = document.getElementById('nextBtn');
+            nextBtn.disabled = true;
+            nextBtn.textContent = 'Completing setup...';
+            
+            try {
+                const response = await fetch('/api/wizard/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Setup completed successfully! Redirecting to dashboard...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 2000);
+                } else {
+                    showAlert('❌ Failed to complete setup: ' + (data.error || 'Unknown error'), 'error');
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = 'Complete Setup';
+                }
+            } catch (error) {
+                showAlert('❌ Network error: ' + error.message, 'error');
+                nextBtn.disabled = false;
+                nextBtn.textContent = 'Complete Setup';
+            }
+        }
+        
+        // Initialize
+        updateProgress();
+    </script>
+</body>
+</html>
