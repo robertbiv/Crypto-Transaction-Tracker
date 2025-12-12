@@ -440,9 +440,8 @@ class InteractiveReviewFixer:
     # Database modification methods
     
     def _rename_coin(self, transaction_id, old_name, new_name):
-        """Rename a coin in the database"""
+        """Rename a coin in the database (staged, not committed)"""
         self.db.cursor.execute("UPDATE trades SET coin = ? WHERE id = ?", (new_name, transaction_id))
-        self.db.commit()
         self.fixes_applied.append({
             'type': 'rename',
             'id': transaction_id,
@@ -451,9 +450,8 @@ class InteractiveReviewFixer:
         })
     
     def _update_price(self, transaction_id, price):
-        """Update price_usd for a transaction"""
+        """Update price_usd for a transaction (staged, not committed)"""
         self.db.update_price(transaction_id, price)
-        self.db.commit()
         self.fixes_applied.append({
             'type': 'price_update',
             'id': transaction_id,
@@ -461,20 +459,18 @@ class InteractiveReviewFixer:
         })
     
     def _delete_transaction(self, transaction_id):
-        """Delete a transaction"""
+        """Delete a transaction (staged, not committed)"""
         self.db.cursor.execute("DELETE FROM trades WHERE id = ?", (transaction_id,))
-        self.db.commit()
         self.fixes_applied.append({
             'type': 'delete',
             'id': transaction_id
         })
     
     def _add_note_to_transaction(self, transaction_id, note):
-        """Add a note to transaction (if notes column exists)"""
+        """Add a note to transaction (if notes column exists, staged)"""
         # Check if notes column exists
         try:
             self.db.cursor.execute("UPDATE trades SET notes = ? WHERE id = ?", (note, transaction_id))
-            self.db.commit()
             self.fixes_applied.append({
                 'type': 'note',
                 'id': transaction_id,
@@ -700,33 +696,100 @@ class InteractiveReviewFixer:
         
         return filename
     
+    def restore_from_backup(self, backup_path=None):
+        """Restore database from backup file"""
+        if backup_path is None:
+            backup_path = self.backup_file
+        
+        if not backup_path or not Path(backup_path).exists():
+            print(f"\n✗ Backup file not found: {backup_path}")
+            return False
+        
+        try:
+            print(f"\n[*] Restoring database from {Path(backup_path).name}...")
+            shutil.copy2(backup_path, app.DB_FILE)
+            print("\n✓ Database successfully restored from backup!")
+            print("\nYou may need to reconnect your DatabaseManager:")
+            print("  db = DatabaseManager()")
+            print("  db.connect()")
+            return True
+        except Exception as e:
+            print(f"\n✗ Error restoring backup: {e}")
+            return False
+    
     def _print_summary(self):
-        """Print summary of applied fixes"""
+        """Print summary of changes and prompt to save or discard"""
         print("\n" + "="*80)
-        print("FIX SUMMARY")
+        print("FIX REVIEW - ALL CHANGES STAGED (NOT YET SAVED)")
         print("="*80)
         
         if not self.fixes_applied:
-            print("\nNo fixes were applied.")
-            print("Database remains unchanged.")
-        else:
-            print(f"\nTotal fixes applied: {len(self.fixes_applied)}")
-            
-            # Count by type
-            fix_types = {}
-            for fix in self.fixes_applied:
-                fix_type = fix['type']
-                fix_types[fix_type] = fix_types.get(fix_type, 0) + 1
-            
-            print("\nBreakdown:")
-            for fix_type, count in fix_types.items():
-                print(f"  - {fix_type}: {count}")
-            
-            print(f"\n✓ Backup saved to: {self.backup_file.name}")
-            print("\nIMPORTANT: Re-run tax calculations to see updated results:")
-            print(f"  python Crypto_Tax_Engine.py {self.year}")
+            print("\n✓ No changes were made. Database unchanged.")
+            return
+        
+        # Group by type
+        renames = [f for f in self.fixes_applied if f['type'] == 'rename']
+        prices = [f for f in self.fixes_applied if f['type'] == 'price_update']
+        deletes = [f for f in self.fixes_applied if f['type'] == 'delete']
+        notes = [f for f in self.fixes_applied if f['type'] == 'note']
+        
+        print(f"\nTotal staged changes: {len(self.fixes_applied)}")
+        if renames:
+            print(f"  - {len(renames)} rename(s)")
+            for fix in renames[:5]:  # Show first 5
+                print(f"      • ID {fix['id']}: {fix['old']} → {fix['new']}")
+            if len(renames) > 5:
+                print(f"      ... and {len(renames)-5} more")
+        
+        if prices:
+            print(f"  - {len(prices)} price update(s)")
+            for fix in prices[:5]:  # Show first 5
+                print(f"      • ID {fix['id']}: ${fix['price']}")
+            if len(prices) > 5:
+                print(f"      ... and {len(prices)-5} more")
+        
+        if deletes:
+            print(f"  - {len(deletes)} deletion(s)")
+            for fix in deletes[:5]:  # Show first 5
+                print(f"      • ID {fix['id']}")
+            if len(deletes) > 5:
+                print(f"      ... and {len(deletes)-5} more")
+        
+        if notes:
+            print(f"  - {len(notes)} note(s) added")
         
         print("\n" + "="*80)
+        print("SAVE OR DISCARD?")
+        print("="*80)
+        print("\nThese changes are currently staged but NOT saved to the database.")
+        print("\nOptions:")
+        print("  'save'    - Commit all changes permanently")
+        print("  'discard' - Roll back all changes (database unchanged)")
+        print("  'undo'    - Restore from backup (same as discard)")
+        
+        while True:
+            choice = input("\nYour choice (save/discard/undo): ").strip().lower()
+            
+            if choice == 'save':
+                print("\n[*] Committing changes to database...")
+                self.db.commit()
+                print(f"\n✓ Successfully saved {len(self.fixes_applied)} change(s) to database!")
+                print(f"\n✓ Backup still available at: {self.backup_file.name}")
+                print("\nNext steps:")
+                print("  1. Re-run tax calculations: python Auto_Runner.py")
+                print("  2. Review updated reports in outputs/Year_XXXX/")
+                break
+            
+            elif choice in ['discard', 'undo']:
+                print("\n[*] Rolling back all changes...")
+                self.db.connection.rollback()
+                print(f"\n✓ All {len(self.fixes_applied)} change(s) discarded. Database unchanged.")
+                print(f"✓ Backup preserved at: {self.backup_file.name}")
+                print("\nNo changes were made to your database.")
+                break
+            
+            else:
+                print("\n✗ Invalid choice. Please type 'save', 'discard', or 'undo'.")
 
 
 def main():
