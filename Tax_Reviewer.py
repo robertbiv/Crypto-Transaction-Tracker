@@ -49,6 +49,26 @@ class TaxReviewer:
             'UNI-V2', 'UNI-V3', 'SUSHI', 'CURVE', 'BALANCER', 'AAVE',
             'COMPOUND', 'MAKER', 'YEARN', '-LP', '_LP', 'POOL'
         ]
+        
+        # FBAR Compliance (2025): Distinguish domestic vs foreign exchanges
+        self.domestic_exchanges = {
+            'COINBASE', 'KRAKEN', 'GEMINI', 'BITSTAMP', 'ITBIT',
+            'BINANCE.US',  # US-registered entity, FBAR exempt
+            'CASH APP', 'SQUARE', 'STRIKE', 'RIVER', 'SWAN BITCOIN',
+            'LEDGER LIVE', 'TREZOR', 'COLD STORAGE'
+        }
+        
+        self.foreign_exchanges = {
+            # Major Asia-Pacific
+            'BINANCE', 'BINANCE.COM', 'BYBIT', 'OKX', 'KUCOIN',
+            'GATE.IO', 'HUOBI', 'CRYPTO.COM', 'FTX.COM', 'FTX', 'UPBIT', 'BITHUMB',
+            'COINCHECK', 'LIQUID', 'DERIBIT',
+            # European
+            'KRAKEN EU', 'BITSTAMP EU', 'REVOLUT', 'LMAX', 'THEROCK',
+            # Other regions
+            'MEXC', 'ASCENDEX', 'HOTBIT', 'BITFINEX', 'POLONIEX'
+        }
+
     
     def run_review(self):
         """Run all heuristic checks and generate review report"""
@@ -83,6 +103,7 @@ class TaxReviewer:
         self._check_spam_tokens(df_year)
         self._check_duplicate_suspects(df_year)
         self._check_price_anomalies(df_year)
+        self._check_fbar_reporting_requirements(df_year)
         
         # Generate report
         report = self._generate_report()
@@ -438,6 +459,109 @@ class TaxReviewer:
                 'items': price_anomalies[:10],
                 'action': 'Review these prices carefully. If incorrect, divide the price by the amount to get true per-unit cost, ' \
                          'then update the Price column in your CSV.'
+            })
+
+    def _check_fbar_reporting_requirements(self, df):
+        """
+        2025 COMPLIANCE: Check FBAR (Report of Foreign Bank and Financial Accounts) requirements.
+        
+        FBAR Rule (FinCEN): US citizens/residents must file if aggregate value of foreign 
+        financial accounts exceeds $10,000 at ANY point during the year.
+        
+        Classification:
+        - DOMESTIC: Coinbase, Kraken, Gemini, etc. (NOT reportable)
+        - FOREIGN: Binance, OKX, KuCoin, Crypto.com, etc. (REPORTABLE if >$10,000)
+        - SELF-CUSTODY: Wallets, Cold Storage (Uncertain - current FinCEN guidance unclear)
+        """
+        
+        # Aggregate balances by exchange (using source field)
+        exchange_balances = {}
+        
+        for _, row in df.iterrows():
+            source = str(row.get('source', 'UNKNOWN')).upper()
+            amount = float(row.get('amount', 0))
+            price = float(row.get('price_usd', 0))
+            action = str(row.get('action', '')).upper()
+            
+            # Only count BUY, INCOME, DEPOSIT (not SELL, WITHDRAW)
+            if action in ['BUY', 'INCOME', 'DEPOSIT', 'STAKE', 'FARM']:
+                if source not in exchange_balances:
+                    exchange_balances[source] = {'amount': 0, 'total_value': 0, 'transactions': []}
+                
+                transaction_value = amount * price
+                exchange_balances[source]['amount'] += amount
+                exchange_balances[source]['total_value'] += transaction_value
+                exchange_balances[source]['transactions'].append({
+                    'date': row.get('date'),
+                    'coin': row.get('coin'),
+                    'amount': amount,
+                    'price': price,
+                    'value': transaction_value
+                })
+        
+        # Check for FBAR triggers
+        foreign_exchanges_flagged = []
+        self_custody_flagged = []
+        
+        for exchange, data in exchange_balances.items():
+            total_value = data['total_value']
+            
+            # Check if exchange is in our lists (check domestic FIRST to avoid false positives)
+            is_domestic = exchange in self.domestic_exchanges or any(
+                domestic in exchange for domestic in ['COINBASE', 'KRAKEN', 'GEMINI', 'BINANCE.US']
+            )
+            is_foreign = (not is_domestic) and (
+                exchange in self.foreign_exchanges or any(
+                    foreign in exchange for foreign in ['BINANCE.COM', 'BYBIT', 'KUCOIN', 'OKX', 'GATE', 'CRYPTO.COM']
+                )
+            )
+            is_wallet = any(w in exchange for w in ['WALLET', 'COLD', 'LEDGER', 'TREZOR', 'HARDWARE'])
+            
+            # Foreign exchange threshold check
+            if is_foreign and total_value > 10000:
+                foreign_exchanges_flagged.append({
+                    'exchange': exchange,
+                    'max_balance_usd': total_value,
+                    'timestamp': data['transactions'][0]['date'] if data['transactions'] else 'Unknown',
+                    'count': len(data['transactions'])
+                })
+            
+            # Self-custody uncertainty flag
+            elif is_wallet:
+                if total_value > 0:
+                    self_custody_flagged.append({
+                        'wallet': exchange,
+                        'total_received_usd': total_value,
+                        'status': 'Uncertain - FinCEN guidance not yet finalized',
+                        'count': len(data['transactions'])
+                    })
+        
+        # Issue warnings for foreign exchanges
+        if foreign_exchanges_flagged:
+            self.warnings.append({
+                'severity': 'HIGH',
+                'category': 'FBAR_FOREIGN_EXCHANGES',
+                'title': 'FBAR Filing Likely Required (Foreign Exchange Accounts)',
+                'count': len(foreign_exchanges_flagged),
+                'description': '2025 COMPLIANCE: FinCEN requires FBAR (Form 114) filing if aggregate value of foreign financial accounts exceeds $10,000 at any point in the year. ' \
+                              'Custodial accounts on foreign-based exchanges (Binance, OKX, KuCoin, etc.) count as reportable accounts.',
+                'items': foreign_exchanges_flagged,
+                'action': 'If total value exceeded $10,000: File FinCEN Form 114 (FBAR) by April 15, 2026 (or Oct 15 with extension). ' \
+                         'Failure to file can result in civil penalties ($10,000+) or criminal charges.'
+            })
+        
+        # Issue suggestions for self-custody (uncertain status)
+        if self_custody_flagged:
+            self.suggestions.append({
+                'severity': 'MEDIUM',
+                'category': 'FBAR_SELF_CUSTODY_UNCERTAIN',
+                'title': 'FBAR Status Uncertain for Self-Custody Wallets',
+                'count': len(self_custody_flagged),
+                'description': 'Current FinCEN guidance (as of 2025) does not explicitly require FBAR reporting for non-custodial crypto wallets. ' \
+                              'However, guidance may change. If you hold crypto in self-custody (hardware wallet, MetaMask, etc.), the FBAR requirement is uncertain.',
+                'items': self_custody_flagged,
+                'action': 'Recommended: Keep detailed records of max balance reached in each wallet. Monitor FinCEN updates for changes to self-custody guidance. ' \
+                         'Consider consulting a tax professional if your self-custody holdings exceed $10,000.'
             })
 
     def _generate_report(self):

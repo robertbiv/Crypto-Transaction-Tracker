@@ -51,19 +51,12 @@ def run_automation():
         stake_mgr.run()
         log("   -> Staking rewards processed.")
         
-        # 3. BACKFILL PRICES
-        bf = tax_app.PriceFetcher()
+        # 3. CHECK FOR MISSING PRICES
         zeros = db.get_zeros()
         if not zeros.empty:
-            log(f">>> STEP 2: BACKFILLING {len(zeros)} MISSING PRICES")
-            count = 0
-            for _, r in zeros.iterrows():
-                p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
-                if p > 0: 
-                    db.update_price(r['id'], p)
-                    count += 1
-            db.commit()
-            log(f"   -> Backfilled {count} prices.")
+            log(f">>> STEP 2: DETECTED {len(zeros)} MISSING PRICES", level="warning")
+            log(f"   [ACTION REQUIRED] Run Interactive_Review_Fixer.py to resolve missing price issues.", level="warning")
+            log(f"   The fixer will guide you through correcting these transactions.", level="warning")
         else:
             log(">>> STEP 2: NO MISSING PRICES FOUND (SKIP)")
 
