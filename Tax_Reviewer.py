@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import timedelta
 from pathlib import Path
 import logging
+import Crypto_Tax_Engine as app
 
 logger = logging.getLogger("crypto_tax_engine")
 
@@ -399,7 +400,7 @@ class TaxReviewer:
         2. High-frequency trading (different sources, legitimate)
         """
         # Parse dates to extract timestamps with second precision
-        df['datetime_parsed'] = pd.to_datetime(df['date'], format='mixed', utc=True)
+        df['datetime_parsed'] = pd.to_datetime(df['date'], utc=True)
         df['timestamp_sec'] = df['datetime_parsed'].dt.floor('s')  # Floor to nearest second
         
         # Create enhanced signature with timestamp precision
