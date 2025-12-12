@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Wizard - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .setup-wizard-container {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+    }
+    
+    .wizard-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    
+    .wizard-header h1 {
+        font-size: 2.5rem;
+        color: var(--md-sys-color-primary);
+        margin-bottom: 16px;
+    }
+    
+    .wizard-card {
+        background: white;
+        padding: 32px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 24px;
+    }
+    
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 32px;
+        position: relative;
+    }
+    
+    .step-indicator::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--md-sys-color-surface-variant);
+        z-index: 0;
+        transform: translateY(-50%);
+    }
+    
+    .step {
+        position: relative;
+        z-index: 1;
+        background: white;
+        padding: 0 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+    
+    .step-circle {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--md-sys-color-surface-variant);
+        color: var(--md-sys-color-on-surface-variant);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        transition: all 0.3s;
+    }
+    
+    .step.active .step-circle {
+        background: var(--md-sys-color-primary);
+        color: var(--md-sys-color-on-primary);
+    }
+    
+    .step.completed .step-circle {
+        background: var(--md-sys-color-primary);
+        color: var(--md-sys-color-on-primary);
+    }
+    
+    .step-label {
+        font-size: 0.875rem;
+        color: var(--md-sys-color-on-surface-variant);
+        font-weight: 500;
+    }
+    
+    .step.active .step-label {
+        color: var(--md-sys-color-primary);
+    }
+    
+    .wizard-step {
+        display: none;
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    .wizard-step.active {
+        display: block;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .form-section {
+        margin-bottom: 24px;
+    }
+    
+    .form-section h3 {
+        color: var(--md-sys-color-primary);
+        margin-bottom: 16px;
+        font-size: 1.25rem;
+        border-bottom: 1px solid var(--md-sys-color-surface-variant);
+        padding-bottom: 8px;
+    }
+    
+    .api-key-group {
+        background: var(--md-sys-color-surface);
+        padding: 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        border: 1px solid var(--md-sys-color-surface-variant);
+    }
+    
+    .api-key-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        cursor: pointer;
+    }
+    
+    .api-key-content {
+        display: none;
+    }
+    
+    .api-key-content.open {
+        display: block;
+    }
+    
+    .wallet-input {
+        font-family: monospace;
+        min-height: 80px;
+    }
+    
+    .nav-buttons {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 32px;
+        padding-top: 16px;
+        border-top: 1px solid var(--md-sys-color-surface-variant);
+    }
+    
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255,255,255,0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        display: none;
+    }
+    
+    .spinner {
+        width: 48px;
+        height: 48px;
+        border: 5px solid var(--md-sys-color-primary-container);
+        border-top-color: var(--md-sys-color-primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="setup-wizard-container">
+    <div class="wizard-header">
+        <h1>🚀 Setup Wizard</h1>
+        <p>Configure your Crypto Tax Engine in 4 simple steps</p>
+    </div>
+    
+    <div class="step-indicator">
+        <div class="step active" onclick="goToStep(1)">
+            <div class="step-circle">1</div>
+            <div class="step-label">General</div>
+        </div>
+        <div class="step" onclick="goToStep(2)">
+            <div class="step-circle">2</div>
+            <div class="step-label">API Keys</div>
+        </div>
+        <div class="step" onclick="goToStep(3)">
+            <div class="step-circle">3</div>
+            <div class="step-label">Wallets</div>
+        </div>
+        <div class="step" onclick="goToStep(4)">
+            <div class="step-circle">4</div>
+            <div class="step-label">Review</div>
+        </div>
+    </div>
+    
+    <div class="wizard-card">
+        <form id="setupForm" onsubmit="return false;">
+            <!-- STEP 1: GENERAL CONFIG -->
+            <div class="wizard-step active" id="step1">
+                <div class="form-section">
+                    <h3>Accounting Settings</h3>
+                    <div class="form-group">
+                        <label class="form-label">Accounting Method</label>
+                        <select class="form-input" name="config.accounting.method">
+                            <option value="FIFO">FIFO (First In, First Out) - Recommended</option>
+                            <option value="HIFO">HIFO (Highest In, First Out) - Aggressive</option>
+                            <option value="LIFO">LIFO (Last In, First Out)</option>
+                        </select>
+                        <small style="color: var(--md-sys-color-secondary);">FIFO is the standard conservative method accepted by most tax authorities.</small>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Compliance Controls</h3>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="config.compliance.strict_broker_mode" checked>
+                            Strict Broker Mode
+                        </label>
+                        <small style="display:block; margin-left: 24px; color: var(--md-sys-color-secondary);">Prevents basis borrowing across wallets for custodial sources (1099-DA alignment).</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="config.compliance.staking_taxable_on_receipt" checked>
+                            Tax Staking on Receipt
+                        </label>
+                        <small style="display:block; margin-left: 24px; color: var(--md-sys-color-secondary);">Treats staking rewards as income when received (Conservative).</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="config.compliance.defi_lp_conservative" checked>
+                            Conservative DeFi LP
+                        </label>
+                        <small style="display:block; margin-left: 24px; color: var(--md-sys-color-secondary);">Treats LP deposits as taxable swaps.</small>
+                    </div>
+                </div>
+                
+                <div class="nav-buttons">
+                    <button class="btn btn-secondary" disabled>Back</button>
+                    <button class="btn btn-primary" onclick="nextStep()">Next: API Keys</button>
+                </div>
+            </div>
+            
+            <!-- STEP 2: API KEYS -->
+            <div class="wizard-step" id="step2">
+                <div class="alert alert-info">
+                    <span class="material-icons" style="vertical-align: middle; font-size: 18px;">info</span>
+                    API keys are stored locally and encrypted. Read-only permissions recommended.
+                </div>
+                
+                <div class="form-section">
+                    <h3>Core Services</h3>
+                    <div class="api-key-group">
+                        <label class="form-label">Moralis API Key (Required for EVM/Solana)</label>
+                        <input type="password" class="form-input" name="api_keys.moralis.apiKey" placeholder="Paste Moralis Key">
+                    </div>
+                    <div class="api-key-group">
+                        <label class="form-label">Blockchair API Key (Optional for BTC)</label>
+                        <input type="password" class="form-input" name="api_keys.blockchair.apiKey" placeholder="Paste Blockchair Key">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Exchanges</h3>
+                    <div id="exchange-container">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button class="btn btn-secondary" onclick="addExchangeField()">+ Add Exchange Key</button>
+                </div>
+                
+                <div class="nav-buttons">
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                    <button class="btn btn-primary" onclick="nextStep()">Next: Wallets</button>
+                </div>
+            </div>
+            
+            <!-- STEP 3: WALLETS -->
+            <div class="wizard-step" id="step3">
+                <div class="alert alert-info">
+                    Enter public wallet addresses. One address per line.
+                </div>
+                
+                <div class="form-section">
+                    <h3>EVM Chains (Ethereum, BSC, Polygon, etc.)</h3>
+                    <div class="form-group">
+                        <label class="form-label">Ethereum & EVM Addresses</label>
+                        <textarea class="form-input wallet-input" name="wallets.ethereum.addresses" placeholder="0x..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Other Chains</h3>
+                    <div class="form-group">
+                        <label class="form-label">Bitcoin (BTC)</label>
+                        <textarea class="form-input wallet-input" name="wallets.bitcoin.addresses" placeholder="bc1..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Solana (SOL)</label>
+                        <textarea class="form-input wallet-input" name="wallets.solana.addresses" placeholder="..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Litecoin (LTC)</label>
+                        <textarea class="form-input wallet-input" name="wallets.litecoin.addresses" placeholder="L..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="nav-buttons">
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                    <button class="btn btn-primary" onclick="nextStep()">Next: Review</button>
+                </div>
+            </div>
+            
+            <!-- STEP 4: REVIEW -->
+            <div class="wizard-step" id="step4">
+                <div class="form-section">
+                    <h3>Ready to Finish?</h3>
+                    <p>Your configuration is ready to be saved. You can always change these settings later in the Config page.</p>
+                    
+                    <div class="info-box" style="margin-top: 20px;">
+                        <h4>Summary</h4>
+                        <ul id="review-summary" style="margin-left: 20px; margin-top: 10px;">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="nav-buttons">
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                    <button class="btn btn-primary" onclick="submitSetup()">Finish Setup</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentStep = 1;
+    const totalSteps = 4;
+    
+    // Exchange list for dropdown
+    const exchanges = [
+        'binance', 'binanceus', 'coinbase', 'kraken', 'kucoin', 'gemini', 
+        'bybit', 'okx', 'gateio', 'bitget', 'crypto.com', 'mexc'
+    ];
+    
+    function goToStep(step) {
+        document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
+        document.getElementById(`step${step}`).classList.add('active');
+        
+        document.querySelectorAll('.step').forEach((el, index) => {
+            if (index + 1 === step) {
+                el.classList.add('active');
+                el.classList.remove('completed');
+            } else if (index + 1 < step) {
+                el.classList.add('completed');
+                el.classList.remove('active');
+            } else {
+                el.classList.remove('active', 'completed');
+            }
+        });
+        
+        currentStep = step;
+        
+        if (step === 4) {
+            updateReviewSummary();
+        }
+    }
+    
+    function nextStep() {
+        if (currentStep < totalSteps) {
+            goToStep(currentStep + 1);
+        }
+    }
+    
+    function prevStep() {
+        if (currentStep > 1) {
+            goToStep(currentStep - 1);
+        }
+    }
+    
+    function addExchangeField() {
+        const container = document.getElementById('exchange-container');
+        const id = Date.now();
+        
+        const div = document.createElement('div');
+        div.className = 'api-key-group';
+        div.innerHTML = `
+            <div class="api-key-header" onclick="this.nextElementSibling.classList.toggle('open')">
+                <strong>Select Exchange</strong>
+                <span class="material-icons">expand_more</span>
+            </div>
+            <div class="api-key-content open">
+                <div class="form-group">
+                    <label class="form-label">Exchange</label>
+                    <select class="form-input" onchange="updateExchangeLabel(this)">
+                        <option value="">-- Select Exchange --</option>
+                        ${exchanges.map(ex => `<option value="${ex}">${ex.charAt(0).toUpperCase() + ex.slice(1)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-input exchange-key" placeholder="API Key">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API Secret</label>
+                    <input type="password" class="form-input exchange-secret" placeholder="API Secret">
+                </div>
+                <div class="form-group passphrase-group" style="display:none">
+                    <label class="form-label">Passphrase (if required)</label>
+                    <input type="password" class="form-input exchange-passphrase" placeholder="Passphrase">
+                </div>
+                <button class="btn btn-secondary" style="background:#ffcdd2; color:#b71c1c; margin-top:8px;" onclick="this.closest('.api-key-group').remove()">Remove</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+    
+    function updateExchangeLabel(select) {
+        const header = select.closest('.api-key-group').querySelector('.api-key-header strong');
+        header.textContent = select.options[select.selectedIndex].text;
+        
+        const passphraseGroup = select.closest('.api-key-content').querySelector('.passphrase-group');
+        if (['kucoin', 'okx'].includes(select.value)) {
+            passphraseGroup.style.display = 'block';
+        } else {
+            passphraseGroup.style.display = 'none';
+        }
+        
+        const container = select.closest('.api-key-content');
+        const keyInput = container.querySelector('.exchange-key');
+        const secretInput = container.querySelector('.exchange-secret');
+        const passInput = container.querySelector('.exchange-passphrase');
+        
+        const exName = select.value;
+        if (exName) {
+            keyInput.name = `api_keys.${exName}.apiKey`;
+            secretInput.name = `api_keys.${exName}.secret`;
+            passInput.name = `api_keys.${exName}.password`;
+        }
+    }
+    
+    function updateReviewSummary() {
+        const summary = document.getElementById('review-summary');
+        
+        let method = document.querySelector('[name="config.accounting.method"]').value;
+        let walletCount = 0;
+        document.querySelectorAll('.wallet-input').forEach(el => {
+            if (el.value.trim()) walletCount += el.value.trim().split('\n').length;
+        });
+        
+        let apiCount = 0;
+        if (document.querySelector('[name="api_keys.moralis.apiKey"]').value) apiCount++;
+        document.querySelectorAll('.exchange-key').forEach(el => {
+            if (el.value) apiCount++;
+        });
+        
+        summary.innerHTML = `
+            <li><strong>Accounting Method:</strong> ${method}</li>
+            <li><strong>Wallets Configured:</strong> ${walletCount} addresses</li>
+            <li><strong>API Keys Provided:</strong> ${apiCount} keys</li>
+        `;
+    }
+    
+    async function submitSetup() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        try {
+            const payload = {
+                config: {
+                    accounting: {
+                        method: document.querySelector('[name="config.accounting.method"]').value
+                    },
+                    compliance: {
+                        strict_broker_mode: document.querySelector('[name="config.compliance.strict_broker_mode"]').checked,
+                        staking_taxable_on_receipt: document.querySelector('[name="config.compliance.staking_taxable_on_receipt"]').checked,
+                        defi_lp_conservative: document.querySelector('[name="config.compliance.defi_lp_conservative"]').checked
+                    }
+                },
+                api_keys: {},
+                wallets: {}
+            };
+            
+            const moralisKey = document.querySelector('[name="api_keys.moralis.apiKey"]').value;
+            if (moralisKey) payload.api_keys.moralis = { apiKey: moralisKey };
+            
+            const blockchairKey = document.querySelector('[name="api_keys.blockchair.apiKey"]').value;
+            if (blockchairKey) payload.api_keys.blockchair = { apiKey: blockchairKey };
+            
+            document.querySelectorAll('.api-key-group').forEach(group => {
+                const select = group.querySelector('select');
+                if (select && select.value) {
+                    const ex = select.value;
+                    const key = group.querySelector('.exchange-key').value;
+                    const secret = group.querySelector('.exchange-secret').value;
+                    const pass = group.querySelector('.exchange-passphrase').value;
+                    
+                    if (key) {
+                        payload.api_keys[ex] = { apiKey: key, secret: secret };
+                        if (pass) payload.api_keys[ex].password = pass;
+                    }
+                }
+            });
+            
+            const ethAddrs = document.querySelector('[name="wallets.ethereum.addresses"]').value;
+            if (ethAddrs.trim()) {
+                const addrs = ethAddrs.split('\n').map(a => a.trim()).filter(a => a);
+                ['ethereum', 'binance', 'polygon', 'avalanche', 'fantom', 'arbitrum', 'optimism', 'base'].forEach(chain => {
+                    payload.wallets[chain] = { addresses: addrs };
+                });
+            }
+            
+            const btcAddrs = document.querySelector('[name="wallets.bitcoin.addresses"]').value;
+            if (btcAddrs.trim()) payload.wallets.bitcoin = { addresses: btcAddrs.split('\n').map(a => a.trim()).filter(a => a) };
+            
+            const solAddrs = document.querySelector('[name="wallets.solana.addresses"]').value;
+            if (solAddrs.trim()) payload.wallets.solana = { addresses: solAddrs.split('\n').map(a => a.trim()).filter(a => a) };
+            
+            const ltcAddrs = document.querySelector('[name="wallets.litecoin.addresses"]').value;
+            if (ltcAddrs.trim()) payload.wallets.litecoin = { addresses: ltcAddrs.split('\n').map(a => a.trim()).filter(a => a) };
+            
+            const response = await fetch('/api/setup/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token() if csrf_token else "" }}'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                alert('Configuration saved successfully!');
+                window.location.href = '/dashboard';
+            } else {
+                alert('Error: ' + (result.error || 'Unknown error'));
+            }
+            
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+    }
+    
+    addExchangeField();
+</script>
+{% endblock %}

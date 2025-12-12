@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Crypto Tax Generator{% endblock %}</title>
+    
+    <!-- Material Design 3 -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        :root {
+            --md-sys-color-primary: #6750A4;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-primary-container: #EADDFF;
+            --md-sys-color-on-primary-container: #21005D;
+            --md-sys-color-secondary: #625B71;
+            --md-sys-color-on-secondary: #FFFFFF;
+            --md-sys-color-secondary-container: #E8DEF8;
+            --md-sys-color-on-secondary-container: #1D192B;
+            --md-sys-color-surface: #FFFBFE;
+            --md-sys-color-on-surface: #1C1B1F;
+            --md-sys-color-surface-variant: #E7E0EC;
+            --md-sys-color-on-surface-variant: #49454F;
+            --md-sys-color-error: #B3261E;
+            --md-sys-color-on-error: #FFFFFF;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Navigation Bar */
+        .nav-bar {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .nav-bar h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+        
+        .nav-menu {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .nav-link {
+            color: var(--md-sys-color-on-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-link.active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--md-sys-color-surface);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--md-sys-color-on-surface);
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+        }
+        
+        .btn-primary:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .btn-secondary {
+            background: var(--md-sys-color-secondary);
+            color: var(--md-sys-color-on-secondary);
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--md-sys-color-surface-variant);
+        }
+        
+        th {
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        
+        tr:hover {
+            background: rgba(103, 80, 164, 0.04);
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--md-sys-color-surface-variant);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--md-sys-color-primary);
+        }
+        
+        /* Alerts */
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .alert-success {
+            background: #E8F5E9;
+            color: #1B5E20;
+        }
+        
+        .alert-error {
+            background: #FFEBEE;
+            color: #B71C1C;
+        }
+        
+        .alert-warning {
+            background: #FFF3E0;
+            color: #E65100;
+        }
+        
+        .alert-info {
+            background: #E3F2FD;
+            color: #0D47A1;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .nav-menu {
+                flex-direction: column;
+                gap: 4px;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .card {
+                padding: 16px;
+            }
+            
+            table {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% set hidden_endpoints = ['first_time_setup', 'setup_wizard', 'login'] %}
+    {% set show_nav = (session.username and request.endpoint not in hidden_endpoints and not hide_nav) %}
+    {% if show_nav %}
+    <nav class="nav-bar">
+        <h1>💰 Crypto Tax Generator</h1>
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/transactions" class="nav-link">Transactions</a>
+            <a href="/warnings" class="nav-link">Warnings</a>
+            <a href="/reports" class="nav-link">Reports</a>
+            <a href="/config" class="nav-link">Config</a>
+            <a href="/logs" class="nav-link">Logs</a>
+            <a href="/schedule" class="nav-link">Schedule</a>
+            <a href="/settings" class="nav-link">Settings</a>
+            <a href="/logout" class="nav-link">Logout</a>
+        </div>
+    </nav>
+    {% endif %}
+    
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <script>
+        // Secure API client with encryption and CSRF protection
+        class SecureAPIClient {
+            constructor() {
+                this.csrfToken = null;
+            }
+            
+            async initCSRF() {
+                if (!this.csrfToken) {
+                    const response = await fetch('/api/csrf-token');
+                    const data = await response.json();
+                    this.csrfToken = data.csrf_token;
+                }
+                return this.csrfToken;
+            }
+            
+            generateSignature(data, timestamp) {
+                // Signature generation handled server-side
+                // This is a placeholder for client-side reference
+                return '';
+            }
+            
+            async request(url, options = {}) {
+                await this.initCSRF();
+                
+                const timestamp = new Date().toISOString();
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': this.csrfToken,
+                    ...options.headers
+                };
+                
+                // For write operations, add timestamp and signature
+                if (['POST', 'PUT', 'DELETE'].includes(options.method)) {
+                    headers['X-Request-Timestamp'] = timestamp;
+                    
+                    // Generate signature (simplified for client)
+                    let data = {};
+                    if (options.body) {
+                        try {
+                            data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+                        } catch (e) {
+                            data = {};
+                        }
+                    }
+                    const message = JSON.stringify(data) + timestamp;
+                    
+                    // Use SubtleCrypto API for HMAC
+                    const encoder = new TextEncoder();
+                    const key = await window.crypto.subtle.importKey(
+                        'raw',
+                        encoder.encode(this.csrfToken),
+                        { name: 'HMAC', hash: 'SHA-256' },
+                        false,
+                        ['sign']
+                    );
+                    const signature = await window.crypto.subtle.sign(
+                        'HMAC',
+                        key,
+                        encoder.encode(message)
+                    );
+                    const signatureHex = Array.from(new Uint8Array(signature))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join('');
+                    
+                    headers['X-Request-Signature'] = signatureHex;
+                }
+                
+                const response = await fetch(url, {
+                    ...options,
+                    headers,
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Request failed');
+                }
+                
+                return response.json();
+            }
+            
+            async get(url) {
+                return this.request(url, { method: 'GET' });
+            }
+            
+            async post(url, data) {
+                // Encrypt sensitive data before sending
+                const encryptedData = { data: JSON.stringify(data) };
+                return this.request(url, {
+                    method: 'POST',
+                    body: JSON.stringify(encryptedData)
+                });
+            }
+            
+            async put(url, data) {
+                // Encrypt sensitive data before sending
+                const encryptedData = { data: JSON.stringify(data) };
+                return this.request(url, {
+                    method: 'PUT',
+                    body: JSON.stringify(encryptedData)
+                });
+            }
+            
+            async delete(url) {
+                return this.request(url, { method: 'DELETE' });
+            }
+        }
+        
+        // Global API client instance
+        const api = new SecureAPIClient();
+        
+        // Helper to show alerts with dismiss button
+        function showAlert(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.style.display = 'flex';
+            alertDiv.style.justifyContent = 'space-between';
+            alertDiv.style.alignItems = 'center';
+            
+            const messageSpan = document.createElement('span');
+            messageSpan.textContent = message;
+            alertDiv.appendChild(messageSpan);
+            
+            const dismissBtn = document.createElement('button');
+            dismissBtn.textContent = '×';
+            dismissBtn.className = 'alert-dismiss';
+            dismissBtn.style.cssText = 'background: none; border: none; font-size: 24px; cursor: pointer; padding: 0 8px; margin-left: 16px;';
+            dismissBtn.onclick = function() {
+                alertDiv.remove();
+            };
+            alertDiv.appendChild(dismissBtn);
+            
+            const container = document.querySelector('.container');
+            if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+            }
+        }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

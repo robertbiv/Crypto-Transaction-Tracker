@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .logs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+    }
+    
+    .log-card {
+        background: white;
+        border: 1px solid var(--md-sys-color-surface-variant);
+        border-radius: 8px;
+        padding: 16px;
+        transition: box-shadow 0.2s;
+    }
+    
+    .log-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .log-name {
+        font-weight: 500;
+        font-size: 1rem;
+        margin-bottom: 8px;
+        color: var(--md-sys-color-on-surface);
+    }
+    
+    .log-meta {
+        display: flex;
+        justify-content: space-between;
+        color: var(--md-sys-color-on-surface-variant);
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+    }
+    
+    .log-actions {
+        display: flex;
+        gap: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Application Logs</h1>
+
+<div class="card">
+    <h2 class="card-title">Log Files</h2>
+    <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+        View and download application log files for troubleshooting and monitoring.
+    </p>
+    
+    <div id="logsContainer">
+        <p>Loading logs...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadLogs() {
+        try {
+            const response = await api.get('/api/logs');
+            const logs = JSON.parse(response.data);
+            
+            const container = document.getElementById('logsContainer');
+            
+            if (logs.length === 0) {
+                container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No log files found.</p>';
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="logs-grid">
+                    ${logs.map(log => `
+                        <div class="log-card">
+                            <div class="log-name">${log.name}</div>
+                            <div class="log-meta">
+                                <span>${formatFileSize(log.size)}</span>
+                                <span>${formatDate(log.modified)}</span>
+                            </div>
+                            <div class="log-actions">
+                                <button class="btn btn-primary" onclick="downloadLog('${log.path}', '${log.name}')">
+                                    <span class="material-icons" style="vertical-align: middle; font-size: 18px;">download</span>
+                                    Download
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading logs:', error);
+            document.getElementById('logsContainer').innerHTML = 
+                '<p style="color: var(--md-sys-color-error);">Failed to load logs: ' + error.message + '</p>';
+        }
+    }
+    
+    function downloadLog(path, filename) {
+        window.location.href = `/api/logs/download/${encodeURIComponent(path)}`;
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    function formatDate(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleString();
+    }
+    
+    // Load logs on page load
+    document.addEventListener('DOMContentLoaded', loadLogs);
+</script>
+{% endblock %}

@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .config-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+        border-bottom: 2px solid var(--md-sys-color-surface-variant);
+    }
+    
+    .config-tab {
+        padding: 12px 24px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--md-sys-color-on-surface-variant);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+    }
+    
+    .config-tab.active {
+        color: var(--md-sys-color-primary);
+        border-bottom-color: var(--md-sys-color-primary);
+    }
+    
+    .config-panel {
+        display: none;
+    }
+    
+    .config-panel.active {
+        display: block;
+    }
+    
+    .wallet-entry {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+        align-items: center;
+    }
+    
+    .wallet-entry input {
+        flex: 1;
+    }
+    
+    .wallet-entry button {
+        padding: 8px 16px;
+    }
+    
+    .api-key-section {
+        margin-bottom: 24px;
+        padding: 16px;
+        border: 1px solid var(--md-sys-color-surface-variant);
+        border-radius: 8px;
+    }
+    
+    .api-key-section h4 {
+        margin-bottom: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Configuration</h1>
+
+<div class="card">
+    <div class="config-tabs">
+        <button class="config-tab active" onclick="switchTab(event, 'general')">General Settings</button>
+        <button class="config-tab" onclick="switchTab(event, 'wallets')">Wallets</button>
+        <button class="config-tab" onclick="switchTab(event, 'apikeys')">API Keys</button>
+    </div>
+    
+    <!-- General Settings Panel -->
+    <div id="generalPanel" class="config-panel active">
+        <h3 class="card-title">Tax Configuration</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Configure tax calculation settings. Changes take effect after restarting calculations.
+        </p>
+        
+        <form id="generalConfigForm">
+            <h4 style="margin-top: 20px;">Accounting Method</h4>
+            <div class="form-group">
+                <label class="form-label">Method</label>
+                <select id="accounting_method" class="form-input">
+                    <option value="FIFO">FIFO (First In, First Out)</option>
+                    <option value="HIFO">HIFO (Highest In, First Out)</option>
+                </select>
+            </div>
+            
+            <h4 style="margin-top: 20px;">General Settings</h4>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="run_audit"> Run audit checks
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="create_db_backups"> Create database backups
+                </label>
+            </div>
+            
+            <h4 style="margin-top: 20px;">Performance Settings</h4>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="respect_free_tier_limits"> Respect API free tier limits
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">API Timeout (seconds)</label>
+                <input type="number" id="api_timeout_seconds" class="form-input" min="10" max="120">
+            </div>
+            
+            <h4 style="margin-top: 20px;">Compliance Settings</h4>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="strict_broker_mode"> Strict broker mode
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="staking_taxable_on_receipt"> Staking taxable on receipt
+                </label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Save General Settings</button>
+        </form>
+    </div>
+    
+    <!-- Wallets Panel -->
+    <div id="walletsPanel" class="config-panel">
+        <h3 class="card-title">Blockchain Wallets</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Add your public wallet addresses for blockchain auditing. <strong>Never paste private keys!</strong>
+        </p>
+        
+        <div id="walletsContainer">
+            <p>Loading wallets...</p>
+        </div>
+        
+        <button class="btn btn-secondary" onclick="addWalletEntry()" style="margin-top: 16px;">
+            <span class="material-icons" style="vertical-align: middle;">add</span>
+            Add Wallet Address
+        </button>
+        <button class="btn btn-primary" onclick="saveWallets()" style="margin-top: 16px; margin-left: 12px;">
+            Save All Wallets
+        </button>
+    </div>
+    
+    <!-- API Keys Panel -->
+    <div id="apikeysPanel" class="config-panel">
+        <h3 class="card-title">Exchange API Keys</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Add Read-Only API keys for exchanges. Masked values (*****) will not be updated.
+        </p>
+        <div class="alert alert-warning">
+            <strong>⚠️ Security Notice:</strong> All API keys are encrypted in transit. Only add Read-Only keys with no withdrawal permissions.
+        </div>
+        
+        <div id="apiKeysContainer">
+            <p>Loading API keys...</p>
+        </div>
+        
+        <button class="btn btn-primary" onclick="saveApiKeys()" style="margin-top: 16px;">Save API Keys</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentTab = 'general';
+    let walletsData = {};
+    let apiKeysData = {};
+    
+    function switchTab(event, tab) {
+        // Update tab buttons
+        document.querySelectorAll('.config-tab').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        // Update panels
+        document.querySelectorAll('.config-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        document.getElementById(tab + 'Panel').classList.add('active');
+        
+        currentTab = tab;
+        
+        // Load data for the tab
+        if (tab === 'wallets' && Object.keys(walletsData).length === 0) {
+            loadWallets();
+        } else if (tab === 'apikeys' && Object.keys(apiKeysData).length === 0) {
+            loadApiKeys();
+        }
+    }
+    
+    async function loadGeneralConfig() {
+        try {
+            const response = await api.get('/api/config');
+            const config = JSON.parse(response.data);
+            
+            // Populate form fields
+            if (config.accounting && config.accounting.method) {
+                document.getElementById('accounting_method').value = config.accounting.method;
+            }
+            
+            if (config.general) {
+                document.getElementById('run_audit').checked = config.general.run_audit !== false;
+                document.getElementById('create_db_backups').checked = config.general.create_db_backups !== false;
+            }
+            
+            if (config.performance) {
+                document.getElementById('respect_free_tier_limits').checked = config.performance.respect_free_tier_limits !== false;
+                document.getElementById('api_timeout_seconds').value = config.performance.api_timeout_seconds || 30;
+            }
+            
+            if (config.compliance) {
+                document.getElementById('strict_broker_mode').checked = config.compliance.strict_broker_mode !== false;
+                document.getElementById('staking_taxable_on_receipt').checked = config.compliance.staking_taxable_on_receipt !== false;
+            }
+        } catch (error) {
+            showAlert('Failed to load configuration: ' + error.message, 'error');
+        }
+    }
+    
+    document.getElementById('generalConfigForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        try {
+            // Build config object
+            const config = {
+                accounting: {
+                    method: document.getElementById('accounting_method').value
+                },
+                general: {
+                    run_audit: document.getElementById('run_audit').checked,
+                    create_db_backups: document.getElementById('create_db_backups').checked
+                },
+                performance: {
+                    respect_free_tier_limits: document.getElementById('respect_free_tier_limits').checked,
+                    api_timeout_seconds: parseInt(document.getElementById('api_timeout_seconds').value)
+                },
+                compliance: {
+                    strict_broker_mode: document.getElementById('strict_broker_mode').checked,
+                    staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
+                }
+            };
+            
+            await api.put('/api/config', config);
+            showAlert('Configuration saved successfully', 'success');
+        } catch (error) {
+            showAlert('Failed to save configuration: ' + error.message, 'error');
+        }
+    });
+    
+    async function loadWallets() {
+        try {
+            const response = await api.get('/api/wallets');
+            walletsData = JSON.parse(response.data) || {};
+            displayWallets();
+        } catch (error) {
+            document.getElementById('walletsContainer').innerHTML = 
+                '<p style="color: var(--md-sys-color-error);">Failed to load wallets: ' + error.message + '</p>';
+        }
+    }
+    
+    function displayWallets() {
+        const container = document.getElementById('walletsContainer');
+        
+        if (Object.keys(walletsData).length === 0) {
+            container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No wallets configured. Click "Add Wallet Address" to add one.</p>';
+            return;
+        }
+        
+        let html = '';
+        for (const [currency, addresses] of Object.entries(walletsData)) {
+            if (Array.isArray(addresses)) {
+                addresses.forEach((address, index) => {
+                    html += `
+                        <div class="wallet-entry">
+                            <input type="text" class="form-input" placeholder="Currency (e.g., BTC, ETH)" value="${currency}" readonly>
+                            <input type="text" class="form-input" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}">
+                            <button class="btn btn-secondary" onclick="removeWallet('${currency}', ${index})">
+                                <span class="material-icons" style="font-size: 16px;">delete</span>
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+        }
+        
+        container.innerHTML = html || '<p>No wallets configured.</p>';
+    }
+    
+    function addWalletEntry() {
+        const currency = prompt('Enter currency code (e.g., BTC, ETH, SOL):');
+        if (!currency) return;
+        
+        const address = prompt('Enter wallet address:');
+        if (!address) return;
+        
+        if (!walletsData[currency.toUpperCase()]) {
+            walletsData[currency.toUpperCase()] = [];
+        }
+        
+        walletsData[currency.toUpperCase()].push(address);
+        displayWallets();
+    }
+    
+    function removeWallet(currency, index) {
+        if (confirm('Remove this wallet address?')) {
+            walletsData[currency].splice(index, 1);
+            if (walletsData[currency].length === 0) {
+                delete walletsData[currency];
+            }
+            displayWallets();
+        }
+    }
+    
+    async function saveWallets() {
+        try {
+            // Collect updated values from inputs
+            const inputs = document.querySelectorAll('#walletsContainer input[data-currency]');
+            const updated = {};
+            
+            inputs.forEach(input => {
+                const currency = input.dataset.currency;
+                const index = parseInt(input.dataset.index);
+                const value = input.value.trim();
+                
+                if (value) {
+                    if (!updated[currency]) {
+                        updated[currency] = [];
+                    }
+                    updated[currency][index] = value;
+                }
+            });
+            
+            walletsData = updated;
+            await api.put('/api/wallets', walletsData);
+            showAlert('Wallets saved successfully', 'success');
+        } catch (error) {
+            showAlert('Failed to save wallets: ' + error.message, 'error');
+        }
+    }
+    
+    async function loadApiKeys() {
+        try {
+            const response = await api.get('/api/api-keys');
+            apiKeysData = JSON.parse(response.data) || {};
+            displayApiKeys();
+        } catch (error) {
+            document.getElementById('apiKeysContainer').innerHTML = 
+                '<p style="color: var(--md-sys-color-error);">Failed to load API keys: ' + error.message + '</p>';
+        }
+    }
+    
+    function displayApiKeys() {
+        const container = document.getElementById('apiKeysContainer');
+        
+        let html = '';
+        const exchanges = ['binance', 'binanceus', 'coinbase', 'kraken', 'gemini'];
+        
+        for (const exchange of exchanges) {
+            const keys = apiKeysData[exchange] || {};
+            html += `
+                <div class="api-key-section">
+                    <h4>${exchange.charAt(0).toUpperCase() + exchange.slice(1)}</h4>
+                    <div class="form-group">
+                        <label class="form-label">API Key</label>
+                        <input type="text" class="form-input" data-exchange="${exchange}" data-field="apiKey" 
+                               value="${keys.apiKey || ''}" placeholder="Enter API key or leave blank">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Secret</label>
+                        <input type="password" class="form-input" data-exchange="${exchange}" data-field="secret" 
+                               value="${keys.secret || ''}" placeholder="Enter secret or leave blank">
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    async function saveApiKeys() {
+        try {
+            // Collect values from inputs
+            const inputs = document.querySelectorAll('#apiKeysContainer input[data-exchange]');
+            const updated = {};
+            
+            inputs.forEach(input => {
+                const exchange = input.dataset.exchange;
+                const field = input.dataset.field;
+                const value = input.value.trim();
+                
+                if (!updated[exchange]) {
+                    updated[exchange] = {};
+                }
+                
+                // Only update non-masked values
+                if (value && !value.includes('*')) {
+                    updated[exchange][field] = value;
+                }
+            });
+            
+            await api.put('/api/api-keys', updated);
+            showAlert('API keys saved successfully. Masked values were not updated.', 'success');
+            await loadApiKeys(); // Reload to show masked values
+        } catch (error) {
+            showAlert('Failed to save API keys: ' + error.message, 'error');
+        }
+    }
+    
+    // Load general config on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadGeneralConfig();
+    });
+</script>
+{% endblock %}
