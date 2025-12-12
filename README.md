@@ -4,6 +4,25 @@ A professional-grade, self-hosted Python system for tracking cryptocurrency taxe
 
 **Privacy First:** This software runs entirely on your local machine. No financial data is sent to the developer.
 
+## **🌐 Web UI**
+
+**NEW:** Self-hosted web interface with Material Design 3!
+- 🔐 **Secure**: HTTPS with self-signed certificates
+- 🔒 **Encrypted**: All API operations encrypted end-to-end
+- 🛡️ **Protected**: CSRF protection and request signing
+- 📱 **Mobile-Ready**: Responsive design for all devices
+- 🎨 **Modern UI**: Google Material Design 3
+
+**Quick Start:**
+```bash
+pip install Flask Flask-CORS bcrypt PyJWT cryptography
+python3 start_web_ui.py
+```
+
+Access at **https://localhost:5000** (Default: admin/admin123)
+
+See [Web UI User Guide](docs/WEB_UI_GUIDE.md) for detailed documentation.
+
 ## **🌟 Key Features**
 
 ### **🇺🇸 US Tax Compliance**

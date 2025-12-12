@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-section {
+        margin-bottom: 32px;
+    }
+    
+    .settings-section h3 {
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--md-sys-color-surface-variant);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Settings</h1>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>Account Security</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Change your password to secure your account.
+        </p>
+        
+        <form id="passwordForm">
+            <div class="form-group">
+                <label class="form-label">Current Password</label>
+                <input type="password" id="currentPassword" class="form-input" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" id="newPassword" class="form-input" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" id="confirmPassword" class="form-input" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Change Password</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>System Maintenance</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Run setup script to repair or reconfigure the application.
+        </p>
+        
+        <button class="btn btn-secondary" onclick="runSetup()">
+            <span class="material-icons" style="vertical-align: middle;">build</span>
+            Run Setup Script
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>Security Information</h3>
+        <p><strong>🔒 Encryption:</strong> All API operations are encrypted end-to-end</p>
+        <p><strong>🛡️ CSRF Protection:</strong> Active</p>
+        <p><strong>🔐 HTTPS:</strong> Self-signed certificate (accept browser warning)</p>
+        <p><strong>👤 Current User:</strong> {{ session.username }}</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>About</h3>
+        <p><strong>Crypto Tax Generator</strong></p>
+        <p>Version 30 - US Tax Compliance Edition</p>
+        <p style="margin-top: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Self-hosted cryptocurrency tax automation engine with Material Design 3 web interface.
+            All data stays on your local machine with encrypted database operations.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        // Validate passwords match
+        if (newPassword !== confirmPassword) {
+            showAlert('New passwords do not match', 'error');
+            return;
+        }
+        
+        // Validate password strength
+        if (newPassword.length < 8) {
+            showAlert('New password must be at least 8 characters', 'error');
+            return;
+        }
+        
+        try {
+            const response = await api.post('/api/auth/change-password', {
+                current_password: currentPassword,
+                new_password: newPassword
+            });
+            
+            const result = JSON.parse(response.data || response);
+            showAlert(result.message || 'Password changed successfully', 'success');
+            
+            // Clear form
+            document.getElementById('passwordForm').reset();
+            
+        } catch (error) {
+            showAlert('Failed to change password: ' + error.message, 'error');
+        }
+    });
+    
+    async function runSetup() {
+        if (!confirm('Run setup script? This will reconfigure the application.')) {
+            return;
+        }
+        
+        try {
+            showAlert('Running setup script...', 'info');
+            
+            const response = await api.post('/api/setup', {});
+            const result = JSON.parse(response.data);
+            
+            if (result.success) {
+                showAlert('Setup completed successfully', 'success');
+                
+                // Show output in console
+                if (result.output) {
+                    console.log('Setup output:', result.output);
+                }
+            } else {
+                showAlert('Setup failed: ' + result.errors, 'error');
+            }
+            
+        } catch (error) {
+            showAlert('Failed to run setup: ' + error.message, 'error');
+        }
+    }
+</script>
+{% endblock %}
