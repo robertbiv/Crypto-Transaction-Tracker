@@ -360,16 +360,31 @@
         // Global API client instance
         const api = new SecureAPIClient();
         
-        // Helper to show alerts
+        // Helper to show alerts with dismiss button
         function showAlert(message, type = 'info') {
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type}`;
-            alertDiv.textContent = message;
+            alertDiv.style.display = 'flex';
+            alertDiv.style.justifyContent = 'space-between';
+            alertDiv.style.alignItems = 'center';
+            
+            const messageSpan = document.createElement('span');
+            messageSpan.textContent = message;
+            alertDiv.appendChild(messageSpan);
+            
+            const dismissBtn = document.createElement('button');
+            dismissBtn.textContent = '×';
+            dismissBtn.className = 'alert-dismiss';
+            dismissBtn.style.cssText = 'background: none; border: none; font-size: 24px; cursor: pointer; padding: 0 8px; margin-left: 16px;';
+            dismissBtn.onclick = function() {
+                alertDiv.remove();
+            };
+            alertDiv.appendChild(dismissBtn);
             
             const container = document.querySelector('.container');
-            container.insertBefore(alertDiv, container.firstChild);
-            
-            setTimeout(() => alertDiv.remove(), 5000);
+            if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+            }
         }
     </script>
     

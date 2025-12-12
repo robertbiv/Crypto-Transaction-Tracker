@@ -146,12 +146,25 @@ def validate_api_signature(data, timestamp, signature):
     return hmac.compare_digest(signature, expected_signature)
 
 def api_security_required(f):
-    """Decorator to enforce API security (CSRF + signature validation)"""
+    """Decorator to enforce API security (CSRF + signature validation + origin check)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Check authentication
         if 'username' not in session:
             return jsonify({'error': 'Authentication required'}), 401
+        
+        # Check origin (same-origin only - no external API access)
+        origin = request.headers.get('Origin')
+        referer = request.headers.get('Referer')
+        host = request.headers.get('Host')
+        
+        # If origin or referer present, must match host
+        if origin and host:
+            # Extract domain from origin
+            from urllib.parse import urlparse
+            origin_host = urlparse(origin).netloc
+            if origin_host != host:
+                return jsonify({'error': 'Cross-origin requests not allowed'}), 403
         
         # Validate CSRF token
         csrf_token = request.headers.get('X-CSRF-Token')
@@ -1127,6 +1140,146 @@ def api_reset_program():
         }
         
         encrypted_response = encrypt_data(response_data)
+        return jsonify({'data': encrypted_response})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/system-health', methods=['GET'])
+@login_required
+@api_security_required
+def api_system_health():
+    """Check system health and integrity - encrypted response"""
+    try:
+        health_status = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'checks': []
+        }
+        
+        # Check 1: Database connectivity
+        try:
+            conn = get_db_connection()
+            conn.execute("SELECT COUNT(*) FROM trades").fetchone()
+            conn.close()
+            health_status['checks'].append({
+                'name': 'Database Connection',
+                'status': 'OK',
+                'message': 'Database is accessible'
+            })
+        except Exception as e:
+            health_status['checks'].append({
+                'name': 'Database Connection',
+                'status': 'ERROR',
+                'message': f'Database error: {str(e)}'
+            })
+        
+        # Check 2: Database integrity
+        try:
+            conn = get_db_connection()
+            integrity_check = conn.execute("PRAGMA integrity_check").fetchone()
+            conn.close()
+            
+            if integrity_check and integrity_check[0] == 'ok':
+                health_status['checks'].append({
+                    'name': 'Database Integrity',
+                    'status': 'OK',
+                    'message': 'Database integrity verified'
+                })
+            else:
+                health_status['checks'].append({
+                    'name': 'Database Integrity',
+                    'status': 'WARNING',
+                    'message': f'Integrity check result: {integrity_check[0] if integrity_check else "Unknown"}'
+                })
+        except Exception as e:
+            health_status['checks'].append({
+                'name': 'Database Integrity',
+                'status': 'ERROR',
+                'message': f'Integrity check failed: {str(e)}'
+            })
+        
+        # Check 3: Core scripts existence
+        core_scripts = ['Crypto_Tax_Engine.py', 'Auto_Runner.py', 'Setup.py']
+        missing_scripts = []
+        for script in core_scripts:
+            if not (BASE_DIR / script).exists():
+                missing_scripts.append(script)
+        
+        if not missing_scripts:
+            health_status['checks'].append({
+                'name': 'Core Scripts',
+                'status': 'OK',
+                'message': f'All {len(core_scripts)} core scripts present'
+            })
+        else:
+            health_status['checks'].append({
+                'name': 'Core Scripts',
+                'status': 'WARNING',
+                'message': f'Missing scripts: {", ".join(missing_scripts)}'
+            })
+        
+        # Check 4: Configuration files
+        config_files = {'config.json': CONFIG_FILE, 'api_keys.json': API_KEYS_FILE, 'wallets.json': WALLETS_FILE}
+        missing_configs = []
+        for name, path in config_files.items():
+            if not path.exists():
+                missing_configs.append(name)
+        
+        if not missing_configs:
+            health_status['checks'].append({
+                'name': 'Configuration Files',
+                'status': 'OK',
+                'message': 'All configuration files present'
+            })
+        else:
+            health_status['checks'].append({
+                'name': 'Configuration Files',
+                'status': 'WARNING',
+                'message': f'Missing configs: {", ".join(missing_configs)}'
+            })
+        
+        # Check 5: Output directory
+        if OUTPUT_DIR.exists():
+            health_status['checks'].append({
+                'name': 'Output Directory',
+                'status': 'OK',
+                'message': 'Output directory exists'
+            })
+        else:
+            health_status['checks'].append({
+                'name': 'Output Directory',
+                'status': 'WARNING',
+                'message': 'Output directory not found'
+            })
+        
+        # Check 6: Encryption key
+        if ENCRYPTION_KEY_FILE.exists():
+            health_status['checks'].append({
+                'name': 'Encryption Key',
+                'status': 'OK',
+                'message': 'Encryption key present'
+            })
+        else:
+            health_status['checks'].append({
+                'name': 'Encryption Key',
+                'status': 'WARNING',
+                'message': 'Encryption key missing (will regenerate)'
+            })
+        
+        # Overall status
+        has_errors = any(check['status'] == 'ERROR' for check in health_status['checks'])
+        has_warnings = any(check['status'] == 'WARNING' for check in health_status['checks'])
+        
+        if has_errors:
+            health_status['overall_status'] = 'ERROR'
+            health_status['summary'] = 'System has critical errors'
+        elif has_warnings:
+            health_status['overall_status'] = 'WARNING'
+            health_status['summary'] = 'System has warnings'
+        else:
+            health_status['overall_status'] = 'OK'
+            health_status['summary'] = 'All systems operational'
+        
+        encrypted_response = encrypt_data(health_status)
         return jsonify({'data': encrypted_response})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

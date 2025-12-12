@@ -30,6 +30,7 @@ print("  • Edge Cases: Extreme values, malformed data")
 print("  • Chaos Testing: Monte Carlo, random scenarios")
 print("  • Wallet Compatibility: Wallet format tests")
 print("  • Price Fetcher: Price fetching integration")
+print("  • Web UI: Web interface security and functionality")
 print("")
 print("NOTE: Large-scale tests (100k iterations) are reduced to 1k for CI.")
 print("      Set STRESS_TEST=1 environment variable to run full tests.")
@@ -80,6 +81,7 @@ def main():
         ('test_chaos_and_monte_carlo', 'Chaos Testing and Monte Carlo'),
         ('test_wallet_compatibility', 'Wallet Format Compatibility'),
         ('test_price_fetcher', 'Price Fetcher Integration'),
+        ('test_web_ui', 'Web UI Security and Functionality'),
     ]
     
     # Track results

@@ -103,6 +103,10 @@
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
         
+        const submitBtn = document.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        
         try {
             const response = await fetch('/login', {
                 method: 'POST',
@@ -115,12 +119,18 @@
             const data = await response.json();
             
             if (data.success) {
-                window.location.href = '/';
+                // Login successful - redirect to dashboard
+                // The dashboard will run health checks
+                window.location.href = '/dashboard';
             } else {
                 showAlert(data.error || 'Login failed', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
             }
         } catch (error) {
             showAlert('Network error: ' + error.message, 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
         }
     });
 </script>

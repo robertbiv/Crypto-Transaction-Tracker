@@ -105,6 +105,9 @@
 <script>
     async function loadDashboardData() {
         try {
+            // First, run system health check on login
+            await runHealthCheck();
+            
             // Load statistics with encrypted API
             const statsResponse = await api.get('/api/stats');
             const stats = JSON.parse(statsResponse.data);
@@ -181,6 +184,42 @@
             return true;
         } catch {
             return false;
+        }
+    }
+    
+    async function runHealthCheck() {
+        try {
+            const response = await api.get('/api/system-health');
+            const health = JSON.parse(response.data);
+            
+            // Display health check results
+            let hasErrors = false;
+            let hasWarnings = false;
+            
+            for (const check of health.checks) {
+                if (check.status === 'ERROR') {
+                    hasErrors = true;
+                    showAlert(`❌ ${check.name}: ${check.message}`, 'error');
+                } else if (check.status === 'WARNING') {
+                    hasWarnings = true;
+                    showAlert(`⚠️ ${check.name}: ${check.message}`, 'warning');
+                }
+            }
+            
+            // Show success message if everything is OK
+            if (!hasErrors && !hasWarnings) {
+                showAlert('✅ System Health Check: All systems operational', 'success');
+            } else if (hasErrors) {
+                showAlert('❌ System Health Check: Critical errors detected. Please review above.', 'error');
+            } else if (hasWarnings) {
+                showAlert('⚠️ System Health Check: Warnings detected. System functional but review recommended.', 'warning');
+            }
+            
+            // Log full health status to console
+            console.log('System Health Check:', health);
+            
+        } catch (error) {
+            showAlert('⚠️ Failed to run system health check: ' + error.message, 'warning');
         }
     }
     
