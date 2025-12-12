@@ -18,6 +18,12 @@ from Crypto_Tax_Engine import DatabaseManager, logger, WALLETS_FILE, KEYS_FILE
 TOKEN_CACHE_FILE = Path("configs/cached_token_addresses.json")
 CACHE_REFRESH_DAYS = 7  # Refresh cache every 7 days
 
+# API Rate Limiting Configuration (CoinGecko Free Tier: 10-30 calls/min)
+API_REQUEST_DELAY = 0.3  # Seconds between individual API requests (~3 calls/sec max)
+API_BATCH_DELAY = 2  # Seconds after processing 50 tokens
+API_MAX_RETRIES = 5  # Maximum retry attempts for failed requests
+API_INITIAL_BACKOFF = 1  # Initial backoff delay in seconds
+
 class InteractiveReviewFixer:
     """Interactive tool to fix issues detected by Tax Reviewer"""
     
@@ -159,7 +165,7 @@ class InteractiveReviewFixer:
                 print("    → Kept as-is")
     
     def _guided_fix_missing_prices(self, warning):
-        """Guided fix for missing prices - show suggestions and let user accept/override"""
+        """Guided fix for missing prices - prioritize blockchain data with wallet prompt"""
         print("\n--- GUIDED FIX: MISSING PRICES ---")
         print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
         
@@ -179,37 +185,104 @@ class InteractiveReviewFixer:
                 coin = item['coin']
                 date_str = str(item['date']).split()[0]
 
-                # 1) Try blockchain context
+                print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
+                
+                # 1) PRIORITY: Try blockchain context first
                 bc_price, bc_msg = self._try_blockchain_price(coin, date_str)
+                
+                # If blockchain data potentially available, prompt for wallet
+                if bc_msg and 'not found' not in bc_msg.lower() and 'missing' not in bc_msg.lower():
+                    print(f"    🔗 Blockchain data available: {bc_msg}")
+                    
+                    if bc_price is not None and bc_price > 0:
+                        # Blockchain price found
+                        print(f"    💎 On-chain price: ${bc_price:.6f}")
+                        print(f"    → RECOMMENDED: Use blockchain price (most accurate)")
+                        user_input = input("    (Enter=accept blockchain, number=override, 'wallet'=enter wallet address, 'yahoo'=use Yahoo Finance): ").strip().lower()
+                        
+                        if user_input == '':
+                            # Accept blockchain price
+                            self._update_price(item['id'], Decimal(str(bc_price)))
+                            print(f"    ✓ Set to ${bc_price:.6f} (blockchain)")
+                            continue
+                        elif user_input == 'wallet':
+                            # User wants to add/verify wallet
+                            wallet_addr = input("    Enter wallet address (or 'cancel'): ").strip()
+                            if wallet_addr.lower() != 'cancel' and wallet_addr:
+                                # Automatically save wallet to wallets.json
+                                success, message = self._save_wallet_address(wallet_addr, coin)
+                                print(f"    {message}")
+                                
+                                if success:
+                                    print(f"    💾 Wallet saved! Re-run the fixer for real-time on-chain pricing.")
+                                    print(f"    Using current blockchain estimate: ${bc_price:.6f}")
+                                    self._update_price(item['id'], Decimal(str(bc_price)))
+                                    print(f"    ✓ Set to ${bc_price:.6f} (blockchain estimate)")
+                                else:
+                                    print(f"    ⚠️  Could not save wallet, but continuing with price estimate")
+                                    print(f"    Using current blockchain estimate: ${bc_price:.6f}")
+                                    self._update_price(item['id'], Decimal(str(bc_price)))
+                                    print(f"    ✓ Set to ${bc_price:.6f} (blockchain estimate)")
+                                continue
+                        elif user_input == 'yahoo':
+                            # User explicitly chose Yahoo Finance fallback
+                            pass  # Continue to Yahoo Finance section below
+                        elif user_input == 'skip':
+                            continue
+                        else:
+                            # Custom override
+                            try:
+                                manual_price = Decimal(user_input)
+                                self._update_price(item['id'], manual_price)
+                                print(f"    ✓ Set to ${manual_price} (manual)")
+                                continue
+                            except:
+                                print("    ✗ Invalid input, falling back to Yahoo Finance")
+                    else:
+                        # Blockchain context available but no price yet
+                        print(f"    ℹ️  {bc_msg}")
+                        prompt_wallet = input("    Would you like to enter a wallet address to fetch on-chain price? (y/n): ").strip().lower()
+                        
+                        if prompt_wallet == 'y':
+                            wallet_addr = input("    Enter wallet address: ").strip()
+                            if wallet_addr:
+                                # Automatically save wallet to wallets.json
+                                success, message = self._save_wallet_address(wallet_addr, coin)
+                                print(f"    {message}")
+                                
+                                if success:
+                                    print(f"    💾 Wallet saved! Re-run the fixer for on-chain pricing")
+                                print(f"    ⚠️  Falling back to Yahoo Finance for now...")
+                            else:
+                                print(f"    ⚠️  No wallet provided, falling back to Yahoo Finance...")
+                        else:
+                            print(f"    ⚠️  Skipping blockchain lookup, falling back to Yahoo Finance...")
 
-                # 2) Yahoo Finance fallback
+                # 2) FALLBACK: Yahoo Finance (with warning if blockchain was available)
                 yf_price = None
                 try:
-                    yf_price = fetcher.get_price(coin, pd.to_datetime(date_str))
+                    yf_price = fetcher.get_price(coin, pd.to_datetime(date_str, utc=True))
                 except Exception as e:
                     yf_price = None
 
-                suggested_price = bc_price if bc_price is not None else yf_price
-
-                print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
-                if bc_price is not None:
-                    print(f"    On-chain: ${bc_price} ({bc_msg})")
-                
                 if yf_price is not None and yf_price > 0:
-                    print(f"    Yahoo:    ${yf_price}")
-
-                if suggested_price is not None and suggested_price > 0:
-                    print(f"    → Suggested: ${suggested_price}")
+                    if bc_msg and 'not found' not in bc_msg.lower():
+                        print(f"    ⚠️  Yahoo Finance: ${yf_price:.2f} (DAILY CLOSE - may not match exact transaction time)")
+                    else:
+                        print(f"    Yahoo Finance: ${yf_price:.2f}")
+                    
+                    print(f"    → Suggested: ${yf_price:.2f}")
                 else:
+                    print("    ✗ No price data available from any source")
                     print("    → Suggested: unavailable")
 
                 user_input = input("    (Enter=accept, number=override, 'skip'=skip): ").strip()
 
                 if user_input.lower() == 'skip':
                     continue
-                elif user_input == '' and suggested_price is not None and suggested_price > 0:
-                    self._update_price(item['id'], suggested_price)
-                    print(f"    ✓ Set to ${suggested_price}")
+                elif user_input == '' and yf_price is not None and yf_price > 0:
+                    self._update_price(item['id'], Decimal(str(yf_price)))
+                    print(f"    ✓ Set to ${yf_price:.2f} (Yahoo Finance)")
                 else:
                     try:
                         manual_price = Decimal(user_input)
@@ -388,7 +461,7 @@ class InteractiveReviewFixer:
             'fantom': 'fantom'
         }
         
-        def fetch_with_retry(url, params=None, max_retries=5, initial_delay=1):
+        def fetch_with_retry(url, params=None, max_retries=API_MAX_RETRIES, initial_delay=API_INITIAL_BACKOFF):
             """Fetch URL with exponential backoff on rate limit errors"""
             delay = initial_delay
             for attempt in range(max_retries):
@@ -442,7 +515,7 @@ class InteractiveReviewFixer:
             for i, token in enumerate(tokens):
                 if i > 0 and i % 50 == 0:
                     print(f"  Processed {i}/{len(tokens)} tokens...")
-                    time.sleep(2)  # Increased rate limiting for free tier (10-30 calls/min)
+                    time.sleep(API_BATCH_DELAY)  # Batch delay for free tier rate limiting (10-30 calls/min)
                 
                 try:
                     detail_url = f"https://api.coingecko.com/api/v3/coins/{token['id']}"
@@ -460,7 +533,7 @@ class InteractiveReviewFixer:
                                 token_map[chain] = {}
                             token_map[chain][symbol] = contract_addr
                     
-                    time.sleep(0.3)  # Increased delay between requests (respects free tier: ~3 calls/sec max)
+                    time.sleep(API_REQUEST_DELAY)  # Request delay respects free tier (~3 calls/sec max)
                     
                 except Exception as e:
                     print(f"  [Skipped] {token.get('id', 'unknown')}: {str(e)[:50]}")
@@ -521,6 +594,95 @@ class InteractiveReviewFixer:
         # Store in session cache
         self._token_map_cache = token_map
         return token_map
+    
+    def _save_wallet_address(self, wallet_address, coin):
+        """Save wallet address to wallets.json in the appropriate chain section
+        
+        Returns: (success: bool, message: str)
+        """
+        # Detect chain from wallet address format
+        chain = self._detect_chain_from_address(wallet_address, coin)
+        
+        if not chain:
+            return False, f"Could not determine blockchain for {coin}"
+        
+        # Load or create wallets.json
+        try:
+            if WALLETS_FILE.exists():
+                with open(WALLETS_FILE, 'r') as f:
+                    wallets = json.load(f)
+            else:
+                wallets = {}
+        except Exception as e:
+            return False, f"Error reading wallets.json: {e}"
+        
+        # Initialize chain section if needed
+        if chain not in wallets:
+            wallets[chain] = []
+        
+        # Convert to list if it's a dict with 'addresses' key
+        if isinstance(wallets[chain], dict):
+            if 'addresses' in wallets[chain]:
+                wallets[chain] = wallets[chain]['addresses']
+            else:
+                wallets[chain] = []
+        
+        # Add wallet if not already present
+        if wallet_address not in wallets[chain]:
+            wallets[chain].append(wallet_address)
+            
+            # Save back to file
+            try:
+                WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with open(WALLETS_FILE, 'w') as f:
+                    json.dump(wallets, f, indent=2)
+                return True, f"✓ Saved wallet to {chain} section in wallets.json"
+            except Exception as e:
+                return False, f"Error saving wallets.json: {e}"
+        else:
+            return True, f"Wallet already exists in {chain} section"
+    
+    def _detect_chain_from_address(self, address, coin):
+        """Detect blockchain from wallet address format and coin symbol
+        
+        Returns: chain name (str) or None
+        """
+        address = address.strip()
+        coin_upper = coin.upper()
+        
+        # Bitcoin addresses (legacy, segwit, native segwit)
+        if address.startswith('1') or address.startswith('3') or address.startswith('bc1'):
+            if coin_upper in ['BTC', 'BITCOIN']:
+                return 'bitcoin'
+        
+        # Ethereum and EVM chains (0x prefix, 42 chars)
+        if address.startswith('0x') and len(address) == 42:
+            # Try to infer from coin
+            if coin_upper in ['ETH', 'WETH', 'ETHEREUM']:
+                return 'ethereum'
+            elif coin_upper in ['MATIC', 'POLYGON']:
+                return 'polygon'
+            elif coin_upper in ['BNB', 'WBNB']:
+                return 'bsc'
+            elif coin_upper in ['AVAX', 'WAVAX']:
+                return 'avalanche'
+            elif coin_upper in ['FTM', 'FANTOM']:
+                return 'fantom'
+            elif 'ARBITRUM' in coin_upper or 'ARB' == coin_upper:
+                return 'arbitrum'
+            elif 'OPTIMISM' in coin_upper or 'OP' == coin_upper:
+                return 'optimism'
+            else:
+                # Default to ethereum for unknown EVM tokens
+                return 'ethereum'
+        
+        # Solana addresses (base58, typically 32-44 chars, no 0x prefix)
+        if not address.startswith('0x') and 32 <= len(address) <= 44:
+            if coin_upper in ['SOL', 'SOLANA']:
+                return 'solana'
+        
+        # Couldn't determine
+        return None
     
     def _try_blockchain_price(self, coin, date_str):
         """Attempt on-chain pricing using wallets/key context. Returns (price, message)."""
