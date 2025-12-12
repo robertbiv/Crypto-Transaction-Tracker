@@ -372,7 +372,8 @@ class InteractiveReviewFixer:
         return {}
 
     def _fetch_token_addresses_from_api(self):
-        """Fetch token contract addresses from CoinGecko API. Returns dict: {chain: {symbol: contract_address}}"""
+        """Fetch token contract addresses from CoinGecko API with exponential backoff. 
+        Returns dict: {chain: {symbol: contract_address}}"""
         print("\n[*] Fetching token addresses from CoinGecko API...")
         token_map = {}
         
@@ -387,6 +388,42 @@ class InteractiveReviewFixer:
             'fantom': 'fantom'
         }
         
+        def fetch_with_retry(url, params=None, max_retries=5, initial_delay=1):
+            """Fetch URL with exponential backoff on rate limit errors"""
+            delay = initial_delay
+            for attempt in range(max_retries):
+                try:
+                    response = requests.get(url, params=params, timeout=30)
+                    
+                    # Check for rate limiting (429) or server errors (5xx)
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', delay))
+                        print(f"  [Rate limit] Waiting {retry_after}s before retry...")
+                        time.sleep(retry_after)
+                        delay = min(delay * 2, 60)  # Exponential backoff, max 60s
+                        continue
+                    elif response.status_code >= 500:
+                        print(f"  [Server error {response.status_code}] Retrying in {delay}s...")
+                        time.sleep(delay)
+                        delay = min(delay * 2, 60)
+                        continue
+                    
+                    response.raise_for_status()
+                    return response
+                    
+                except requests.exceptions.Timeout:
+                    print(f"  [Timeout] Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+                except requests.exceptions.RequestException as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    print(f"  [Error] {str(e)[:100]}... Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+            
+            raise requests.exceptions.RequestException(f"Failed after {max_retries} retries")
+        
         try:
             # Fetch top 250 tokens by market cap (free tier limit)
             url = "https://api.coingecko.com/api/v3/coins/markets"
@@ -398,20 +435,18 @@ class InteractiveReviewFixer:
                 'sparkline': False
             }
             
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            response = fetch_with_retry(url, params=params)
             tokens = response.json()
             
             # For each token, get detailed info including contract addresses
             for i, token in enumerate(tokens):
                 if i > 0 and i % 50 == 0:
                     print(f"  Processed {i}/{len(tokens)} tokens...")
-                    time.sleep(1)  # Rate limiting
+                    time.sleep(2)  # Increased rate limiting for free tier (10-30 calls/min)
                 
                 try:
                     detail_url = f"https://api.coingecko.com/api/v3/coins/{token['id']}"
-                    detail_response = requests.get(detail_url, timeout=10)
-                    detail_response.raise_for_status()
+                    detail_response = fetch_with_retry(detail_url)
                     detail = detail_response.json()
                     
                     symbol = detail.get('symbol', '').upper()
@@ -425,9 +460,10 @@ class InteractiveReviewFixer:
                                 token_map[chain] = {}
                             token_map[chain][symbol] = contract_addr
                     
-                    time.sleep(0.1)  # Rate limiting between requests
+                    time.sleep(0.3)  # Increased delay between requests (respects free tier: ~3 calls/sec max)
                     
-                except Exception:
+                except Exception as e:
+                    print(f"  [Skipped] {token.get('id', 'unknown')}: {str(e)[:50]}")
                     continue  # Skip failed tokens
             
             print(f"[*] Fetched {sum(len(tokens) for tokens in token_map.values())} token addresses across {len(token_map)} chains")
@@ -435,6 +471,7 @@ class InteractiveReviewFixer:
             
         except Exception as e:
             print(f"[!] Error fetching from CoinGecko: {e}")
+            print(f"[!] This may be due to rate limiting. Try again later or use cached data.")
             return {}
     
     def _get_cached_token_addresses(self):
