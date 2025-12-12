@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Warnings - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .warning-card {
+        background: #FFF3E0;
+        border-left: 4px solid #FF9800;
+        padding: 16px;
+        margin-bottom: 16px;
+        border-radius: 4px;
+    }
+    
+    .warning-card.high {
+        background: #FFEBEE;
+        border-left-color: #F44336;
+    }
+    
+    .warning-card.medium {
+        background: #FFF3E0;
+        border-left-color: #FF9800;
+    }
+    
+    .warning-card.low {
+        background: #E3F2FD;
+        border-left-color: #2196F3;
+    }
+    
+    .warning-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .warning-title {
+        font-weight: 500;
+        font-size: 1.1rem;
+    }
+    
+    .warning-severity {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    .warning-severity.high {
+        background: #F44336;
+        color: white;
+    }
+    
+    .warning-severity.medium {
+        background: #FF9800;
+        color: white;
+    }
+    
+    .warning-severity.low {
+        background: #2196F3;
+        color: white;
+    }
+    
+    .stats-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    
+    .stat-box {
+        padding: 16px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-box.high {
+        background: #FFEBEE;
+    }
+    
+    .stat-box.medium {
+        background: #FFF3E0;
+    }
+    
+    .stat-box.low {
+        background: #E3F2FD;
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 8px 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Review Warnings</h1>
+
+<div class="stats-container">
+    <div class="stat-box high">
+        <div>High Priority</div>
+        <div class="stat-value" id="highCount">0</div>
+    </div>
+    <div class="stat-box medium">
+        <div>Medium Priority</div>
+        <div class="stat-value" id="mediumCount">0</div>
+    </div>
+    <div class="stat-box low">
+        <div>Low Priority</div>
+        <div class="stat-value" id="lowCount">0</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Warnings</h2>
+    <div id="warningsContainer">
+        <p>Loading warnings...</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Suggestions</h2>
+    <div id="suggestionsContainer">
+        <p>Loading suggestions...</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Actions</h2>
+    <p style="margin-bottom: 16px;">Use the Interactive Review Fixer to address warnings automatically.</p>
+    <button class="btn btn-primary" onclick="runFixer()">
+        <span class="material-icons" style="vertical-align: middle;">build</span>
+        Run Interactive Fixer
+    </button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadWarnings() {
+        try {
+            const response = await api.get('/api/warnings');
+            const data = JSON.parse(response.data);
+            
+            const warnings = data.warnings || [];
+            const suggestions = data.suggestions || [];
+            
+            // Count by severity
+            let highCount = 0, mediumCount = 0, lowCount = 0;
+            
+            warnings.forEach(w => {
+                const severity = (w.Severity || w.severity || 'medium').toLowerCase();
+                if (severity === 'high') highCount++;
+                else if (severity === 'medium') mediumCount++;
+                else lowCount++;
+            });
+            
+            document.getElementById('highCount').textContent = highCount;
+            document.getElementById('mediumCount').textContent = mediumCount;
+            document.getElementById('lowCount').textContent = lowCount;
+            
+            // Display warnings
+            const warningsContainer = document.getElementById('warningsContainer');
+            if (warnings.length === 0) {
+                warningsContainer.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">✓ No warnings found. Your data looks good!</p>';
+            } else {
+                warningsContainer.innerHTML = warnings.map(w => {
+                    const severity = (w.Severity || w.severity || 'medium').toLowerCase();
+                    return `
+                        <div class="warning-card ${severity}">
+                            <div class="warning-header">
+                                <div class="warning-title">${w.Category || w.category || 'Warning'}</div>
+                                <span class="warning-severity ${severity}">${severity.toUpperCase()}</span>
+                            </div>
+                            <p>${w.Description || w.description || w.Message || w.message || 'No description'}</p>
+                            ${w.Count ? `<p><strong>Count:</strong> ${w.Count}</p>` : ''}
+                            ${w.RecommendedAction ? `<p><strong>Action:</strong> ${w.RecommendedAction}</p>` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            // Display suggestions
+            const suggestionsContainer = document.getElementById('suggestionsContainer');
+            if (suggestions.length === 0) {
+                suggestionsContainer.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No suggestions at this time.</p>';
+            } else {
+                suggestionsContainer.innerHTML = suggestions.map(s => {
+                    return `
+                        <div class="warning-card low">
+                            <div class="warning-header">
+                                <div class="warning-title">${s.Category || s.category || 'Suggestion'}</div>
+                                <span class="warning-severity low">SUGGESTION</span>
+                            </div>
+                            <p>${s.Description || s.description || s.Message || s.message || 'No description'}</p>
+                            ${s.RecommendedAction ? `<p><strong>Action:</strong> ${s.RecommendedAction}</p>` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+        } catch (error) {
+            console.error('Error loading warnings:', error);
+            showAlert('Failed to load warnings: ' + error.message, 'error');
+        }
+    }
+    
+    function runFixer() {
+        showAlert('Interactive fixer must be run from the command line. Run: python Interactive_Review_Fixer.py [year]', 'info');
+    }
+    
+    // Load warnings on page load
+    document.addEventListener('DOMContentLoaded', loadWarnings);
+</script>
+{% endblock %}

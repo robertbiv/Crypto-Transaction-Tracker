@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-secondary) 100%);
+    }
+    
+    .login-card {
+        background: white;
+        padding: 40px;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        width: 100%;
+        max-width: 400px;
+    }
+    
+    .login-header {
+        text-align: center;
+        margin-bottom: 32px;
+    }
+    
+    .login-header h1 {
+        font-size: 2rem;
+        color: var(--md-sys-color-primary);
+        margin-bottom: 8px;
+    }
+    
+    .login-header p {
+        color: var(--md-sys-color-on-surface-variant);
+    }
+    
+    .security-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        background: var(--md-sys-color-primary-container);
+        border-radius: 8px;
+        margin-bottom: 24px;
+        font-size: 0.9rem;
+    }
+    
+    .security-badge .material-icons {
+        color: var(--md-sys-color-primary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h1>🔐 Crypto Tax Generator</h1>
+            <p>Self-Hosted Tax Automation</p>
+        </div>
+        
+        <div class="security-badge">
+            <span class="material-icons">lock</span>
+            <span>Secured with HTTPS & Encryption</span>
+        </div>
+        
+        {% if error %}
+        <div class="alert alert-error">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <form id="loginForm" method="POST">
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-input" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-input" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        const submitBtn = document.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Login successful - redirect to dashboard
+                // The dashboard will run health checks
+                window.location.href = '/dashboard';
+            } else {
+                showAlert(data.error || 'Login failed', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+            }
+        } catch (error) {
+            showAlert('Network error: ' + error.message, 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
+        }
+    });
+</script>
+{% endblock %}
