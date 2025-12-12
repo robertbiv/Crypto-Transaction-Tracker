@@ -847,6 +847,12 @@ class TaxEngine:
             # Export to year folder
             yd = OUTPUT_DIR / f"Year_{self.year}"
             reviewer.export_report(yd)
+            
+            # Alert if warnings were found
+            if report and report.get('action_required', False):
+                logger.warning(f"[!] REVIEW NEEDED: {len(report['warnings'])} warning(s) require attention!")
+                logger.warning(f"   Check outputs/Year_{self.year}/REVIEW_WARNINGS.csv for details.")
+            
             return report
         except Exception as e:
             logger.warning(f"Review assistant not available: {e}")

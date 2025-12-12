@@ -3053,6 +3053,80 @@ class TestAutoRunner(unittest.TestCase):
         self.assertIn(2024, created_engines)
         self.assertNotIn(prev_year, created_engines)
 
+    def test_auto_runner_triggers_manual_review_with_warnings(self):
+        """Test that Auto Runner invokes Tax Reviewer and detects issues"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Seed database with problematic data that should trigger warnings
+        db = app.DatabaseManager()
+        
+        # 1. NFT without proper prefix (should trigger NFT warning)
+        db.save_trade({
+            'id': 'nft1', 'date': '2024-06-01', 'source': 'OPENSEA', 
+            'action': 'BUY', 'coin': 'BAYC#1234', 
+            'amount': 1, 'price_usd': 50000, 'fee': 0, 'batch_id': 'nft'
+        })
+        
+        # 2. BTC sale followed by WBTC purchase within 30 days (wash sale)
+        db.save_trade({
+            'id': 'btc_buy', 'date': '2024-01-01', 'source': 'BINANCE',
+            'action': 'BUY', 'coin': 'BTC', 
+            'amount': 1, 'price_usd': 40000, 'fee': 0, 'batch_id': 'wash'
+        })
+        db.save_trade({
+            'id': 'btc_sell', 'date': '2024-06-01', 'source': 'BINANCE',
+            'action': 'SELL', 'coin': 'BTC', 
+            'amount': 1, 'price_usd': 35000, 'fee': 0, 'batch_id': 'wash'
+        })
+        db.save_trade({
+            'id': 'wbtc_buy', 'date': '2024-06-15', 'source': 'BINANCE',
+            'action': 'BUY', 'coin': 'WBTC', 
+            'amount': 1, 'price_usd': 35500, 'fee': 0, 'batch_id': 'wash'
+        })
+        
+        # 3. Missing price data (should trigger missing price warning)
+        db.save_trade({
+            'id': 'no_price', 'date': '2024-07-01', 'source': 'WALLET',
+            'action': 'INCOME', 'coin': 'UNKNOWN', 
+            'amount': 100, 'price_usd': 0, 'fee': 0, 'batch_id': 'missing'
+        })
+        
+        db.commit()
+        db.close()
+        
+        # Capture review output
+        review_called = []
+        original_run_review = TaxReviewer.run_review
+        
+        def mock_run_review(self):
+            result = original_run_review(self)
+            review_called.append(result)
+            return result
+        
+        with patch.object(app, 'Ingestor', self._stub_ingestor()), \
+             patch.object(app, 'StakeTaxCSVManager', self._stub_stake_mgr()), \
+             patch.object(app, 'PriceFetcher', self._stub_price_fetcher()), \
+             patch.object(Auto_Runner, 'datetime', self._fixed_datetime(2024)), \
+             patch.object(TaxReviewer, 'run_review', mock_run_review):
+            Auto_Runner.run_automation()
+        
+        # Verify review was called
+        self.assertEqual(len(review_called), 1, "Manual review should be called once")
+        
+        report = review_called[0]
+        
+        # Verify warnings were detected
+        self.assertGreater(len(report['warnings']), 0, "Should detect warnings")
+        
+        # Check for specific warning categories
+        warning_categories = [w['category'] for w in report['warnings']]
+        self.assertIn('NFT_COLLECTIBLES', warning_categories, "Should detect NFT without proper prefix")
+        self.assertIn('SUBSTANTIALLY_IDENTICAL_WASH_SALES', warning_categories, "Should detect BTC/WBTC wash sale")
+        self.assertIn('MISSING_PRICES', warning_categories, "Should detect missing price data")
+        
+        # Verify summary
+        self.assertGreaterEqual(report['summary']['total_warnings'], 3, "Should have at least 3 warnings")
+
 
 class TestDestinationColumnMigration(unittest.TestCase):
     def setUp(self):
@@ -5208,3 +5282,231 @@ if __name__ == '__main__':
     print("--- RUNNING ULTIMATE COMPREHENSIVE SUITE V39 (199 Tests + Multi-Coin Fee + Tax Reviewer) ---")
     unittest.main()
 
+class TestTaxReviewerAdvanced(unittest.TestCase):
+    """Test advanced heuristics: High Fee, Spam, Duplicates"""
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.db = app.DatabaseManager()
+        # Mock engine for fee checking
+        self.mock_engine = MagicMock()
+        self.mock_engine.tt = [] 
+
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+
+    def test_high_fee_detection(self):
+        """Test: Fees > $100 are flagged"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Populate mock engine TT with a high fee event
+        self.mock_engine.tt = [
+            {'Description': '0.1 ETH (Fee)', 'Proceeds': 150.0, 'Date Sold': '2024-06-01'}, # High Fee ($150)
+            {'Description': '0.001 ETH (Fee)', 'Proceeds': 2.0, 'Date Sold': '2024-06-02'}   # Low Fee ($2)
+        ]
+        
+        # Dummy DB trade to allow reviewer to run
+        self.db.save_trade({'id':'1','date':'2024-01-01','source':'M','action':'BUY','coin':'BTC','amount':1,'price_usd':100,'fee':0,'batch_id':'1'})
+        self.db.commit()
+
+        reviewer = TaxReviewer(self.db, 2024, tax_engine=self.mock_engine)
+        report = reviewer.run_review()
+        
+        warnings = [w for w in report['warnings'] if w['category'] == 'HIGH_FEES']
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['items'][0]['fee_usd'], 150.0)
+
+    def test_spam_token_detection(self):
+        """Test: High quantity + Near-zero price = Spam Warning"""
+        from Tax_Reviewer import TaxReviewer
+        
+        self.db.save_trade({
+            'id': 'spam1', 'date': '2024-06-01', 'source': 'AIRDROP', 
+            'action': 'INCOME', 'coin': 'SCAMCOIN', 
+            'amount': 1000000, 'price_usd': 0.0000001, 'fee': 0, 'batch_id': 'spam'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        suggestions = [s for s in report['suggestions'] if s['category'] == 'SPAM_TOKENS']
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]['items'][0]['coin'], 'SCAMCOIN')
+
+    def test_duplicate_transaction_suspects(self):
+        """Test: Same Date/Coin/Amount/Action = Duplicate Warning"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Trade 1 (API Import)
+        self.db.save_trade({
+            'id': 'api_123', 'date': '2024-06-01T12:00:00', 'source': 'API', 
+            'action': 'BUY', 'coin': 'BTC', 'amount': 1.0, 'price_usd': 50000, 'fee': 0, 'batch_id': 'api'
+        })
+        
+        # Trade 2 (CSV Import - Duplicate)
+        self.db.save_trade({
+            'id': 'csv_abc', 'date': '2024-06-01T12:00:00', 'source': 'CSV', 
+            'action': 'BUY', 'coin': 'BTC', 'amount': 1.0, 'price_usd': 50000, 'fee': 0, 'batch_id': 'csv'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2024)
+        report = reviewer.run_review()
+        
+        warnings = [w for w in report['warnings'] if w['category'] == 'DUPLICATE_TRANSACTIONS']
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]['count'], 1) # 1 group of duplicates
+
+    def test_reviewer_works_without_engine_access(self):
+        """Test that reviewer still works when engine.tt is not available"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # Add data that should trigger basic warnings (not requiring engine.tt)
+        # Use unique dates/amounts to avoid duplicate detection
+        self.db.save_trade({
+            'id': 'nft1', 'date': '2024-06-01', 'source': 'OPENSEA', 
+            'action': 'BUY', 'coin': 'BAYC#1234', 
+            'amount': 1, 'price_usd': 50000, 'fee': 0, 'batch_id': 'nft'
+        })
+        self.db.save_trade({
+            'id': 'no_price', 'date': '2024-07-01', 'source': 'WALLET',
+            'action': 'INCOME', 'coin': 'UNKNOWN', 
+            'amount': 100, 'price_usd': 0, 'fee': 0, 'batch_id': 'missing'
+        })
+        # Add a normal trade to avoid duplicate detection
+        self.db.save_trade({
+            'id': 'normal1', 'date': '2024-08-01', 'source': 'EXCHANGE',
+            'action': 'BUY', 'coin': 'ETH', 
+            'amount': 2, 'price_usd': 2000, 'fee': 0, 'batch_id': 'normal'
+        })
+        self.db.commit()
+        
+        # Create reviewer WITHOUT engine (or with engine that has no tt)
+        reviewer = TaxReviewer(self.db, 2024, tax_engine=None)
+        report = reviewer.run_review()
+        
+        # Should still detect NFT and missing price warnings
+        self.assertGreater(len(report['warnings']), 0, "Should detect warnings even without engine")
+        
+        warning_categories = [w['category'] for w in report['warnings']]
+        self.assertIn('NFT_COLLECTIBLES', warning_categories)
+        self.assertIn('MISSING_PRICES', warning_categories)
+        
+        # High fee warnings should be skipped (requires engine.tt)
+        self.assertNotIn('HIGH_FEES', warning_categories)
+
+class TestInteractiveReviewFixer(unittest.TestCase):
+    """Test the Interactive Review Fixer functionality"""
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        self.orig_db = app.DB_FILE
+        app.BASE_DIR = self.test_path
+        app.DB_FILE = self.test_path / 'test_fixer.db'
+        self.db = app.DatabaseManager()
+
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+        app.DB_FILE = self.orig_db
+
+    def test_rename_coin_function(self):
+        """Test that _rename_coin updates the database correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Add test data
+        self.db.save_trade({
+            'id': 'nft1', 'date': '2024-06-01', 'source': 'OPENSEA',
+            'action': 'BUY', 'coin': 'BAYC#1234',
+            'amount': 1, 'price_usd': 50000, 'fee': 0, 'batch_id': 'test'
+        })
+        self.db.commit()
+        
+        # Create fixer and rename
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        fixer._rename_coin('nft1', 'BAYC#1234', 'NFT-BAYC#1234')
+        
+        # Verify rename
+        df = self.db.get_all()
+        updated_row = df[df['id'] == 'nft1'].iloc[0]
+        self.assertEqual(updated_row['coin'], 'NFT-BAYC#1234')
+        
+        # Verify fix was tracked
+        self.assertEqual(len(fixer.fixes_applied), 1)
+        self.assertEqual(fixer.fixes_applied[0]['type'], 'rename')
+
+    def test_update_price_function(self):
+        """Test that _update_price updates the database correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Add test data with missing price
+        self.db.save_trade({
+            'id': 'no_price', 'date': '2024-07-01', 'source': 'WALLET',
+            'action': 'INCOME', 'coin': 'UNKNOWN',
+            'amount': 100, 'price_usd': 0, 'fee': 0, 'batch_id': 'test'
+        })
+        self.db.commit()
+        
+        # Create fixer and update price
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        fixer._update_price('no_price', Decimal('1.50'))
+        
+        # Verify price updated
+        df = self.db.get_all()
+        updated_row = df[df['id'] == 'no_price'].iloc[0]
+        self.assertEqual(float(updated_row['price_usd']), 1.50)
+        
+        # Verify fix was tracked
+        self.assertEqual(len(fixer.fixes_applied), 1)
+        self.assertEqual(fixer.fixes_applied[0]['type'], 'price_update')
+
+    def test_delete_transaction_function(self):
+        """Test that _delete_transaction removes from database"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Add test data
+        self.db.save_trade({
+            'id': 'dup1', 'date': '2024-06-01', 'source': 'API',
+            'action': 'BUY', 'coin': 'BTC',
+            'amount': 1, 'price_usd': 50000, 'fee': 0, 'batch_id': 'test'
+        })
+        self.db.save_trade({
+            'id': 'dup2', 'date': '2024-06-01', 'source': 'CSV',
+            'action': 'BUY', 'coin': 'BTC',
+            'amount': 1, 'price_usd': 50000, 'fee': 0, 'batch_id': 'test'
+        })
+        self.db.commit()
+        
+        # Verify both exist
+        df_before = self.db.get_all()
+        self.assertEqual(len(df_before), 2)
+        
+        # Delete one
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        fixer._delete_transaction('dup2')
+        
+        # Verify deletion
+        df_after = self.db.get_all()
+        self.assertEqual(len(df_after), 1)
+        self.assertEqual(df_after.iloc[0]['id'], 'dup1')
+        
+        # Verify fix was tracked
+        self.assertEqual(len(fixer.fixes_applied), 1)
+        self.assertEqual(fixer.fixes_applied[0]['type'], 'delete')
+
+    def test_backup_creation(self):
+        """Test that backup file is created before fixes"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        backup_path = fixer.create_backup()
+        
+        # Verify backup exists
+        self.assertTrue(backup_path.exists())
+        self.assertIn('BEFORE_FIX', backup_path.name)
+        
+        # Clean up
+        backup_path.unlink()
