@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import timedelta
 from pathlib import Path
 import logging
+import Crypto_Tax_Engine as app
 
 logger = logging.getLogger("crypto_tax_engine")
 
@@ -104,6 +105,8 @@ class TaxReviewer:
         self._check_duplicate_suspects(df_year)
         self._check_price_anomalies(df_year)
         self._check_fbar_reporting_requirements(df_year)
+        self._check_staking_rewards_valuation(df_year)
+        self._check_hifo_specific_identification()
         
         # Generate report
         report = self._generate_report()
@@ -223,31 +226,62 @@ class TaxReviewer:
             })
 
     def _check_defi_complexity(self, df):
-        """Flag DeFi LP tokens and complex protocol interactions"""
+        """Flag DeFi LP tokens and complex protocol interactions with IRS treatment warnings"""
         defi_transactions = []
+        lp_deposits = []
+        lp_withdrawals = []
         
         for _, row in df.iterrows():
             coin = str(row['coin']).upper()
+            action = str(row['action']).upper()
             
             # Check if coin matches any DeFi protocol pattern
             if any(protocol in coin for protocol in self.defi_protocols):
-                defi_transactions.append({
+                tx_info = {
                     'coin': coin,
                     'date': row['date'],
-                    'action': row['action'],
+                    'action': action,
+                    'amount': row['amount'],
                     'id': row['id']
-                })
+                }
+                defi_transactions.append(tx_info)
+                
+                # Track LP deposits/withdrawals separately for specific guidance
+                if action in ['DEPOSIT', 'BUY'] and any(lp in coin for lp in ['-LP', '_LP', 'UNI-V', 'SUSHI']):
+                    lp_deposits.append(tx_info)
+                elif action in ['WITHDRAWAL', 'SELL'] and any(lp in coin for lp in ['-LP', '_LP', 'UNI-V', 'SUSHI']):
+                    lp_withdrawals.append(tx_info)
         
-        if defi_transactions:
+        # Warn about LP deposits (IRS treatment unclear)
+        if lp_deposits:
+            self.warnings.append({
+                'severity': 'HIGH',
+                'category': 'DEFI_LP_DEPOSITS',
+                'title': 'DeFi Liquidity Pool Deposits - IRS Treatment Uncertain',
+                'count': len(lp_deposits),
+                'description': 'IRS COMPLIANCE ISSUE: The IRS has not explicitly ruled on whether depositing tokens into a Liquidity Pool '
+                              'is a taxable event (treated as selling crypto for an "LP Token") or a non-taxable deposit. '
+                              'Your code marks these as DEPOSIT (non-taxable), which is aggressive. '
+                              'A conservative auditor might argue that receiving an LP token in exchange for ETH is a taxable crypto-to-crypto swap.',
+                'items': lp_deposits[:10],
+                'action': 'RECOMMENDED: Treat LP deposits as taxable swaps (conservative). '
+                         'ALTERNATIVE: Mark as DEPOSIT but maintain documentation that you do not have dominion/control over the underlying assets. '
+                         'CONSULT: A tax professional familiar with DeFi for your specific situation. '
+                         'RISK: If audited, IRS may recharacterize as taxable swap and assess additional taxes + penalties.'
+            })
+        
+        # Suggest review for other DeFi complexity
+        if defi_transactions and not lp_deposits:
             self.suggestions.append({
                 'severity': 'MEDIUM',
                 'category': 'DEFI_COMPLEXITY',
                 'title': 'Complex DeFi Transactions Requiring Review',
                 'count': len(defi_transactions),
-                'description': 'Found LP tokens and DeFi protocol interactions. These may require special treatment.',
+                'description': 'Found DeFi protocol interactions. LP token rewards are taxable as income. Swaps are taxable.',
                 'items': defi_transactions[:10],
-                'action': 'Verify DeFi transaction handling. LP deposits may not be taxable events, but rewards are income.'
+                'action': 'Verify DeFi transaction handling. LP token receipts from rewards/fees = Income. LP withdrawals = Disposal (taxable gain/loss).'
             })
+
 
     def _check_missing_prices(self, df):
         """Flag transactions with missing or zero prices"""
@@ -359,32 +393,86 @@ class TaxReviewer:
             })
 
     def _check_duplicate_suspects(self, df):
-        """Flag potential duplicate transactions (Same coin, amount, time)"""
-        # Create a signature for each trade
-        df['sig'] = df.apply(lambda x: f"{x['date']}_{x['coin']}_{float(x['amount']):.6f}_{x['action']}", axis=1)
-        duplicates = df[df.duplicated(subset=['sig'], keep=False)]
+        """Flag potential duplicate transactions with enhanced detection to reduce false positives
         
-        if not duplicates.empty:
-            # Group by signature to show pairs
+        Enhanced to include timestamp precision and distinguish between:
+        1. True duplicates (same source, likely double-import)
+        2. High-frequency trading (different sources, legitimate)
+        """
+        # Parse dates to extract timestamps with second precision
+        df['datetime_parsed'] = pd.to_datetime(df['date'], utc=True)
+        df['timestamp_sec'] = df['datetime_parsed'].dt.floor('s')  # Floor to nearest second
+        
+        # Create enhanced signature with timestamp precision
+        # Include price to distinguish between legitimate HFT at different prices
+        df['sig'] = df.apply(
+            lambda x: f"{x['timestamp_sec']}_{x['coin']}_{float(x['amount']):.8f}_{x['action']}_{float(x.get('price_usd', 0)):.2f}",
+            axis=1
+        )
+        
+        # Find exact duplicates (same signature)
+        exact_duplicates = df[df.duplicated(subset=['sig'], keep=False)]
+        
+        if not exact_duplicates.empty:
+            # Group by signature and analyze each group
             dupe_groups = []
-            for sig, group in duplicates.groupby('sig'):
-                if len(group) > 1:
-                    dupe_groups.append({
-                        'signature': sig,
-                        'ids': group['id'].tolist(),
-                        'count': len(group)
-                    })
+            
+            for sig, group in exact_duplicates.groupby('sig'):
+                if len(group) <= 1:
+                    continue
+                
+                # Check if duplicates are from different sources
+                sources = group['source'].unique()
+                batch_ids = group['batch_id'].unique()
+                
+                # Classify duplicate type
+                if len(sources) > 1 or len(batch_ids) > 1:
+                    # Likely true duplicate (same transaction imported from CSV and API)
+                    dupe_type = 'LIKELY_DUPLICATE'
+                    severity_note = 'Different sources/batches suggest double-import'
+                else:
+                    # Same source - could be legitimate HFT or error
+                    dupe_type = 'POSSIBLE_DUPLICATE'
+                    severity_note = 'Same source - verify if legitimate high-frequency trading'
+                
+                dupe_groups.append({
+                    'signature': sig,
+                    'ids': group['id'].tolist(),
+                    'sources': group['source'].tolist(),
+                    'batch_ids': group['batch_id'].tolist(),
+                    'count': len(group),
+                    'type': dupe_type,
+                    'note': severity_note
+                })
             
             if dupe_groups:
-                self.warnings.append({
-                    'severity': 'HIGH',
-                    'category': 'DUPLICATE_TRANSACTIONS',
-                    'title': 'Suspected Duplicate Transactions',
-                    'count': len(dupe_groups),
-                    'description': 'Found transactions with identical Date, Coin, Amount, and Action but different IDs. This often happens when importing via both API and CSV.',
-                    'items': dupe_groups[:10],
-                    'action': 'Check these IDs in your database. If they are duplicates, delete one.'
-                })
+                # Separate likely duplicates from possible
+                likely_dupes = [d for d in dupe_groups if d['type'] == 'LIKELY_DUPLICATE']
+                possible_dupes = [d for d in dupe_groups if d['type'] == 'POSSIBLE_DUPLICATE']
+                
+                # Warn about likely duplicates
+                if likely_dupes:
+                    self.warnings.append({
+                        'severity': 'HIGH',
+                        'category': 'DUPLICATE_TRANSACTIONS',
+                        'title': 'Likely Duplicate Transactions (Cross-Source)',
+                        'count': len(likely_dupes),
+                        'description': 'Found transactions with identical Date (to the second), Coin, Amount, Price, and Action from different sources/batches. This typically indicates the same transaction was imported via both API and CSV.',
+                        'items': likely_dupes[:10],
+                        'action': 'These are likely true duplicates. Use Interactive Review Fixer to delete one copy from each pair.'
+                    })
+                
+                # Suggest review for possible duplicates (HFT traders)
+                if possible_dupes:
+                    self.suggestions.append({
+                        'severity': 'MEDIUM',
+                        'category': 'DUPLICATE_TRANSACTIONS',
+                        'title': 'Possible Duplicates (Same-Source)',
+                        'count': len(possible_dupes),
+                        'description': 'Found transactions with identical parameters from the same source. For high-frequency traders, multiple orders at the exact same time and price may be legitimate.',
+                        'items': possible_dupes[:10],
+                        'action': 'Review these manually. If you use HFT bots, these may be legitimate. Otherwise, they could be import errors.'
+                    })
 
     def _check_price_anomalies(self, df):
         """Flag potential price entry errors: Price Per Unit ≈ Total Value
@@ -566,6 +654,90 @@ class TaxReviewer:
                 'items': self_custody_flagged,
                 'action': 'Recommended: Keep detailed records of max balance reached in each wallet. Monitor FinCEN updates for changes to self-custody guidance. ' \
                          'Consider consulting a tax professional if your self-custody holdings exceed $10,000.'
+            })
+
+    def _check_staking_rewards_valuation(self, df):
+        """Warn about intraday price variance for staking rewards (daily close vs actual receipt time)
+        
+        IRS COMPLIANCE ISSUE: Staking rewards must be valued at Fair Market Value (FMV) at time of receipt.
+        This software uses daily close prices from Yahoo Finance, which may differ significantly from
+        the actual moment-of-receipt price for coins with high volatility.
+        """
+        staking_income = df[df['action'].isin(['INCOME'])].copy()
+        
+        if staking_income.empty:
+            return
+        
+        # Identify likely staking rewards (INCOME transactions, not airdrops/gifts)
+        # and flag those with significant amounts
+        large_staking_rewards = []
+        
+        for _, row in staking_income.iterrows():
+            amount = float(row.get('amount', 0))
+            price = float(row.get('price_usd', 0))
+            total_value = amount * price
+            
+            # Flag large staking operations (>$1,000 per transaction or >$10,000 annually)
+            if total_value > 1000:
+                large_staking_rewards.append({
+                    'coin': row['coin'],
+                    'date': row['date'],
+                    'amount': amount,
+                    'price_used': price,
+                    'total_value': total_value,
+                    'source': row.get('source', 'UNKNOWN')
+                })
+        
+        if large_staking_rewards:
+            total_staking_value = sum(r['total_value'] for r in large_staking_rewards)
+            
+            self.suggestions.append({
+                'severity': 'MEDIUM',
+                'category': 'STAKING_REWARDS_VALUATION',
+                'title': 'Staking Rewards Valuation - Intraday Price Variance Risk',
+                'count': len(large_staking_rewards),
+                'description': f'IRS COMPLIANCE ISSUE: Found ${total_staking_value:,.2f} in staking rewards valued using DAILY CLOSE prices. '
+                              'The IRS requires staking income to be reported at Fair Market Value (FMV) at the EXACT MOMENT of receipt. '
+                              'Yahoo Finance provides daily open/close prices only. If staking rewards arrive throughout the day and '
+                              'the coin price swings significantly (10%+), your reported values may differ from actual FMV at receipt time. '
+                              'For large staking operations, this variance can add up to thousands of dollars in discrepancies.',
+                'items': large_staking_rewards[:10],
+                'action': 'RECOMMENDED FOR LARGE STAKING OPS (>$10k/year): Use exchange APIs or on-chain block timestamps + historical minutely price data '
+                         'to capture exact FMV at moment of receipt. '
+                         'ACCEPTABLE FOR SMALL STAKING: Daily close prices are generally acceptable for smaller amounts (<$10k/year total). '
+                         'RISK: In an audit, IRS may request proof of FMV at exact receipt time. Maintain records of block timestamps and price sources.'
+            })
+
+    def _check_hifo_specific_identification(self):
+        """Warn about HIFO retroactive record generation (IRS requires contemporaneous identification)
+        
+        IRS COMPLIANCE ISSUE: To use HIFO (Highest-In, First-Out) or any specific lot identification method,
+        the IRS requires that you maintain contemporaneous records identifying which specific lots are being sold
+        AT THE TIME OF THE SALE. This software applies HIFO retroactively at year-end, which is technically aggressive.
+        """
+        # Check if HIFO is configured (app imported at module level)
+        acct_method = str(app.GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')).upper()
+        
+        if acct_method == 'HIFO':
+            self.warnings.append({
+                'severity': 'HIGH',
+                'category': 'HIFO_SPECIFIC_IDENTIFICATION',
+                'title': 'HIFO Accounting - IRS Requires Contemporaneous Records',
+                'count': 1,
+                'description': 'IRS COMPLIANCE ISSUE: You are using HIFO (Highest-In, First-Out) accounting. '
+                              'The IRS requires that to use specific lot identification, you must have CONTEMPORANEOUS RECORDS '
+                              'identifying which specific lots were sold AT THE TIME OF EACH SALE. '
+                              'This software applies HIFO retroactively when you run year-end reports, which generates the records after the fact. '
+                              'While this is common practice in crypto tax software, it is technically aggressive and may be challenged in an audit.',
+                'items': [{
+                    'method': 'HIFO',
+                    'risk': 'IRS may deny specific identification and force FIFO',
+                    'consequence': 'Higher tax liability if FIFO produces larger gains than HIFO'
+                }],
+                'action': 'STRONGLY RECOMMENDED: Maintain external logs (spreadsheet, notebook, broker confirmations) documenting your intent '
+                         'to use specific lot identification AT THE TIME OF EACH SALE. Example: "Sold 0.5 BTC from Jan 15, 2023 lot (cost basis $25,000)". '
+                         'ALTERNATIVE: Switch to FIFO (config.json) which is the IRS default and does not require specific identification. '
+                         'RISK: If audited and you cannot prove contemporaneous records, IRS may force FIFO and assess additional taxes + penalties.'
             })
 
     def _generate_report(self):
