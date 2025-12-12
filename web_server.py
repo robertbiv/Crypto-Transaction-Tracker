@@ -578,18 +578,13 @@ def index():
     
     return redirect(url_for('login'))
 
-@app.route('/setup-wizard', methods=['GET'])
-@login_required
-def setup_wizard():
-    """Setup wizard for configuring the tax engine"""
-    return render_template('setup.html', hide_nav=True)
-
 @app.route('/setup', methods=['GET'])
 def setup_page():
-    """Legacy setup page - redirect to appropriate location"""
-    if is_first_time_setup():
-        return redirect(url_for('first_time_setup'))
-    return redirect(url_for('setup_wizard'))
+    """Setup page for first-time configuration"""
+    # If users already exist, redirect to login
+    if USERS_FILE.exists():
+        return redirect(url_for('login'))
+    return render_template('setup.html')
 
 @app.route('/dashboard')
 @login_required
@@ -1114,9 +1109,9 @@ def api_run_setup():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/initial-setup', methods=['POST'])
-def api_initial_setup():
-    """Initial setup - create first user account"""
+@app.route('/api/wizard/create-account', methods=['POST'])
+def api_wizard_create_account():
+    """Wizard Step 1 - Create first user account - NO AUTHENTICATION REQUIRED"""
     # Only allow if no users exist
     if USERS_FILE.exists():
         return jsonify({'error': 'Setup already completed'}), 403
@@ -1132,18 +1127,152 @@ def api_initial_setup():
         if len(password) < 8:
             return jsonify({'error': 'Password must be at least 8 characters'}), 400
         
-        # Create user
+        # Create user (setup not completed yet)
         users = {
             username: {
                 'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
                 'created_at': datetime.now(timezone.utc).isoformat(),
-                'setup_completed': True
+                'setup_completed': False  # Will be set to True when wizard completes
             }
         }
         
         save_users(users)
         
         return jsonify({'success': True, 'message': 'Setup completed successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wizard/run-setup-script', methods=['POST'])
+def api_wizard_run_setup():
+    """Wizard Step 2 - Run Setup.py script - NO AUTHENTICATION REQUIRED"""
+    # Only allow if no users exist yet (in wizard flow)
+    if not USERS_FILE.exists():
+        return jsonify({'error': 'Please create account first'}), 403
+    
+    try:
+        # Run Setup.py script
+        setup_script = BASE_DIR / 'Setup.py'
+        if not setup_script.exists():
+            return jsonify({'error': 'Setup.py not found'}), 404
+        
+        # Run the script and capture output (shell=False for security)
+        result = subprocess.run(
+            [sys.executable, str(setup_script)],
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+            timeout=30,
+            shell=False  # Explicitly set for security
+        )
+        
+        return jsonify({
+            'success': result.returncode == 0,
+            'output': result.stdout,
+            'error': result.stderr if result.returncode != 0 else None
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Setup script timed out'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wizard/get-config', methods=['GET'])
+def api_wizard_get_config():
+    """Wizard Step 3/4/5 - Get current config/wallets/api_keys - NO AUTHENTICATION REQUIRED"""
+    # Only allow during setup wizard (no users or just created)
+    if not USERS_FILE.exists():
+        return jsonify({'error': 'Please create account first'}), 403
+    
+    try:
+        config_type = request.args.get('type', 'config')
+        
+        if config_type == 'api_keys':
+            if API_KEYS_FILE.exists():
+                with open(API_KEYS_FILE, 'r') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+            return jsonify({'success': True, 'data': data})
+        
+        elif config_type == 'wallets':
+            if WALLETS_FILE.exists():
+                with open(WALLETS_FILE, 'r') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+            return jsonify({'success': True, 'data': data})
+        
+        elif config_type == 'config':
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, 'r') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+            return jsonify({'success': True, 'data': data})
+        
+        else:
+            return jsonify({'error': 'Invalid config type'}), 400
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wizard/save-config', methods=['POST'])
+def api_wizard_save_config():
+    """Wizard Step 3/4/5 - Save config/wallets/api_keys - NO AUTHENTICATION REQUIRED"""
+    # Only allow during setup wizard
+    if not USERS_FILE.exists():
+        return jsonify({'error': 'Please create account first'}), 403
+    
+    try:
+        data = request.get_json()
+        config_type = data.get('type')
+        config_data = data.get('data')
+        
+        if not config_type or config_data is None:
+            return jsonify({'error': 'Missing type or data'}), 400
+        
+        if config_type == 'api_keys':
+            with open(API_KEYS_FILE, 'w') as f:
+                json.dump(config_data, f, indent=4)
+        
+        elif config_type == 'wallets':
+            with open(WALLETS_FILE, 'w') as f:
+                json.dump(config_data, f, indent=4)
+        
+        elif config_type == 'config':
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config_data, f, indent=4)
+        
+        else:
+            return jsonify({'error': 'Invalid config type'}), 400
+        
+        return jsonify({'success': True, 'message': f'{config_type} saved successfully'})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wizard/complete', methods=['POST'])
+def api_wizard_complete():
+    """Wizard Final Step - Mark setup as complete and auto-login - NO AUTHENTICATION REQUIRED"""
+    if not USERS_FILE.exists():
+        return jsonify({'error': 'No user account found'}), 403
+    
+    try:
+        # Get the user (validate only one exists during wizard)
+        users = load_users()
+        if len(users) != 1:
+            return jsonify({'error': 'Invalid setup state - expected exactly one user'}), 500
+        username = list(users.keys())[0]
+        
+        # Mark setup as completed
+        users[username]['setup_completed'] = True
+        users[username]['setup_completed_at'] = datetime.now(timezone.utc).isoformat()
+        save_users(users)
+        
+        # Auto-login the user
+        session['username'] = username
+        session.permanent = True
+        
+        return jsonify({'success': True, 'message': 'Setup completed! Logging you in...'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

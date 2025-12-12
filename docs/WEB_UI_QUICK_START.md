@@ -44,7 +44,11 @@ SSL certificate generated: /path/to/certs/cert.pem
    (You may need to accept the self-signed certificate warning)
 ```
 
-## Step 3: Access the Web UI
+## Step 3: Complete the Setup Wizard (First-Time Only)
+
+### **NO AUTHENTICATION REQUIRED FOR SETUP!**
+
+When you first start the web UI, you'll see a friendly setup wizard that guides you through everything:
 
 1. Open your browser and navigate to:
    ```
@@ -56,22 +60,53 @@ SSL certificate generated: /path/to/certs/cert.pem
    - Firefox: Click "Advanced" → "Accept the Risk and Continue"
    - Safari: Click "Show Details" → "visit this website"
 
-## Step 4: Login
+3. **The Setup Wizard will appear automatically!**
 
-Use the default credentials:
-- **Username**: `admin`
-- **Password**: `admin123`
+### Setup Wizard Steps
 
-## Step 5: Change Your Password! 🔐
+#### 🔐 Step 1: Create Your Account
+- Choose your username
+- Create a strong password with real-time strength indicator
+- Confirm your password
+- **Security warnings displayed** (don't share, don't reuse)
 
-**IMPORTANT**: Change the default password immediately!
+#### ⚙️ Step 2: Initialize System
+- Automatically runs Setup.py script
+- Creates required folders (inputs, outputs, logs)
+- Generates configuration templates
+- **Watch the progress in real-time!**
 
-1. Click on **Settings** in the navigation bar
-2. Enter current password: `admin123`
-3. Enter your new secure password (minimum 8 characters)
-4. Click "Change Password"
+#### 🔑 Step 3: Configure API Keys (Optional)
+- Add exchange API keys (Binance, Coinbase, KuCoin, etc.)
+- Add blockchain provider keys:
+  - **Moralis** (required for EVM/Solana blockchain audits)
+  - **Blockchair** (optional for Bitcoin/UTXO chains)
+- **All keys should be READ-ONLY**
+- **Can skip and add later** via Settings
 
-## Step 6: Explore the Features
+#### 💼 Step 4: Add Wallet Addresses (Optional)
+- Add cryptocurrency wallet addresses for tracking
+- Click "Add Wallet" button
+- Enter currency code (BTC, ETH, SOL, etc.)
+- Enter wallet address
+- **Can add multiple addresses per currency**
+- **Can skip and add later** via Configuration page
+
+#### ⚙️ Step 5: Configure Settings
+- **Accounting Method**: Choose HIFO, FIFO, or LIFO
+- **Tax Year**: Set the tax year (2024 by default)
+- **Long-term Benefits**: Enable/disable capital gains benefits
+- **Include Fees**: Include fees in cost basis
+- Click "Complete Setup"
+
+#### ✅ Automatic Login
+- **No need to login manually** - you're automatically logged in!
+- Redirected to dashboard
+- Ready to start using the application!
+
+## Step 4: Start Using the Application
+
+## Features Overview
 
 ### Dashboard
 - View transaction statistics
