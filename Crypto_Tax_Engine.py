@@ -102,13 +102,19 @@ GLOBAL_CONFIG = load_config()
 STRICT_BROKER_MODE = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
 BROKER_SOURCES = set(GLOBAL_CONFIG.get('compliance', {}).get('broker_sources', ['COINBASE','KRAKEN','GEMINI','BINANCE','ROBINHOOD','ETORO']))
 STAKING_TAXABLE_ON_RECEIPT = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+DEFI_LP_CONSERVATIVE = bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True))
 COLLECTIBLE_PREFIXES = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_prefixes', ['NFT-','ART-']))
 COLLECTIBLE_TOKENS = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_tokens', ['NFT','PUNK','BAYC']))
+
+# DeFi protocol patterns for LP detection
+DEFI_LP_PATTERNS = ['UNI-V2', 'UNI-V3', 'SUSHI', 'CURVE', 'BALANCER', 'AAVE', 
+                    'COMPOUND', 'MAKER', 'YEARN', '-LP', '_LP', 'POOL']
 
 COMPLIANCE_WARNINGS = {
     'HIFO': '[CONFIG] Accounting method HIFO selected. This is not recommended and may not align with broker 1099-DA reporting.',
     'STRICT_BROKER_DISABLED': '[CONFIG] strict_broker_mode is disabled. Cross-wallet basis fallback can cause 1099-DA mismatches.',
-    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_taxable_on_receipt=False. Constructive receipt deferral is aggressive and may be challenged by IRS.'
+    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_taxable_on_receipt=False. Constructive receipt deferral is aggressive and may be challenged by IRS.',
+    'DEFI_LP_AGGRESSIVE': '[CONFIG] defi_lp_conservative is False. LP deposits treated as non-taxable. AGGRESSIVE STANCE - IRS may challenge as taxable swaps.'
 }
 
 # ==========================================
@@ -123,6 +129,11 @@ def to_decimal(value):
     elif isinstance(value, (int, float)):
         return Decimal(str(value))
     else: return Decimal('0')
+
+def is_defi_lp_token(coin_name):
+    """Check if a coin matches DeFi LP token patterns"""
+    coin_upper = str(coin_name).upper()
+    return any(pattern in coin_upper for pattern in DEFI_LP_PATTERNS)
 
 def round_decimal(value, places=8):
     if not isinstance(value, Decimal): value = to_decimal(value)
@@ -245,6 +256,16 @@ class DatabaseManager:
     def save_trade(self, t):
         try:
             t_copy = dict(t)
+            
+            # CONSERVATIVE DEFI LP TREATMENT: Convert LP deposits to taxable swaps
+            if DEFI_LP_CONSERVATIVE:
+                action = str(t_copy.get('action', '')).upper()
+                coin = str(t_copy.get('coin', ''))
+                if action in ['DEPOSIT', 'BUY'] and is_defi_lp_token(coin):
+                    # Convert DEPOSIT -> SWAP to treat as taxable event
+                    t_copy['action'] = 'SWAP'
+                    logger.debug(f"[CONSERVATIVE] Converted LP DEPOSIT to SWAP: {coin}")
+            
             for field in ['amount', 'price_usd', 'fee']:
                 val = t_copy.get(field, "0")
                 if val is None: t_copy[field] = "0"
@@ -561,6 +582,8 @@ class TaxEngine:
             logger.warning(COMPLIANCE_WARNINGS['STRICT_BROKER_DISABLED'])
         if not bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True)):
             logger.warning(COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'])
+        if not bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True)):
+            logger.warning(COMPLIANCE_WARNINGS['DEFI_LP_AGGRESSIVE'])
 
     def _load_prior_year_data(self):
         prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
