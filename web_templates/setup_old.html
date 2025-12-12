@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Wizard - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .setup-wizard-container {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+    }
+    
+    .wizard-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    
+    .wizard-header h1 {
+        font-size: 2.5rem;
+        color: var(--md-sys-color-primary);
+        margin-bottom: 16px;
+    }
+    
+    .wizard-card {
+        background: white;
+        padding: 32px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 24px;
+    }
+    
+    .wizard-section {
+        margin-bottom: 32px;
+    }
+    
+    .wizard-section h2 {
+        color: var(--md-sys-color-primary);
+        font-size: 1.5rem;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .wizard-section p {
+        color: var(--md-sys-color-on-surface-variant);
+        margin-bottom: 16px;
+        line-height: 1.6;
+    }
+    
+    .options-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin-top: 20px;
+    }
+    
+    .option-card {
+        border: 2px solid var(--md-sys-color-surface-variant);
+        padding: 20px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .option-card:hover {
+        border-color: var(--md-sys-color-primary);
+        background: var(--md-sys-color-primary-container);
+    }
+    
+    .option-card h3 {
+        color: var(--md-sys-color-primary);
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        margin-top: 32px;
+        flex-wrap: wrap;
+    }
+    
+    .info-box {
+        background: var(--md-sys-color-secondary-container);
+        padding: 16px;
+        border-radius: 8px;
+        margin-top: 16px;
+    }
+    
+    .info-box strong {
+        color: var(--md-sys-color-secondary);
+    }
+</style>
+{% endblock %}
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--md-sys-color-on-surface-variant);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--md-sys-color-surface-variant);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--md-sys-color-primary);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            width: 100%;
+        }
+        
+        .btn-primary {
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+        }
+        
+        .btn-primary:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .password-strength {
+            margin-top: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .password-strength.weak {
+            background: #FFEBEE;
+            color: #C62828;
+            display: block;
+        }
+        
+        .password-strength.medium {
+            background: #FFF3E0;
+            color: #E65100;
+            display: block;
+        }
+        
+        .password-strength.strong {
+            background: #E8F5E9;
+            color: #2E7D32;
+            display: block;
+        }
+        
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .alert-error {
+            background: #FFEBEE;
+            color: #B71C1C;
+        }
+        
+        .alert-success {
+            background: #E8F5E9;
+            color: #1B5E20;
+        }
+        
+        .alert-info {
+            background: #E3F2FD;
+            color: #0D47A1;
+        }
+        
+        .security-note {
+            margin-top: 24px;
+            padding: 16px;
+            background: var(--md-sys-color-primary-container);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .security-note strong {
+            color: var(--md-sys-color-error);
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="setup-header">
+            <h1>🔐 Welcome to Crypto Tax Generator</h1>
+            <p>First-time setup - Create your admin account</p>
+        </div>
+        
+        <div id="alertContainer"></div>
+        
+        <form id="setupForm">
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-input" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-input" required>
+                <div id="passwordStrength" class="password-strength"></div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" class="form-input" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" id="submitBtn">Create Account</button>
+        </form>
+        
+        <div class="security-note">
+            <strong>⚠️ Security Reminder:</strong>
+            <ul style="margin-left: 20px; margin-top: 8px;">
+                <li>Do NOT share your password with anyone</li>
+                <li>Do NOT reuse passwords from other services</li>
+                <li>Use a strong, unique password</li>
+                <li>Consider using a password manager</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Password strength checker
+        function checkPasswordStrength(password) {
+            const strengthDiv = document.getElementById('passwordStrength');
+            
+            if (password.length === 0) {
+                strengthDiv.style.display = 'none';
+                return;
+            }
+            
+            let strength = 0;
+            let feedback = [];
+            
+            // Length check
+            if (password.length >= 8) strength++;
+            if (password.length >= 12) strength++;
+            if (password.length >= 16) strength++;
+            
+            // Character variety checks
+            if (/[a-z]/.test(password)) strength++;
+            if (/[A-Z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+            
+            // Display strength
+            strengthDiv.className = 'password-strength';
+            
+            if (strength < 4) {
+                strengthDiv.classList.add('weak');
+                strengthDiv.textContent = '⚠️ Weak password - Add more characters and variety';
+            } else if (strength < 6) {
+                strengthDiv.classList.add('medium');
+                strengthDiv.textContent = '⚡ Medium password - Consider adding special characters';
+            } else {
+                strengthDiv.classList.add('strong');
+                strengthDiv.textContent = '✓ Strong password';
+            }
+            
+            return strength;
+        }
+        
+        document.getElementById('password').addEventListener('input', (e) => {
+            checkPasswordStrength(e.target.value);
+        });
+        
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+            }
+        }
+        
+        document.getElementById('setupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Validation
+            if (!username) {
+                showAlert('Username is required', 'error');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showAlert('Passwords do not match', 'error');
+                return;
+            }
+            
+            if (password.length < 8) {
+                showAlert('Password must be at least 8 characters', 'error');
+                return;
+            }
+            
+            // Check password strength
+            const strength = checkPasswordStrength(password);
+            if (strength < 4) {
+                if (!confirm('Your password is weak. Are you sure you want to continue?')) {
+                    return;
+                }
+            }
+            
+            // Submit
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating account...';
+            
+            try {
+                const response = await fetch('/api/initial-setup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Account created successfully! Redirecting to login...', 'success');
+                } else {
+                    showAlert(data.error || 'Setup failed', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Account';
+                }
+            } catch (error) {
+                showAlert('Network error: ' + error.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Account';
+            }
+        });
+    </script>
+</body>
+</html>
