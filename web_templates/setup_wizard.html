@@ -919,8 +919,8 @@
                     const walletDiv = document.createElement('div');
                     walletDiv.className = 'wallet-entry';
                     walletDiv.innerHTML = `
-                        <input type="text" class="form-input small" value="${currency}" placeholder="Currency" data-wallet-currency="${currency}" data-wallet-index="${index}">
-                        <input type="text" class="form-input" value="${address}" placeholder="Address" data-wallet-address="${currency}" data-wallet-index="${index}">
+                        <input type="text" class="form-input small" value="${currency}" placeholder="Currency (e.g., BTC, ETH)" data-currency="${currency}" data-index="${index}">
+                        <input type="text" class="form-input" value="${address}" placeholder="Wallet Address" data-address="${currency}" data-index="${index}">
                         <button class="btn btn-remove btn-small" onclick="removeWallet('${currency}', ${index})">Remove</button>
                     `;
                     container.appendChild(walletDiv);
@@ -933,19 +933,22 @@
         }
         
         function addWallet() {
-            const currency = prompt('Enter currency code (e.g., BTC, ETH):');
-            if (!currency) return;
+            // Add empty wallet entry for user to fill in
+            if (!window.wallets) window.wallets = {};
             
-            const address = prompt('Enter wallet address:');
-            if (!address) return;
-            
-            const upper = currency.toUpperCase();
-            if (!window.wallets[upper]) {
-                window.wallets[upper] = [];
-            }
-            window.wallets[upper].push(address);
+            // Create a temporary key for the new wallet
+            const tempKey = `NEW_${Date.now()}`;
+            window.wallets[tempKey] = [''];
             
             renderWallets();
+            
+            // Focus on the first input of the newly added wallet
+            setTimeout(() => {
+                const inputs = document.querySelectorAll('[data-currency]');
+                if (inputs.length > 0) {
+                    inputs[inputs.length - 1].focus();
+                }
+            }, 100);
         }
         
         function removeWallet(currency, index) {
@@ -960,16 +963,21 @@
         
         async function saveWallets() {
             // Get current values from inputs
-            const currencyInputs = document.querySelectorAll('[data-wallet-currency]');
-            const addressInputs = document.querySelectorAll('[data-wallet-address]');
+            const walletEntries = document.querySelectorAll('.wallet-entry');
             
             const wallets = {};
-            addressInputs.forEach(input => {
-                const currency = input.dataset.walletAddress;
-                const address = input.value.trim();
-                if (address) {
-                    if (!wallets[currency]) wallets[currency] = [];
-                    wallets[currency].push(address);
+            walletEntries.forEach(entry => {
+                const currencyInput = entry.querySelector('[data-currency]');
+                const addressInput = entry.querySelector('[data-address]');
+                
+                if (currencyInput && addressInput) {
+                    const currency = currencyInput.value.trim().toUpperCase();
+                    const address = addressInput.value.trim();
+                    
+                    if (currency && address) {
+                        if (!wallets[currency]) wallets[currency] = [];
+                        wallets[currency].push(address);
+                    }
                 }
             });
             
