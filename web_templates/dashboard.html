@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 24px;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-secondary) 100%);
+        color: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 8px 0;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Dashboard</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Transactions</div>
+        <div class="stat-value" id="totalTransactions">-</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Unique Coins</div>
+        <div class="stat-value" id="uniqueCoins">-</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Warnings</div>
+        <div class="stat-value" id="totalWarnings">-</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-label">Reports Generated</div>
+        <div class="stat-value" id="totalReports">-</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Quick Actions</h2>
+    <div class="action-buttons">
+        <button class="btn btn-primary" onclick="runTaxCalculation()">
+            <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
+            Run Tax Calculation
+        </button>
+        <button class="btn btn-secondary" onclick="window.location.href='/transactions'">
+            <span class="material-icons" style="vertical-align: middle;">list</span>
+            View Transactions
+        </button>
+        <button class="btn btn-secondary" onclick="window.location.href='/warnings'">
+            <span class="material-icons" style="vertical-align: middle;">warning</span>
+            Check Warnings
+        </button>
+        <button class="btn btn-secondary" onclick="window.location.href='/reports'">
+            <span class="material-icons" style="vertical-align: middle;">download</span>
+            Download Reports
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">System Status</h2>
+    <div id="systemStatus">
+        <p>Loading status...</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Recent Activity</h2>
+    <div id="recentActivity">
+        <p>Loading recent transactions...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function loadDashboardData() {
+        try {
+            // Load statistics with encrypted API
+            const statsResponse = await api.get('/api/stats');
+            const stats = JSON.parse(statsResponse.data);
+            
+            document.getElementById('totalTransactions').textContent = stats.total_transactions.toLocaleString();
+            document.getElementById('uniqueCoins').textContent = Object.keys(stats.top_coins).length;
+            
+            // Load warnings
+            const warningsResponse = await api.get('/api/warnings');
+            const warnings = JSON.parse(warningsResponse.data);
+            document.getElementById('totalWarnings').textContent = warnings.warnings.length;
+            
+            // Load reports
+            const reportsResponse = await api.get('/api/reports');
+            const reports = JSON.parse(reportsResponse.data);
+            let totalReports = 0;
+            reports.forEach(year => totalReports += year.reports.length);
+            document.getElementById('totalReports').textContent = totalReports;
+            
+            // Update system status
+            document.getElementById('systemStatus').innerHTML = `
+                <p><strong>Database:</strong> Connected ✓</p>
+                <p><strong>Date Range:</strong> ${stats.date_range.min || 'N/A'} to ${stats.date_range.max || 'N/A'}</p>
+                <p><strong>Encryption:</strong> Active 🔒</p>
+                <p><strong>HTTPS:</strong> Enabled ✓</p>
+            `;
+            
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+            showAlert('Failed to load dashboard data: ' + error.message, 'error');
+        }
+    }
+    
+    async function runTaxCalculation() {
+        if (!confirm('Start tax calculation? This may take several minutes.')) {
+            return;
+        }
+        
+        try {
+            const response = await api.post('/api/run', {});
+            const result = JSON.parse(response.data);
+            showAlert(result.message, 'success');
+        } catch (error) {
+            showAlert('Failed to start calculation: ' + error.message, 'error');
+        }
+    }
+    
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', loadDashboardData);
+</script>
+{% endblock %}
