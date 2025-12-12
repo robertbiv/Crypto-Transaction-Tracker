@@ -227,7 +227,9 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    {% if session.username %}
+    {% set hidden_endpoints = ['first_time_setup', 'setup_wizard', 'login'] %}
+    {% set show_nav = (session.username and request.endpoint not in hidden_endpoints and not hide_nav) %}
+    {% if show_nav %}
     <nav class="nav-bar">
         <h1>💰 Crypto Tax Generator</h1>
         <div class="nav-menu">

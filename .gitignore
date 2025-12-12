@@ -8,6 +8,7 @@ config.json
 web_encryption.key
 web_users.json
 certs/
+testcreds/
 
 # Data: Local databases and caches
 crypto_master.db

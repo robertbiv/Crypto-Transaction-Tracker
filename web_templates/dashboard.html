@@ -108,17 +108,15 @@
             // First, run system health check on login
             await runHealthCheck();
             
-            // Load statistics with encrypted API
-            const statsResponse = await api.get('/api/stats');
-            const stats = JSON.parse(statsResponse.data);
+            // Load statistics
+            const stats = await api.get('/api/stats');
             
             document.getElementById('totalTransactions').textContent = stats.total_transactions ? stats.total_transactions.toLocaleString() : '0';
             document.getElementById('uniqueCoins').textContent = stats.top_coins ? Object.keys(stats.top_coins).length : '0';
             
             // Load warnings
             try {
-                const warningsResponse = await api.get('/api/warnings');
-                const warnings = JSON.parse(warningsResponse.data);
+                const warnings = await api.get('/api/warnings');
                 document.getElementById('totalWarnings').textContent = warnings.warnings ? warnings.warnings.length : '0';
             } catch (e) {
                 document.getElementById('totalWarnings').textContent = '0';
@@ -126,8 +124,7 @@
             
             // Load reports
             try {
-                const reportsResponse = await api.get('/api/reports');
-                const reports = JSON.parse(reportsResponse.data);
+                const reports = await api.get('/api/reports');
                 let totalReports = 0;
                 if (reports && Array.isArray(reports)) {
                     reports.forEach(year => totalReports += year.reports ? year.reports.length : 0);
@@ -189,8 +186,7 @@
     
     async function runHealthCheck() {
         try {
-            const response = await api.get('/api/system-health');
-            const health = JSON.parse(response.data);
+            const health = await api.get('/api/system-health');
             
             // Display health check results
             let hasErrors = false;

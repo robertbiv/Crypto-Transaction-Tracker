@@ -121,6 +121,10 @@ def validate_csrf_token(token):
     """Validate CSRF token"""
     return token == session.get('csrf_token')
 
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=generate_csrf_token)
+
 def generate_api_signature(data, timestamp):
     """Generate HMAC signature for API request"""
     message = f"{json.dumps(data, sort_keys=True)}:{timestamp}:{session.get('username', '')}"
@@ -144,6 +148,31 @@ def validate_api_signature(data, timestamp, signature):
     
     expected_signature = generate_api_signature(data, timestamp)
     return hmac.compare_digest(signature, expected_signature)
+
+def web_security_required(f):
+    """Decorator for Web UI API requests (CSRF + Origin check, no HMAC)"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check authentication
+        if 'username' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        # Check origin (same-origin only)
+        origin = request.headers.get('Origin')
+        host = request.headers.get('Host')
+        if origin and host:
+            from urllib.parse import urlparse
+            origin_host = urlparse(origin).netloc
+            if origin_host != host:
+                return jsonify({'error': 'Cross-origin requests not allowed'}), 403
+        
+        # Validate CSRF token
+        csrf_token = request.headers.get('X-CSRF-Token')
+        if not csrf_token or not validate_csrf_token(csrf_token):
+            return jsonify({'error': 'Invalid CSRF token'}), 403
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 def api_security_required(f):
     """Decorator to enforce API security (CSRF + signature validation + origin check)"""
@@ -195,35 +224,26 @@ def api_security_required(f):
 def load_users():
     """Load users from JSON file"""
     if not USERS_FILE.exists():
-        # Create default admin user with random password
-        import secrets
-        import string
-        # Generate random password
-        alphabet = string.ascii_letters + string.digits + string.punctuation
-        random_password = ''.join(secrets.choice(alphabet) for _ in range(16))
-        
-        default_user = {
-            'admin': {
-                'password_hash': bcrypt.hashpw(random_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
-                'created_at': datetime.now(timezone.utc).isoformat(),
-                'initial_password': random_password  # Store for first-time display only
-            }
-        }
-        with open(USERS_FILE, 'w') as f:
-            json.dump(default_user, f, indent=4)
-        
-        print("\n" + "="*60)
-        print("⚠️  NEW ADMIN ACCOUNT CREATED")
-        print("="*60)
-        print(f"Username: admin")
-        print(f"Password: {random_password}")
-        print("\n⚠️  SAVE THIS PASSWORD! It will not be shown again.")
-        print("="*60 + "\n")
-        
-        return default_user
+        return {}
     
     with open(USERS_FILE, 'r') as f:
         return json.load(f)
+
+def is_first_time_setup():
+    """Check if this is first-time setup (no users exist)"""
+    return not USERS_FILE.exists() or len(load_users()) == 0
+
+def create_initial_user(username, password):
+    """Create the initial admin user"""
+    users = {
+        username: {
+            'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'is_admin': True
+        }
+    }
+    save_users(users)
+    return True
 
 def save_users(users):
     """Save users to JSON file"""
@@ -410,9 +430,67 @@ def get_csrf_token():
         })
     return jsonify({'error': 'Not authenticated'}), 401
 
+@app.route('/first-time-setup', methods=['GET', 'POST'])
+def first_time_setup():
+    """First-time setup page for creating admin account"""
+    # If users already exist, redirect to login
+    if not is_first_time_setup():
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        # Double-check no users exist (race condition protection)
+        if not is_first_time_setup():
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'User already exists'}), 400
+            return redirect(url_for('login'))
+        
+        data = request.get_json() if request.is_json else request.form
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        confirm_password = data.get('confirm_password', '')
+        
+        # Validation
+        errors = []
+        if not username or len(username) < 3:
+            errors.append('Username must be at least 3 characters')
+        if not password or len(password) < 8:
+            errors.append('Password must be at least 8 characters')
+        if password != confirm_password:
+            errors.append('Passwords do not match')
+        
+        if errors:
+            if request.is_json:
+                return jsonify({'success': False, 'errors': errors}), 400
+            return render_template('first_time_setup.html', errors=errors, hide_nav=True)
+        
+        # Create user
+        try:
+            create_initial_user(username, password)
+            
+            # Auto-login the new user
+            session['username'] = username
+            session.permanent = True
+            
+            if request.is_json:
+                return jsonify({'success': True, 'message': 'Account created successfully', 'redirect': url_for('setup_wizard')})
+            
+            # Redirect to setup wizard
+            return redirect(url_for('setup_wizard'))
+        except Exception as e:
+            error_msg = f'Error creating account: {str(e)}'
+            if request.is_json:
+                return jsonify({'success': False, 'error': error_msg}), 500
+            return render_template('first_time_setup.html', error=error_msg, hide_nav=True)
+    
+    return render_template('first_time_setup.html', hide_nav=True)
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page"""
+    # If first-time setup needed, redirect there
+    if is_first_time_setup():
+        return redirect(url_for('first_time_setup'))
+    
     if request.method == 'POST':
         data = request.get_json() if request.is_json else request.form
         username = data.get('username')
@@ -490,9 +568,9 @@ def change_password():
 @app.route('/')
 def index():
     """Main entry point - redirect to setup or dashboard"""
-    # Check if setup is needed (no users exist)
-    if not USERS_FILE.exists():
-        return redirect(url_for('setup_page'))
+    # Check if first-time setup is needed
+    if is_first_time_setup():
+        return redirect(url_for('first_time_setup'))
     
     # Check if logged in
     if 'username' in session:
@@ -500,13 +578,18 @@ def index():
     
     return redirect(url_for('login'))
 
+@app.route('/setup-wizard', methods=['GET'])
+@login_required
+def setup_wizard():
+    """Setup wizard for configuring the tax engine"""
+    return render_template('setup.html', hide_nav=True)
+
 @app.route('/setup', methods=['GET'])
 def setup_page():
-    """Setup page for first-time configuration"""
-    # If users already exist, redirect to login
-    if USERS_FILE.exists():
-        return redirect(url_for('login'))
-    return render_template('setup.html')
+    """Legacy setup page - redirect to appropriate location"""
+    if is_first_time_setup():
+        return redirect(url_for('first_time_setup'))
+    return redirect(url_for('setup_wizard'))
 
 @app.route('/dashboard')
 @login_required
@@ -798,9 +881,9 @@ def api_update_api_keys():
 
 @app.route('/api/warnings', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_warnings():
-    """Get review warnings - encrypted response"""
+    """Get review warnings"""
     try:
         warnings_file = None
         suggestions_file = None
@@ -831,16 +914,15 @@ def api_get_warnings():
             'suggestions': suggestions
         }
         
-        encrypted_response = encrypt_data(result)
-        return jsonify({'data': encrypted_response})
+        return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reports', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_reports():
-    """List available reports - encrypted response"""
+    """List available reports"""
     try:
         reports = []
         
@@ -865,8 +947,7 @@ def api_get_reports():
                         'reports': year_reports
                     })
         
-        encrypted_response = encrypt_data(reports)
-        return jsonify({'data': encrypted_response})
+        return jsonify(reports)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -894,9 +975,9 @@ def api_download_report(report_path):
 
 @app.route('/api/stats', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_stats():
-    """Get statistics for dashboard - encrypted response"""
+    """Get statistics for dashboard"""
     try:
         conn = get_db_connection()
         
@@ -945,8 +1026,7 @@ def api_get_stats():
             'gains_losses': gains_losses
         }
         
-        encrypted_response = encrypt_data(result)
-        return jsonify({'data': encrypted_response})
+        return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1146,9 +1226,9 @@ def api_reset_program():
 
 @app.route('/api/system-health', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_system_health():
-    """Check system health and integrity - encrypted response"""
+    """Check system health and integrity"""
     try:
         health_status = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
@@ -1279,14 +1359,134 @@ def api_system_health():
             health_status['overall_status'] = 'OK'
             health_status['summary'] = 'All systems operational'
         
-        encrypted_response = encrypt_data(health_status)
-        return jsonify({'data': encrypted_response})
+        return jsonify(health_status)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 # ==========================================
 # MAIN
 # ==========================================
+
+@app.route('/api/setup/save', methods=['POST'])
+@login_required
+@web_security_required
+def api_save_setup_config():
+    """Save configuration from setup wizard"""
+    try:
+        # Allow plain JSON for setup wizard (protected by HTTPS + Auth)
+        data = request.get_json()
+        
+        # If wrapped in 'data' (encrypted), try to decrypt
+        if 'data' in data:
+            try:
+                decrypted = decrypt_data(data['data'])
+                if isinstance(decrypted, str):
+                    decrypted_json = json.loads(decrypted)
+                    # If decryption yields a dict, use it.
+                    if isinstance(decrypted_json, dict):
+                        data = decrypted_json
+            except:
+                # Fallback to using the raw data if decryption fails or it wasn't encrypted
+                pass
+        
+        # 1. Update config.json
+        if 'config' in data:
+            current_config = {}
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, 'r') as f:
+                    current_config = json.load(f)
+            
+            new_config = data['config']
+            # Helper to merge dictionaries recursively
+            def deep_update(d, u):
+                for k, v in u.items():
+                    if isinstance(v, dict):
+                        d[k] = deep_update(d.get(k, {}), v)
+                    else:
+                        d[k] = v
+                return d
+                
+            deep_update(current_config, new_config)
+            
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(current_config, f, indent=4)
+                
+        # 2. Update api_keys.json
+        if 'api_keys' in data:
+            current_keys = {}
+            if API_KEYS_FILE.exists():
+                with open(API_KEYS_FILE, 'r') as f:
+                    current_keys = json.load(f)
+            
+            new_keys = data['api_keys']
+            for provider, keys in new_keys.items():
+                if provider not in current_keys:
+                    current_keys[provider] = {}
+                for k, v in keys.items():
+                    if v and v != "PASTE_KEY" and v != "PASTE_SECRET":
+                        current_keys[provider][k] = v
+                        
+            with open(API_KEYS_FILE, 'w') as f:
+                json.dump(current_keys, f, indent=4)
+
+        # 3. Update wallets.json
+        if 'wallets' in data:
+            current_wallets = {}
+            if WALLETS_FILE.exists():
+                with open(WALLETS_FILE, 'r') as f:
+                    current_wallets = json.load(f)
+            
+            new_wallets = data['wallets']
+            for chain, wallet_data in new_wallets.items():
+                if 'addresses' in wallet_data:
+                    valid_addresses = [
+                        addr.strip() for addr in wallet_data['addresses'] 
+                        if addr and addr.strip() and not addr.startswith('PASTE_')
+                    ]
+                    if valid_addresses:
+                        if chain not in current_wallets:
+                            current_wallets[chain] = {}
+                        current_wallets[chain]['addresses'] = valid_addresses
+                        
+            with open(WALLETS_FILE, 'w') as f:
+                json.dump(current_wallets, f, indent=4)
+                
+        return jsonify({'success': True, 'message': 'Configuration saved successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/setup/config', methods=['GET'])
+@login_required
+@api_security_required
+def api_get_setup_config():
+    """Get current configuration for setup wizard"""
+    try:
+        config = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                
+        api_keys = {}
+        if API_KEYS_FILE.exists():
+            with open(API_KEYS_FILE, 'r') as f:
+                api_keys = json.load(f)
+                
+        wallets = {}
+        if WALLETS_FILE.exists():
+            with open(WALLETS_FILE, 'r') as f:
+                wallets = json.load(f)
+        
+        response_data = {
+            'config': config,
+            'api_keys': api_keys,
+            'wallets': wallets
+        }
+        
+        # Return encrypted response as per API standard
+        return jsonify({'data': encrypt_data(response_data)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def main():
     """Start the web server"""
@@ -1297,12 +1497,11 @@ def main():
     # Generate SSL certificate
     cert_file, key_file = generate_self_signed_cert()
     
-    # Check if default password is still in use
-    users = load_users()
-    if 'admin' in users and 'initial_password' in users['admin']:
-        print("\n⚠️  FIRST TIME SETUP DETECTED!")
-        print(f"   Admin password was shown above when the account was created.")
-        print("   CHANGE THIS IMMEDIATELY after logging in!\n")
+    # Check if first-time setup is needed
+    if is_first_time_setup():
+        print("\n✨ FIRST TIME SETUP")
+        print("   Navigate to the web UI to create your admin account")
+        print("   and complete the setup wizard.\n")
     
     # Start server
     host = '0.0.0.0'
