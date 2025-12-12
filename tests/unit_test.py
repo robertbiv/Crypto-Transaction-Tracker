@@ -4990,9 +4990,9 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         reviewer = TaxReviewer(self.db, 2024)
         report = reviewer.run_review()
         
-        defi_suggestions = [s for s in report['suggestions'] if s['category'] == 'DEFI_COMPLEXITY']
-        self.assertEqual(len(defi_suggestions), 1)
-        self.assertEqual(defi_suggestions[0]['count'], len(lp_tokens))
+        defi_warnings = [w for w in report['warnings'] if w['category'] == 'DEFI_LP_DEPOSITS']
+        self.assertEqual(len(defi_warnings), 1)
+        self.assertEqual(defi_warnings[0]['count'], len(lp_tokens))
     
     def test_missing_price_detection(self):
         """Test missing price detection"""
@@ -5178,9 +5178,8 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         reviewer = TaxReviewer(self.db, 2024)
         report = reviewer.run_review()
         
-        # Should detect all 4 categories
-        self.assertGreaterEqual(report['summary']['total_warnings'], 3)  # NFT, Wash Sale, Missing Price
-        self.assertGreaterEqual(report['summary']['total_suggestions'], 1)  # DeFi
+        # Should detect all 4 categories as warnings
+        self.assertGreaterEqual(report['summary']['total_warnings'], 4)  # NFT, Wash Sale, DeFi, Missing Price
     
     def test_wrong_year_not_flagged(self):
         """Test that issues in different tax year are not flagged"""
@@ -8183,7 +8182,7 @@ class TestBlockchainIntegration(unittest.TestCase):
         self.assertIn('etherscan', eth_hint.lower())
         
         matic_hint = fixer._get_blockchain_explorer_hint('MATIC')
-        self.assertIn('polygonscan', eth_hint.lower())
+        self.assertIn('polygonscan', matic_hint.lower())
         
         sol_hint = fixer._get_blockchain_explorer_hint('SOL')
         self.assertIn('solscan', sol_hint.lower())

@@ -607,7 +607,9 @@ class TaxEngine:
         if migration_loaded:
             logger.info("Skipping pre-2025 history (Migration Inventory loaded).")
             df['temp_date'] = pd.to_datetime(df['date'], utc=True)
-            df = df[df['temp_date'] >= datetime(2025, 1, 1)]
+            # Use timezone-aware datetime for comparison
+            cutoff_date = pd.Timestamp(datetime(2025, 1, 1), tz='UTC')
+            df = df[df['temp_date'] >= cutoff_date]
 
         all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN'])]
         all_buys_dict = {}

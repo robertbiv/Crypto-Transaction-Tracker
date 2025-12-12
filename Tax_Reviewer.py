@@ -247,9 +247,10 @@ class TaxReviewer:
                 defi_transactions.append(tx_info)
                 
                 # Track LP deposits/withdrawals separately for specific guidance
-                if action in ['DEPOSIT', 'BUY'] and any(lp in coin for lp in ['-LP', '_LP', 'UNI-V', 'SUSHI']):
+                # Consider any DeFi token deposit as a potential LP deposit (conservative approach)
+                if action in ['DEPOSIT', 'BUY']:
                     lp_deposits.append(tx_info)
-                elif action in ['WITHDRAWAL', 'SELL'] and any(lp in coin for lp in ['-LP', '_LP', 'UNI-V', 'SUSHI']):
+                elif action in ['WITHDRAWAL', 'SELL']:
                     lp_withdrawals.append(tx_info)
         
         # Warn about LP deposits (IRS treatment unclear)
