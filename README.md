@@ -93,6 +93,7 @@ The script automatically builds and maintains this structure:
 ├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
 ├── Tax_Reviewer.py                # [CORE] Manual review assistant (heuristic audit scanner)
+├── Interactive_Review_Fixer.py    # [USER] Guided tool to fix detected audit risks
 ├── Migration_2025.py              # [TOOL] Safe-harbor allocator for per-wallet basis
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
@@ -102,6 +103,9 @@ The script automatically builds and maintains this structure:
 ├── crypto_master.db               # [AUTO] The permanent database
 ├── crypto_master.db.bak           # [AUTO] Safety backup (Last known good state)
 ├── stablecoins_cache.json         # [AUTO] Cached list of stablecoins
+│
+├── configs/
+│   └── cached_token_addresses.json # [AUTO] Cached ERC-20/token contract addresses (7-day refresh)
 │
 ├── inputs/                        # [USER] Drop manual CSVs here (MoonPay, etc.)
 ├── processed_archive/             # [AUTO] Old CSVs move here after processing
@@ -141,8 +145,8 @@ This program sends no telemetry data. All network traffic consists of direct req
 4. **Blockchair** (Used for auditing Bitcoin & UTXO chains)  
    * **Why:** To fetch balances for non-EVM chains like Bitcoin, Litecoin, and Dogecoin.  
    * [Privacy Policy](https://blockchair.com/privacy)  
-5. **CoinGecko** (Used to identify stablecoin tickers)  
-   * **Why:** To download a list of stablecoins (USDC, USDT, DAI) so the engine knows to value them strictly at $1.00 USD.  
+5. **CoinGecko** (Used to identify stablecoins and fetch token contract addresses)  
+   * **Why:** To download a list of stablecoins (USDC, USDT, DAI) so the engine knows to value them strictly at $1.00 USD. Also used to automatically fetch ERC-20 token contract addresses for on-chain price lookups.  
    * [Privacy Policy](https://www.coingecko.com/en/privacy)  
 6. **Yahoo Finance** (Used to backfill historical prices)  
    * **Why:** To fetch historical prices when current exchange data is incomplete.  
@@ -302,6 +306,163 @@ python Crypto_Tax_Engine.py
 **Review output appears:**
 - **Console:** Formatted report with warnings, suggestions, and recommended actions
 - **CSV Files:** `REVIEW_WARNINGS.csv` and `REVIEW_SUGGESTIONS.csv` in your Year_XXXX folder
+
+### **Interactive Review Fixer**
+
+After the Tax Reviewer detects issues, use the **Interactive Review Fixer** to address them through a guided, transaction-by-transaction workflow.
+
+#### **How to Use**
+
+Run the fixer for a specific tax year:
+
+```bash
+python Interactive_Review_Fixer.py 2024
+```
+
+#### **What It Does**
+
+The fixer automatically guides you through **all warnings** in order, processing each transaction individually:
+
+1. **Creates Automatic Backup**: Database backed up before any changes
+2. **Guided Flow**: No menus—automatically uses the best fix method for each warning type
+3. **Transaction-by-Transaction**: Review and decide on each asset individually
+4. **Smart Price Suggestions**: 
+   - Automatically fetches token contract addresses from CoinGecko (cached for 7 days)
+   - Checks on-chain sources when available
+   - Falls back to Yahoo Finance
+   - Shows suggested prices with accept/override/skip options
+5. **Skip Options**: Skip individual transactions (`'skip'`) or all remaining in category (`'skip-all'`)
+6. **Safety**: All changes committed at end; rollback available if needed
+
+#### **Example Workflow**
+
+```
+=== INTERACTIVE REVIEW FIXER - Guided Fix Process ===
+
+Found 3 warning(s) requiring attention.
+This tool will guide you through fixing each issue automatically.
+
+Ready to start? (yes/no): yes
+
+[✓] Database backup created: trades_backup_before_fix_20251211_143022.db
+
+================================================================================
+WARNING 1/3: Missing USD Prices
+================================================================================
+Category: MISSING_PRICES
+Severity: High
+Count: 8 issue(s)
+
+--- GUIDED FIX: MISSING PRICES ---
+For each transaction, we'll show suggested prices from available sources.
+
+[*] Using cached token addresses (age: 2 days)
+
+  PEPE on 2024-03-15 (amount: 1000000)
+    On-chain: no contract found for PEPE
+    Yahoo Finance: $0.0000089
+    → Suggested: $0.0000089
+    (Enter=accept, number=override, 'skip'=skip this, 'skip-all'=skip remaining): ↵
+    ✓ Set to $0.0000089
+
+  MATIC on 2024-05-10 (amount: 150)
+    On-chain: Found MATIC contract on polygon (0x0d500B1...)
+    Yahoo Finance: $0.68
+    → Suggested: $0.68
+    (Enter=accept, number=override, 'skip'=skip this, 'skip-all'=skip remaining): 0.72
+    ✓ Set to $0.72
+
+  [continues for all 8 transactions...]
+
+================================================================================
+WARNING 2/3: NFT/Collectible Transactions
+================================================================================
+Category: NFT_COLLECTIBLES
+Severity: Medium
+Count: 3 issue(s)
+
+--- GUIDED FIX: NFT/COLLECTIBLES ---
+Rename each NFT/collectible for proper tracking.
+
+  Current: Bored Ape #1234 (Date: 2024-02-01, Amount: 1)
+    Rename to (Enter=keep as-is, 'skip'=skip all remaining): NFT-BAYC-1234
+    ✓ Renamed to 'NFT-BAYC-1234'
+
+  [continues for all 3 NFTs...]
+
+================================================================================
+WARNING 3/3: Duplicate Transactions
+================================================================================
+Category: DUPLICATE_TRANSACTIONS
+Severity: High
+Count: 2 groups (5 transactions total)
+
+--- GUIDED FIX: DUPLICATES ---
+Review each duplicate group and choose which transaction to keep.
+
+  Duplicate group: BTC|2024-03-15|0.5|Coinbase
+    1. ID=12345, Source=Coinbase_API, Batch=batch_001
+    2. ID=12387, Source=Coinbase_CSV, Batch=batch_002
+  Which one to KEEP? (1-2, 'skip'=skip this group, 'skip-all'=skip remaining): 1
+    ✓ Deleted: 12387
+    ✓ Kept: 12345
+
+  [continues for all duplicate groups...]
+
+=== FIX SUMMARY ===
+Applied 15 fixes:
+  - 3 renames
+  - 8 price updates
+  - 4 deletions
+
+✓ All changes saved!
+✓ Backup still available at: trades_backup_before_fix_20251211_143022.db
+
+Re-run tax calculations to see updated results:
+  python Auto_Runner.py
+```
+
+#### **Features**
+
+- **Automatic Token Contract Lookup**: Fetches ERC-20 contract addresses from CoinGecko API
+  - Covers top 250 tokens by market cap across Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Fantom
+  - Cached locally for 7 days (refreshes automatically when expired)
+  - Session-level caching prevents redundant API calls within same session
+
+- **Smart Price Suggestions**: 
+  - Native coin detection (ETH, BTC, MATIC, BNB, etc.)
+  - ERC-20 token contract lookups
+  - Yahoo Finance fallback for all tokens
+  - Shows all available sources and suggests best option
+
+- **Interactive Controls**:
+  - `Enter` = Accept suggested price
+  - `number` = Override with manual price
+  - `'skip'` = Skip current transaction (will reappear next run)
+  - `'skip-all'` = Skip all remaining in category
+
+- **Safety Features**:
+  - Automatic database backup before any changes
+  - Rollback capability if needed
+  - All changes previewed before commit
+  - Detailed summary of all applied fixes
+
+- **Guided Fix Types**:
+  - **Missing Prices**: Shows suggested prices from available sources
+  - **NFT/Collectibles**: Rename for proper 28% collectibles tax treatment
+  - **Duplicates**: Choose which transaction to keep per group
+  - **Wash Sales**: Rename coins to distinguish wallets/exchanges
+  - **High Fees**: Display details for manual source CSV correction
+
+#### **After Fixing**
+
+Once you've fixed issues, re-run the tax calculation:
+
+```bash
+python Auto_Runner.py
+```
+
+The reviewer will run again. Successfully fixed items won't appear. Skipped items will reappear for review later.
 
 ### **Example Review Output**
 
