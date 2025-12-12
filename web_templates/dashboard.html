@@ -109,32 +109,78 @@
             const statsResponse = await api.get('/api/stats');
             const stats = JSON.parse(statsResponse.data);
             
-            document.getElementById('totalTransactions').textContent = stats.total_transactions.toLocaleString();
-            document.getElementById('uniqueCoins').textContent = Object.keys(stats.top_coins).length;
+            document.getElementById('totalTransactions').textContent = stats.total_transactions ? stats.total_transactions.toLocaleString() : '0';
+            document.getElementById('uniqueCoins').textContent = stats.top_coins ? Object.keys(stats.top_coins).length : '0';
             
             // Load warnings
-            const warningsResponse = await api.get('/api/warnings');
-            const warnings = JSON.parse(warningsResponse.data);
-            document.getElementById('totalWarnings').textContent = warnings.warnings.length;
+            try {
+                const warningsResponse = await api.get('/api/warnings');
+                const warnings = JSON.parse(warningsResponse.data);
+                document.getElementById('totalWarnings').textContent = warnings.warnings ? warnings.warnings.length : '0';
+            } catch (e) {
+                document.getElementById('totalWarnings').textContent = '0';
+            }
             
             // Load reports
-            const reportsResponse = await api.get('/api/reports');
-            const reports = JSON.parse(reportsResponse.data);
-            let totalReports = 0;
-            reports.forEach(year => totalReports += year.reports.length);
-            document.getElementById('totalReports').textContent = totalReports;
+            try {
+                const reportsResponse = await api.get('/api/reports');
+                const reports = JSON.parse(reportsResponse.data);
+                let totalReports = 0;
+                if (reports && Array.isArray(reports)) {
+                    reports.forEach(year => totalReports += year.reports ? year.reports.length : 0);
+                }
+                document.getElementById('totalReports').textContent = totalReports;
+            } catch (e) {
+                document.getElementById('totalReports').textContent = '0';
+            }
             
             // Update system status
+            const dbExists = await checkDatabaseExists();
             document.getElementById('systemStatus').innerHTML = `
-                <p><strong>Database:</strong> Connected ✓</p>
-                <p><strong>Date Range:</strong> ${stats.date_range.min || 'N/A'} to ${stats.date_range.max || 'N/A'}</p>
+                <p><strong>Database:</strong> ${dbExists ? 'Connected ✓' : 'Not found - Run setup'}</p>
+                <p><strong>Date Range:</strong> ${stats.date_range && stats.date_range.min ? stats.date_range.min + ' to ' + stats.date_range.max : 'No data yet'}</p>
                 <p><strong>Encryption:</strong> Active 🔒</p>
                 <p><strong>HTTPS:</strong> Enabled ✓</p>
             `;
             
+            // Update recent activity
+            if (stats.total_transactions > 0) {
+                document.getElementById('recentActivity').innerHTML = `
+                    <p>You have ${stats.total_transactions} transactions in the database.</p>
+                    <p><a href="/transactions">View all transactions →</a></p>
+                `;
+            } else {
+                document.getElementById('recentActivity').innerHTML = `
+                    <p style="color: var(--md-sys-color-on-surface-variant);">
+                        No transactions yet. Upload CSV files or connect exchange APIs to get started.
+                    </p>
+                `;
+            }
+            
         } catch (error) {
             console.error('Error loading dashboard:', error);
-            showAlert('Failed to load dashboard data: ' + error.message, 'error');
+            document.getElementById('systemStatus').innerHTML = `
+                <p style="color: var(--md-sys-color-error);">Failed to load system status.</p>
+                <p>Error: ${error.message}</p>
+            `;
+            document.getElementById('recentActivity').innerHTML = `
+                <p style="color: var(--md-sys-color-error);">Failed to load recent activity.</p>
+            `;
+            
+            // Set default values
+            document.getElementById('totalTransactions').textContent = '-';
+            document.getElementById('uniqueCoins').textContent = '-';
+            document.getElementById('totalWarnings').textContent = '-';
+            document.getElementById('totalReports').textContent = '-';
+        }
+    }
+    
+    async function checkDatabaseExists() {
+        try {
+            const response = await api.get('/api/stats');
+            return true;
+        } catch {
+            return false;
         }
     }
     

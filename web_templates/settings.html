@@ -13,6 +13,57 @@
         padding-bottom: 8px;
         border-bottom: 1px solid var(--md-sys-color-surface-variant);
     }
+    
+    .password-strength {
+        margin-top: 8px;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        display: none;
+    }
+    
+    .password-strength.weak {
+        background: #FFEBEE;
+        color: #C62828;
+        display: block;
+    }
+    
+    .password-strength.medium {
+        background: #FFF3E0;
+        color: #E65100;
+        display: block;
+    }
+    
+    .password-strength.strong {
+        background: #E8F5E9;
+        color: #2E7D32;
+        display: block;
+    }
+    
+    .danger-zone {
+        background: #FFEBEE;
+        border: 2px solid #F44336;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 16px;
+    }
+    
+    .danger-zone h4 {
+        color: #C62828;
+        margin-bottom: 12px;
+    }
+    
+    .security-warning {
+        background: var(--md-sys-color-primary-container);
+        padding: 16px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+    }
+    
+    .security-warning strong {
+        color: var(--md-sys-color-error);
+    }
 </style>
 {% endblock %}
 
@@ -26,6 +77,15 @@
             Change your password to secure your account.
         </p>
         
+        <div class="security-warning">
+            <strong>⚠️ Password Security:</strong>
+            <ul style="margin-left: 20px; margin-top: 8px;">
+                <li>Do NOT share your password with anyone</li>
+                <li>Do NOT reuse passwords from other services</li>
+                <li>Use a strong, unique password with letters, numbers, and symbols</li>
+            </ul>
+        </div>
+        
         <form id="passwordForm">
             <div class="form-group">
                 <label class="form-label">Current Password</label>
@@ -35,6 +95,7 @@
             <div class="form-group">
                 <label class="form-label">New Password</label>
                 <input type="password" id="newPassword" class="form-input" required>
+                <div id="passwordStrength" class="password-strength"></div>
             </div>
             
             <div class="form-group">
@@ -58,6 +119,18 @@
             <span class="material-icons" style="vertical-align: middle;">build</span>
             Run Setup Script
         </button>
+        
+        <div class="danger-zone">
+            <h4>⚠️ Danger Zone</h4>
+            <p style="margin-bottom: 12px;">
+                Reset the program to its initial state. This will run the setup script which may 
+                regenerate configuration files. Your database and processed data will NOT be deleted.
+            </p>
+            <button class="btn btn-secondary" onclick="resetProgram()" style="background: #F44336; color: white;">
+                <span class="material-icons" style="vertical-align: middle;">refresh</span>
+                Reset Program
+            </button>
+        </div>
     </div>
 </div>
 
@@ -86,6 +159,49 @@
 
 {% block extra_js %}
 <script>
+    // Password strength checker
+    function checkPasswordStrength(password) {
+        const strengthDiv = document.getElementById('passwordStrength');
+        
+        if (password.length === 0) {
+            strengthDiv.style.display = 'none';
+            return 0;
+        }
+        
+        let strength = 0;
+        
+        // Length check
+        if (password.length >= 8) strength++;
+        if (password.length >= 12) strength++;
+        if (password.length >= 16) strength++;
+        
+        // Character variety checks
+        if (/[a-z]/.test(password)) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[0-9]/.test(password)) strength++;
+        if (/[^a-zA-Z0-9]/.test(password)) strength++;
+        
+        // Display strength
+        strengthDiv.className = 'password-strength';
+        
+        if (strength < 4) {
+            strengthDiv.classList.add('weak');
+            strengthDiv.textContent = '⚠️ Weak password - Add more characters and variety';
+        } else if (strength < 6) {
+            strengthDiv.classList.add('medium');
+            strengthDiv.textContent = '⚡ Medium password - Consider adding special characters';
+        } else {
+            strengthDiv.classList.add('strong');
+            strengthDiv.textContent = '✓ Strong password';
+        }
+        
+        return strength;
+    }
+    
+    document.getElementById('newPassword').addEventListener('input', (e) => {
+        checkPasswordStrength(e.target.value);
+    });
+    
     document.getElementById('passwordForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -105,17 +221,35 @@
             return;
         }
         
+        // Check strength and warn if weak
+        const strength = checkPasswordStrength(newPassword);
+        if (strength < 4) {
+            if (!confirm('Your new password is weak. Are you sure you want to continue?')) {
+                return;
+            }
+        }
+        
         try {
-            const response = await api.post('/api/auth/change-password', {
-                current_password: currentPassword,
-                new_password: newPassword
+            const response = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    current_password: currentPassword,
+                    new_password: newPassword
+                })
             });
             
-            const result = JSON.parse(response.data || response);
-            showAlert(result.message || 'Password changed successfully', 'success');
+            const result = await response.json();
             
-            // Clear form
-            document.getElementById('passwordForm').reset();
+            if (result.success) {
+                showAlert(result.message || 'Password changed successfully', 'success');
+                document.getElementById('passwordForm').reset();
+                document.getElementById('passwordStrength').style.display = 'none';
+            } else {
+                showAlert(result.error || 'Failed to change password', 'error');
+            }
             
         } catch (error) {
             showAlert('Failed to change password: ' + error.message, 'error');
@@ -146,6 +280,34 @@
             
         } catch (error) {
             showAlert('Failed to run setup: ' + error.message, 'error');
+        }
+    }
+    
+    async function resetProgram() {
+        const confirmation = prompt(
+            'WARNING: This will reset the program configuration.\n\n' +
+            'Your database and transaction data will NOT be deleted.\n\n' +
+            'Type "RESET" (all caps) to confirm:'
+        );
+        
+        if (confirmation !== 'RESET') {
+            showAlert('Reset cancelled', 'info');
+            return;
+        }
+        
+        try {
+            showAlert('Resetting program...', 'info');
+            
+            const response = await api.put('/api/reset-program', { confirmation: 'RESET' });
+            const result = JSON.parse(response.data);
+            
+            if (result.success) {
+                showAlert('Program reset completed successfully', 'success');
+            } else {
+                showAlert('Reset failed: ' + (result.errors || result.message), 'error');
+            }
+        } catch (error) {
+            showAlert('Failed to reset program: ' + error.message, 'error');
         }
     }
 </script>
