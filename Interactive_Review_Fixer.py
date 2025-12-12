@@ -12,7 +12,7 @@ import pandas as pd
 import requests
 import time
 import Crypto_Tax_Engine as app
-from Crypto_Tax_Engine import DatabaseManager, logger, WALLETS_FILE, KEYS_FILE
+from Crypto_Tax_Engine import DatabaseManager, logger
 
 # Token address cache configuration
 TOKEN_CACHE_FILE = Path("configs/cached_token_addresses.json")
@@ -694,8 +694,8 @@ class InteractiveReviewFixer:
         
         # Load or create wallets.json
         try:
-            if WALLETS_FILE.exists():
-                with open(WALLETS_FILE, 'r') as f:
+            if app.WALLETS_FILE.exists():
+                with open(app.WALLETS_FILE, 'r') as f:
                     wallets = json.load(f)
             else:
                 wallets = {}
@@ -719,8 +719,8 @@ class InteractiveReviewFixer:
             
             # Save back to file
             try:
-                WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
-                with open(WALLETS_FILE, 'w') as f:
+                app.WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with open(app.WALLETS_FILE, 'w') as f:
                     json.dump(wallets, f, indent=2)
                 return True, f"✓ Saved wallet to {chain} section in wallets.json"
             except Exception as e:
@@ -741,8 +741,8 @@ class InteractiveReviewFixer:
             if coin_upper in ['BTC', 'BITCOIN']:
                 return 'bitcoin'
         
-        # Ethereum and EVM chains (0x prefix, 42 chars)
-        if address.startswith('0x') and len(address) == 42:
+        # Ethereum and EVM chains (0x prefix, 40-42 chars hex)
+        if address.startswith('0x') and 40 <= len(address) <= 42:
             # Try to infer from coin
             if coin_upper in ['ETH', 'WETH', 'ETHEREUM']:
                 return 'ethereum'
@@ -813,9 +813,12 @@ class InteractiveReviewFixer:
             tuple: (success: bool, message: str)
         """
         try:
+            # Ensure parent directory exists first
+            app.KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            
             # Load existing keys or create new structure
-            if KEYS_FILE.exists():
-                with open(KEYS_FILE, 'r') as f:
+            if app.KEYS_FILE.exists():
+                with open(app.KEYS_FILE, 'r') as f:
                     keys_data = json.load(f)
             else:
                 keys_data = {}
@@ -828,11 +831,10 @@ class InteractiveReviewFixer:
             keys_data[key_name]['apiKey'] = api_key
             
             # Write back to file
-            KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(KEYS_FILE, 'w') as f:
+            with open(app.KEYS_FILE, 'w') as f:
                 json.dump(keys_data, f, indent=2)
             
-            return True, f"API key saved to {KEYS_FILE.name}"
+            return True, f"API key saved to {app.KEYS_FILE.name}"
             
         except Exception as e:
             return False, f"Error saving API key: {str(e)}"
@@ -853,9 +855,9 @@ class InteractiveReviewFixer:
         # Load wallets first
         wallets_to_check = []
         
-        if WALLETS_FILE.exists():
+        if app.WALLETS_FILE.exists():
             try:
-                with open(WALLETS_FILE, 'r') as f:
+                with open(app.WALLETS_FILE, 'r') as f:
                     wallets_data = json.load(f)
                 
                 # Only check the correct blockchain for this coin
@@ -879,9 +881,9 @@ class InteractiveReviewFixer:
         
         # Load API keys
         api_keys = {}
-        if KEYS_FILE.exists():
+        if app.KEYS_FILE.exists():
             try:
-                with open(KEYS_FILE) as f:
+                with open(app.KEYS_FILE) as f:
                     api_keys = json.load(f)
             except Exception:
                 pass
@@ -923,9 +925,9 @@ class InteractiveReviewFixer:
         # Load wallets and API keys
         wallets_to_check = []
         
-        if WALLETS_FILE.exists():
+        if app.WALLETS_FILE.exists():
             try:
-                with open(WALLETS_FILE, 'r') as f:
+                with open(app.WALLETS_FILE, 'r') as f:
                     wallets_data = json.load(f)
                 
                 # Determine which chain this coin belongs to - ONLY CHECK THAT CHAIN
@@ -950,9 +952,9 @@ class InteractiveReviewFixer:
         # Load API keys
         moralis_key = None
         blockchair_key = None
-        if KEYS_FILE.exists():
+        if app.KEYS_FILE.exists():
             try:
-                with open(KEYS_FILE) as f:
+                with open(app.KEYS_FILE) as f:
                     keys = json.load(f)
                 blockchair_key = keys.get('blockchair', {}).get('apiKey') or None
             except Exception:
@@ -1226,10 +1228,10 @@ class InteractiveReviewFixer:
         
         if coin_upper in ['BTC', 'BITCOIN']:
             return "Blockchain Explorer: https://www.blockchain.com/explorer or https://blockchair.com/bitcoin"
-        elif coin_upper in ['ETH', 'WETH', 'ETHEREUM'] or 'ETH' in coin_upper:
-            return "Blockchain Explorer: https://etherscan.io"
         elif coin_upper in ['MATIC', 'POLYGON']:
             return "Blockchain Explorer: https://polygonscan.com"
+        elif coin_upper in ['ETH', 'WETH', 'ETHEREUM'] or 'ETH' in coin_upper:
+            return "Blockchain Explorer: https://etherscan.io"
         elif coin_upper in ['BNB', 'WBNB']:
             return "Blockchain Explorer: https://bscscan.com"
         elif coin_upper in ['AVAX', 'WAVAX']:
@@ -1249,11 +1251,11 @@ class InteractiveReviewFixer:
     def _try_blockchain_price(self, coin, date_str):
         """Attempt on-chain pricing using wallets/key context. Returns (price, message)."""
         # If no wallets, we can't infer chains
-        if not WALLETS_FILE.exists():
+        if not app.WALLETS_FILE.exists():
             return None, "wallets.json not found"
 
         try:
-            with open(WALLETS_FILE) as f:
+            with open(app.WALLETS_FILE) as f:
                 wallets = json.load(f)
             if not wallets:
                 return None, "wallets.json empty"
@@ -1263,9 +1265,9 @@ class InteractiveReviewFixer:
         # Check keys
         moralis_key = None
         blockchair_key = None
-        if KEYS_FILE.exists():
+        if app.KEYS_FILE.exists():
             try:
-                with open(KEYS_FILE) as f:
+                with open(app.KEYS_FILE) as f:
                     keys = json.load(f)
                 moralis_key = keys.get('moralis', {}).get('apiKey') or None
                 blockchair_key = keys.get('blockchair', {}).get('apiKey') or None

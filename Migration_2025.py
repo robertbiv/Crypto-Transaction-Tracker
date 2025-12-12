@@ -40,7 +40,12 @@ def build_universal_lots(db):
     """Recreate a universal FIFO lot pool ignoring source (for 2024 history)."""
     df = db.get_all()
     df['date_dt'] = pd.to_datetime(df['date'])
-    df = df[df['date_dt'] <= CUTOFF_DATE].sort_values('date_dt')
+    # Ensure both sides of comparison are timezone-aware or timezone-naive
+    cutoff = pd.Timestamp(CUTOFF_DATE)
+    if df['date_dt'].dt.tz is not None:
+        # If df has timezone, make cutoff timezone-aware
+        cutoff = cutoff.tz_localize('UTC')
+    df = df[df['date_dt'] <= cutoff].sort_values('date_dt')
     lots = {}
     for _, t in df.iterrows():
         coin = t['coin']
