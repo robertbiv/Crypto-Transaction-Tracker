@@ -135,7 +135,6 @@ def validate_api_signature(data, timestamp, signature):
     """Validate API request signature"""
     # Check timestamp is recent (within 5 minutes)
     try:
-        from datetime import timezone
         request_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
         now = datetime.now(timezone.utc)
         if now - request_time > timedelta(minutes=5):
@@ -183,15 +182,31 @@ def api_security_required(f):
 def load_users():
     """Load users from JSON file"""
     if not USERS_FILE.exists():
-        # Create default admin user (password: admin123 - should be changed!)
+        # Create default admin user with random password
+        import secrets
+        import string
+        # Generate random password
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        random_password = ''.join(secrets.choice(alphabet) for _ in range(16))
+        
         default_user = {
             'admin': {
-                'password_hash': bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
-                'created_at': datetime.now().isoformat()
+                'password_hash': bcrypt.hashpw(random_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'initial_password': random_password  # Store for first-time display only
             }
         }
         with open(USERS_FILE, 'w') as f:
             json.dump(default_user, f, indent=4)
+        
+        print("\n" + "="*60)
+        print("⚠️  NEW ADMIN ACCOUNT CREATED")
+        print("="*60)
+        print(f"Username: admin")
+        print(f"Password: {random_password}")
+        print("\n⚠️  SAVE THIS PASSWORD! It will not be shown again.")
+        print("="*60 + "\n")
+        
         return default_user
     
     with open(USERS_FILE, 'r') as f:
@@ -918,8 +933,12 @@ def api_upload_csv():
 def api_run_tax_calculation():
     """Start tax calculation"""
     try:
+        auto_runner = BASE_DIR / 'Auto_Runner.py'
+        if not auto_runner.exists():
+            return jsonify({'error': 'Auto_Runner.py not found'}), 404
+        
         # Run Auto_Runner.py in background
-        subprocess.Popen([sys.executable, str(BASE_DIR / 'Auto_Runner.py')])
+        subprocess.Popen([sys.executable, str(auto_runner)])
         
         result = {
             'success': True,
@@ -971,10 +990,9 @@ def main():
     
     # Check if default password is still in use
     users = load_users()
-    if 'admin' in users:
-        print("\n⚠️  WARNING: Default admin password detected!")
-        print("   Username: admin")
-        print("   Password: admin123")
+    if 'admin' in users and 'initial_password' in users['admin']:
+        print("\n⚠️  FIRST TIME SETUP DETECTED!")
+        print(f"   Admin password was shown above when the account was created.")
         print("   CHANGE THIS IMMEDIATELY after logging in!\n")
     
     # Start server

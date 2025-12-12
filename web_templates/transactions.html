@@ -272,11 +272,19 @@
                 <td>${parseFloat(tx.fee).toFixed(8)} ${tx.fee_coin || tx.coin}</td>
                 <td>${tx.source}</td>
                 <td>
-                    <span class="material-icons edit-icon" onclick="editTransaction('${tx.id}')">edit</span>
-                    <span class="material-icons delete-icon" onclick="deleteTransaction('${tx.id}')">delete</span>
+                    <span class="material-icons edit-icon" data-tx-id="${tx.id}">edit</span>
+                    <span class="material-icons delete-icon" data-tx-id="${tx.id}">delete</span>
                 </td>
             </tr>
         `).join('');
+        
+        // Add event listeners for edit/delete buttons
+        tbody.querySelectorAll('.edit-icon').forEach(el => {
+            el.addEventListener('click', () => editTransaction(el.dataset.txId));
+        });
+        tbody.querySelectorAll('.delete-icon').forEach(el => {
+            el.addEventListener('click', () => deleteTransaction(el.dataset.txId));
+        });
     }
     
     function updatePagination() {
