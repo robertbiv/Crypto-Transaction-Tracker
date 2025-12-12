@@ -433,35 +433,69 @@ def logout():
 @login_required
 def change_password():
     """Change user password"""
-    data = request.get_json()
-    current_password = data.get('current_password')
-    new_password = data.get('new_password')
-    
-    if not current_password or not new_password:
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    username = session['username']
-    
-    # Verify current password
-    if not verify_password(username, current_password):
-        return jsonify({'error': 'Current password is incorrect'}), 401
-    
-    # Update password
-    users = load_users()
-    users[username]['password_hash'] = bcrypt.hashpw(
-        new_password.encode('utf-8'), 
-        bcrypt.gensalt()
-    ).decode('utf-8')
-    users[username]['password_changed_at'] = datetime.now().isoformat()
-    save_users(users)
-    
-    return jsonify({'success': True, 'message': 'Password changed successfully'})
+    # Get data from request (may be encrypted or plain for password change)
+    try:
+        data = request.get_json()
+        # Try to decrypt if encrypted
+        if 'data' in data:
+            data = decrypt_data(data['data'])
+        
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        if not current_password or not new_password:
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        username = session['username']
+        
+        # Verify current password
+        if not verify_password(username, current_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        
+        # Update password
+        users = load_users()
+        users[username]['password_hash'] = bcrypt.hashpw(
+            new_password.encode('utf-8'), 
+            bcrypt.gensalt()
+        ).decode('utf-8')
+        users[username]['password_changed_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # Remove initial_password marker if it exists
+        if 'initial_password' in users[username]:
+            del users[username]['initial_password']
+        
+        save_users(users)
+        
+        return jsonify({'success': True, 'message': 'Password changed successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ==========================================
 # MAIN UI ROUTES
 # ==========================================
 
 @app.route('/')
+def index():
+    """Main entry point - redirect to setup or dashboard"""
+    # Check if setup is needed (no users exist)
+    if not USERS_FILE.exists():
+        return redirect(url_for('setup_page'))
+    
+    # Check if logged in
+    if 'username' in session:
+        return redirect(url_for('dashboard'))
+    
+    return redirect(url_for('login'))
+
+@app.route('/setup', methods=['GET'])
+def setup_page():
+    """Setup page for first-time configuration"""
+    # If users already exist, redirect to login
+    if USERS_FILE.exists():
+        return redirect(url_for('login'))
+    return render_template('setup.html')
+
+@app.route('/dashboard')
 @login_required
 def dashboard():
     """Main dashboard"""
@@ -496,6 +530,18 @@ def reports_page():
 def settings_page():
     """Settings page"""
     return render_template('settings.html')
+
+@app.route('/logs')
+@login_required
+def logs_page():
+    """Logs page"""
+    return render_template('logs.html')
+
+@app.route('/schedule')
+@login_required
+def schedule_page():
+    """Schedule page"""
+    return render_template('schedule.html')
 
 # ==========================================
 # API ROUTES - TRANSACTIONS
@@ -966,6 +1012,116 @@ def api_run_setup():
         response_data = {
             'success': result.returncode == 0,
             'message': 'Setup completed' if result.returncode == 0 else 'Setup failed',
+            'output': result.stdout,
+            'errors': result.stderr
+        }
+        
+        encrypted_response = encrypt_data(response_data)
+        return jsonify({'data': encrypted_response})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/initial-setup', methods=['POST'])
+def api_initial_setup():
+    """Initial setup - create first user account"""
+    # Only allow if no users exist
+    if USERS_FILE.exists():
+        return jsonify({'error': 'Setup already completed'}), 403
+    
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+        
+        # Create user
+        users = {
+            username: {
+                'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'setup_completed': True
+            }
+        }
+        
+        save_users(users)
+        
+        return jsonify({'success': True, 'message': 'Setup completed successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs', methods=['GET'])
+@login_required
+@api_security_required
+def api_get_logs():
+    """Get list of log files"""
+    try:
+        logs = []
+        log_dir = OUTPUT_DIR / 'logs'
+        
+        if log_dir.exists():
+            for log_file in sorted(log_dir.glob('*.log'), key=lambda x: x.stat().st_mtime, reverse=True):
+                logs.append({
+                    'name': log_file.name,
+                    'path': str(log_file.relative_to(BASE_DIR)),
+                    'size': log_file.stat().st_size,
+                    'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                })
+        
+        encrypted_response = encrypt_data(logs)
+        return jsonify({'data': encrypted_response})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/download/<path:log_path>', methods=['GET'])
+@login_required
+def api_download_log(log_path):
+    """Download a log file"""
+    try:
+        file_path = BASE_DIR / log_path
+        
+        # Security check - ensure file is within log directory
+        log_dir = OUTPUT_DIR / 'logs'
+        if not str(file_path.resolve()).startswith(str(log_dir.resolve())):
+            return jsonify({'error': 'Invalid file path'}), 403
+        
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+        
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reset-program', methods=['POST'])
+@login_required
+@api_security_required
+def api_reset_program():
+    """Reset the program - runs setup with confirmation"""
+    try:
+        encrypted_payload = request.get_json().get('data')
+        if not encrypted_payload:
+            return jsonify({'error': 'Missing encrypted data'}), 400
+        
+        data = decrypt_data(encrypted_payload)
+        confirmation = data.get('confirmation', '')
+        
+        if confirmation != 'RESET':
+            return jsonify({'error': 'Invalid confirmation'}), 400
+        
+        # Run Setup.py
+        result = subprocess.run(
+            [sys.executable, str(BASE_DIR / 'Setup.py')],
+            capture_output=True,
+            text=True
+        )
+        
+        response_data = {
+            'success': result.returncode == 0,
+            'message': 'Program reset completed' if result.returncode == 0 else 'Reset failed',
             'output': result.stdout,
             'errors': result.stderr
         }
