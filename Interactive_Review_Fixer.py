@@ -165,7 +165,7 @@ class InteractiveReviewFixer:
                 print("    → Kept as-is")
     
     def _guided_fix_missing_prices(self, warning):
-        """Guided fix for missing prices - check blockchain first, then prompt for wallet"""
+        """Guided fix for missing prices - check blockchain first with API key prompts"""
         print("\n--- GUIDED FIX: MISSING PRICES ---")
         print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
         
@@ -189,11 +189,18 @@ class InteractiveReviewFixer:
                 print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
                 
                 # Step 1: Check if transaction is on blockchain with existing wallets
-                bc_found, bc_price, bc_details = self._check_transaction_on_blockchain(
+                # This will prompt for API key if needed
+                bc_found, bc_price, bc_details, api_key_needed = self._check_transaction_on_blockchain_with_prompts(
                     transaction_id, coin, date_str, item['amount']
                 )
                 
                 new_wallet_to_save = None
+                
+                # If API key was needed but user skipped, treat as not found
+                if api_key_needed == 'skipped':
+                    print(f"    ⚠️  API key required but skipped - treating as transaction not found")
+                    bc_found = False
+                    bc_price = None
                 
                 if bc_found:
                     # Transaction found on blockchain
@@ -210,7 +217,7 @@ class InteractiveReviewFixer:
                         new_wallet_to_save = input("    Enter wallet address: ").strip()
                 else:
                     # Transaction NOT found on blockchain
-                    print(f"    ⚠️  Transaction not found on blockchain with existing wallet addresses")
+                    print(f"    ⚠️  Transaction not found on blockchain")
                     
                     # Prompt for wallet address
                     add_wallet = input("    Would you like to enter a wallet address to check blockchain? (y/n): ").strip().lower()
@@ -220,10 +227,14 @@ class InteractiveReviewFixer:
                         if new_wallet_to_save:
                             # Check blockchain again with new wallet
                             print(f"    🔍 Checking blockchain with provided wallet...")
-                            bc_found_new, bc_price_new, bc_details_new = self._check_transaction_on_blockchain(
+                            bc_found_new, bc_price_new, bc_details_new, api_key_status = self._check_transaction_on_blockchain_with_prompts(
                                 transaction_id, coin, date_str, item['amount'], 
                                 additional_wallet=new_wallet_to_save
                             )
+                            
+                            if api_key_status == 'skipped':
+                                print(f"    ⚠️  API key required but skipped")
+                                bc_found_new = False
                             
                             if bc_found_new:
                                 print(f"    ✅ Transaction found with provided wallet!")
@@ -234,7 +245,7 @@ class InteractiveReviewFixer:
                             else:
                                 print(f"    ❌ Transaction not found with provided wallet on blockchain")
                 
-                # Step 2: Ask if they want to save the wallet (if provided)
+                # Step 2: Always ask if they want to save the wallet (if provided)
                 if new_wallet_to_save:
                     save_wallet = input("    Save this wallet address to wallets.json? (y/n): ").strip().lower()
                     if save_wallet == 'y':
@@ -690,6 +701,143 @@ class InteractiveReviewFixer:
         # Couldn't determine
         return None
     
+    def _prompt_for_api_key(self, service_name, key_name):
+        """Prompt user to enter API key and optionally save it
+        
+        Args:
+            service_name: Human-readable service name (e.g., "Blockchair", "Etherscan")
+            key_name: Key name in api_keys.json (e.g., "blockchair", "etherscan")
+        
+        Returns:
+            tuple: (api_key: str or None, status: 'provided'|'skipped'|'error')
+        """
+        print(f"\n    🔑 {service_name} API key required for blockchain verification")
+        print(f"    Visit https://{service_name.lower()}.com to get a free API key")
+        
+        user_choice = input(f"    Enter API key (or 'skip' to use Yahoo Finance fallback): ").strip()
+        
+        if user_choice.lower() == 'skip' or not user_choice:
+            return None, 'skipped'
+        
+        api_key = user_choice
+        
+        # Ask if they want to save it
+        save_key = input(f"    Save this API key to api_keys.json for future use? (y/n): ").strip().lower()
+        
+        if save_key == 'y':
+            success, message = self._save_api_key(key_name, api_key)
+            if success:
+                print(f"    💾 {message}")
+            else:
+                print(f"    ⚠️  {message}")
+        
+        return api_key, 'provided'
+    
+    def _save_api_key(self, key_name, api_key):
+        """Save API key to api_keys.json
+        
+        Args:
+            key_name: Key name (e.g., "blockchair", "etherscan", "polygonscan")
+            api_key: The API key value
+        
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # Load existing keys or create new structure
+            if KEYS_FILE.exists():
+                with open(KEYS_FILE, 'r') as f:
+                    keys_data = json.load(f)
+            else:
+                keys_data = {}
+            
+            # Ensure proper structure
+            if key_name not in keys_data:
+                keys_data[key_name] = {}
+            
+            # Save the API key
+            keys_data[key_name]['apiKey'] = api_key
+            
+            # Write back to file
+            KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(KEYS_FILE, 'w') as f:
+                json.dump(keys_data, f, indent=2)
+            
+            return True, f"API key saved to {KEYS_FILE.name}"
+            
+        except Exception as e:
+            return False, f"Error saving API key: {str(e)}"
+    
+    def _check_transaction_on_blockchain_with_prompts(self, transaction_id, coin, date_str, amount, additional_wallet=None):
+        """Check blockchain with API key prompting if needed
+        
+        Args:
+            transaction_id: Transaction ID from database
+            coin: Coin symbol (e.g., 'BTC', 'ETH')
+            date_str: Date string of transaction (YYYY-MM-DD format)
+            amount: Transaction amount
+            additional_wallet: Optional additional wallet address to check
+        
+        Returns:
+            tuple: (found: bool, price: float or None, details: str or None, api_key_status: str)
+        """
+        # Load wallets first
+        wallets_to_check = []
+        
+        if WALLETS_FILE.exists():
+            try:
+                with open(WALLETS_FILE, 'r') as f:
+                    wallets_data = json.load(f)
+                
+                # Only check the correct blockchain for this coin
+                chain = self._infer_chain_from_coin(coin)
+                
+                if chain and chain in wallets_data:
+                    wallet_list = wallets_data[chain]
+                    if isinstance(wallet_list, list):
+                        wallets_to_check.extend(wallet_list)
+                    elif isinstance(wallet_list, dict) and 'addresses' in wallet_list:
+                        wallets_to_check.extend(wallet_list['addresses'])
+            except Exception as e:
+                pass
+        
+        # Add additional wallet if provided
+        if additional_wallet:
+            wallets_to_check.append(additional_wallet)
+        
+        if not wallets_to_check:
+            return False, None, "No wallet addresses configured for this blockchain", 'no_wallets'
+        
+        # Load API keys
+        api_keys = {}
+        if KEYS_FILE.exists():
+            try:
+                with open(KEYS_FILE) as f:
+                    api_keys = json.load(f)
+            except Exception:
+                pass
+        
+        coin_upper = coin.upper()
+        
+        # Route to appropriate blockchain and check/prompt for API key
+        if coin_upper in ['BTC', 'BITCOIN']:
+            # Bitcoin requires Blockchair
+            blockchair_key = api_keys.get('blockchair', {}).get('apiKey')
+            
+            if not blockchair_key:
+                # Prompt for API key
+                blockchair_key, status = self._prompt_for_api_key('Blockchair', 'blockchair')
+                if status == 'skipped':
+                    return False, None, "Blockchair API key required but skipped", 'skipped'
+            
+            found, price, details = self._check_bitcoin_transaction(wallets_to_check, date_str, amount, blockchair_key)
+            return found, price, details, 'ok'
+        
+        else:
+            # EVM chains - will check within _check_evm_transaction
+            found, price, details = self._check_evm_transaction_with_prompts(wallets_to_check, coin_upper, date_str, amount, api_keys)
+            return found, price, details, 'ok'
+    
     def _check_transaction_on_blockchain(self, transaction_id, coin, date_str, amount, additional_wallet=None):
         """Check if transaction exists on blockchain with wallet addresses using Etherscan/Blockchair
         
@@ -711,7 +859,7 @@ class InteractiveReviewFixer:
                 with open(WALLETS_FILE, 'r') as f:
                     wallets_data = json.load(f)
                 
-                # Determine which chain this coin belongs to
+                # Determine which chain this coin belongs to - ONLY CHECK THAT CHAIN
                 chain = self._infer_chain_from_coin(coin)
                 
                 if chain and chain in wallets_data:
@@ -743,7 +891,7 @@ class InteractiveReviewFixer:
         
         coin_upper = coin.upper()
         
-        # Route to appropriate blockchain API
+        # Route to appropriate blockchain API (ONLY the correct one for this coin)
         if coin_upper in ['BTC', 'BITCOIN']:
             # Use Blockchair for Bitcoin
             return self._check_bitcoin_transaction(wallets_to_check, date_str, amount, blockchair_key)
@@ -814,7 +962,41 @@ class InteractiveReviewFixer:
         
         return False, None, f"Bitcoin transaction not found in {len(wallets)} wallet(s)"
     
-    def _check_evm_transaction(self, wallets, coin, date_str, amount):
+    def _check_evm_transaction_with_prompts(self, wallets, coin, date_str, amount, api_keys):
+        """Check EVM transaction with API key prompting if needed
+        
+        Returns: (found: bool, price: float or None, details: str or None)
+        """
+        import datetime as dt
+        
+        # Map coins to their API services
+        coin_to_service = {
+            'ETH': ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'),
+            'WETH': ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'),
+            'MATIC': ('Polygonscan', 'polygonscan', 'https://api.polygonscan.com/api'),
+            'BNB': ('BSCScan', 'bscscan', 'https://api.bscscan.com/api'),
+            'WBNB': ('BSCScan', 'bscscan', 'https://api.bscscan.com/api'),
+            'AVAX': ('Snowtrace', 'snowtrace', 'https://api.snowtrace.io/api'),
+            'WAVAX': ('Snowtrace', 'snowtrace', 'https://api.snowtrace.io/api'),
+            'FTM': ('FTMScan', 'ftmscan', 'https://api.ftmscan.com/api'),
+        }
+        
+        # Get service info for this coin (default to Etherscan)
+        service_name, key_name, api_url = coin_to_service.get(coin, ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'))
+        
+        # Check if we have the API key
+        api_key = api_keys.get(key_name, {}).get('apiKey')
+        
+        if not api_key:
+            # Prompt for API key
+            api_key, status = self._prompt_for_api_key(service_name, key_name)
+            if status == 'skipped' or not api_key:
+                return False, None, f"{service_name} API key required but skipped"
+        
+        # Now check the transaction with the API key
+        return self._check_evm_transaction(wallets, coin, date_str, amount, api_key, api_url)
+    
+    def _check_evm_transaction(self, wallets, coin, date_str, amount, api_key=None, api_url=None):
         """Check Ethereum/EVM transaction on blockchain using Etherscan-compatible API
         
         Returns: (found: bool, price: float or None, details: str or None)
@@ -850,13 +1032,18 @@ class InteractiveReviewFixer:
             }
         }
         
-        # Default to Ethereum for ERC-20 tokens
-        chain_info = chain_apis.get(coin, chain_apis.get('ETH', {}))
-        api_url = chain_info.get('api_url')
-        chain_name = chain_info.get('name', 'EVM Chain')
+        # Use provided api_url or default to Ethereum for ERC-20 tokens
+        if not api_url:
+            chain_info = chain_apis.get(coin, chain_apis.get('ETH', {}))
+            api_url = chain_info.get('api_url')
+            chain_name = chain_info.get('name', 'EVM Chain')
         
         if not api_url:
             return False, None, f"API not configured for {coin}"
+        
+        # Use provided api_key or placeholder
+        if not api_key:
+            api_key = 'YourApiKeyToken'  # Placeholder
         
         try:
             tx_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -872,7 +1059,7 @@ class InteractiveReviewFixer:
                             'startblock': 0,
                             'endblock': 99999999,
                             'sort': 'desc',
-                            'apikey': 'YourApiKeyToken'  # Placeholder - would use from keys.json
+                            'apikey': api_key
                         }
                         
                         response = requests.get(api_url, params=params, timeout=10)
