@@ -7270,7 +7270,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         self.assertEqual(len(fbar_warnings), 0, "Binance.US should NOT trigger FBAR (US-registered)")
     
     def test_fbar_threshold_exactly_10k(self):
-        """Test: FBAR triggers at exactly $10,000 threshold"""
+        """Test: FBAR does NOT trigger at exactly $10,000 threshold"""
         from Tax_Reviewer import TaxReviewer
         
         # OKX with exactly $10,000
@@ -7292,8 +7292,57 @@ class TestFBARCompliance2025(unittest.TestCase):
         
         # Exactly $10,000 should NOT trigger (must be > $10,000)
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
-        # At exactly $10,000, should not trigger (requires > $10,000)
         self.assertEqual(len(fbar_warnings), 0, "Exactly $10,000 should not trigger FBAR (must be > $10,000)")
+    
+    def test_fbar_aggregate_multiple_exchanges_below_threshold_individually(self):
+        """Test: FBAR CRITICAL RULE - Aggregate of multiple exchanges below individual threshold but above $10k combined"""
+        from Tax_Reviewer import TaxReviewer
+        
+        # This is the critical scenario: $6,000 on Binance + $5,000 on KuCoin = $11,000 total
+        # Old (wrong) logic: Neither flagged individually (both < $10k). Result: No FBAR warning - FAILURE TO FILE
+        # New (correct) logic: Aggregate = $11,000 > $10,000. Result: FBAR warning - COMPLIANCE
+        
+        self.db.save_trade({
+            'id': 'binance_1',
+            'date': '2025-01-15',
+            'source': 'BINANCE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 0.12,
+            'price_usd': 50000,  # 0.12 * 50,000 = $6,000
+            'fee': 0,
+            'batch_id': 'test'
+        })
+        self.db.save_trade({
+            'id': 'kucoin_1',
+            'date': '2025-02-20',
+            'source': 'KUCOIN',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': 2.5,
+            'price_usd': 2000,  # 2.5 * 2,000 = $5,000
+            'fee': 0,
+            'batch_id': 'test'
+        })
+        self.db.commit()
+        
+        reviewer = TaxReviewer(self.db, 2025)
+        report = reviewer.run_review()
+        
+        # MUST flag - aggregate is $11,000 (> $10,000)
+        fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
+        self.assertEqual(len(fbar_warnings), 1, "Should have ONE FBAR warning for aggregate > $10k")
+        
+        # Verify it includes both exchanges
+        warning = fbar_warnings[0]
+        self.assertEqual(warning['count'], 2, "Warning should list both foreign exchanges")
+        self.assertGreater(warning['aggregate_balance'], 10000, "Aggregate should exceed $10,000")
+        
+        # Verify all exchanges are listed
+        exchange_names = [item['exchange'] for item in warning['items']]
+        self.assertIn('BINANCE', exchange_names)
+        self.assertIn('KUCOIN', exchange_names)
+
     
     def test_fbar_threshold_10k_plus_one(self):
         """Test: FBAR triggers at $10,001 (just above threshold)"""
@@ -7395,7 +7444,9 @@ class TestFBARCompliance2025(unittest.TestCase):
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
         self.assertEqual(len(fbar_warnings), 1, "Should have one FBAR warning")
-        self.assertEqual(fbar_warnings[0]['count'], 2, "Should flag Binance and OKX (2 exchanges >$10k)")
+        # All three exchanges should be listed in the warning (aggregate = $35,000)
+        self.assertEqual(fbar_warnings[0]['count'], 3, "Should list all 3 foreign exchanges (aggregate > $10k)")
+        self.assertGreater(fbar_warnings[0]['aggregate_balance'], 10000, "Aggregate should exceed $10,000")
     
     def test_fbar_recognizes_crypto_dot_com(self):
         """Test: Crypto.com properly identified as foreign exchange"""

@@ -499,9 +499,10 @@ class TaxReviewer:
                     'value': transaction_value
                 })
         
-        # Check for FBAR triggers
-        foreign_exchanges_flagged = []
+        # Check for FBAR triggers - AGGREGATE all foreign exchanges first
+        foreign_exchanges_list = []
         self_custody_flagged = []
+        aggregate_foreign_value = 0
         
         for exchange, data in exchange_balances.items():
             total_value = data['total_value']
@@ -517,17 +518,18 @@ class TaxReviewer:
             )
             is_wallet = any(w in exchange for w in ['WALLET', 'COLD', 'LEDGER', 'TREZOR', 'HARDWARE'])
             
-            # Foreign exchange threshold check
-            if is_foreign and total_value > 10000:
-                foreign_exchanges_flagged.append({
+            # Collect all foreign exchanges for aggregation
+            if is_foreign:
+                aggregate_foreign_value += total_value
+                foreign_exchanges_list.append({
                     'exchange': exchange,
-                    'max_balance_usd': total_value,
+                    'balance_usd': total_value,
                     'timestamp': data['transactions'][0]['date'] if data['transactions'] else 'Unknown',
                     'count': len(data['transactions'])
                 })
             
             # Self-custody uncertainty flag
-            elif is_wallet:
+            if is_wallet:
                 if total_value > 0:
                     self_custody_flagged.append({
                         'wallet': exchange,
@@ -536,17 +538,19 @@ class TaxReviewer:
                         'count': len(data['transactions'])
                     })
         
-        # Issue warnings for foreign exchanges
-        if foreign_exchanges_flagged:
+        # Issue warning if AGGREGATE foreign value exceeds $10,000 (IRS Rule)
+        if aggregate_foreign_value > 10000:
             self.warnings.append({
                 'severity': 'HIGH',
                 'category': 'FBAR_FOREIGN_EXCHANGES',
-                'title': 'FBAR Filing Likely Required (Foreign Exchange Accounts)',
-                'count': len(foreign_exchanges_flagged),
-                'description': '2025 COMPLIANCE: FinCEN requires FBAR (Form 114) filing if aggregate value of foreign financial accounts exceeds $10,000 at any point in the year. ' \
+                'title': 'FBAR Filing Required (Foreign Exchange Accounts)',
+                'count': len(foreign_exchanges_list),
+                'description': '2025 COMPLIANCE: FinCEN requires FBAR (Form 114) filing if the COMBINED TOTAL of all foreign financial accounts exceeds $10,000 at any point in the year. ' \
+                              f'Your combined foreign exchange balance: ${aggregate_foreign_value:,.2f}. ' \
                               'Custodial accounts on foreign-based exchanges (Binance, OKX, KuCoin, etc.) count as reportable accounts.',
-                'items': foreign_exchanges_flagged,
-                'action': 'If total value exceeded $10,000: File FinCEN Form 114 (FBAR) by April 15, 2026 (or Oct 15 with extension). ' \
+                'items': foreign_exchanges_list,
+                'aggregate_balance': aggregate_foreign_value,
+                'action': 'Your combined foreign exchange accounts exceed $10,000: File FinCEN Form 114 (FBAR) by April 15, 2026 (or Oct 15 with extension). ' \
                          'Failure to file can result in civil penalties ($10,000+) or criminal charges.'
             })
         
