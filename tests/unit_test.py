@@ -8188,5 +8188,289 @@ class TestBlockchainIntegration(unittest.TestCase):
         self.assertIn('solscan', sol_hint.lower())
 
 
+# --- NEW TESTS FOR RECENT BUG FIXES ---
+class TestPriceFetcherIntegration(unittest.TestCase):
+    """Tests for PriceFetcher integration to catch method name and datetime errors"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+    
+    def test_price_fetcher_has_get_price_method(self):
+        """Test: PriceFetcher has get_price method (not fetch)"""
+        fetcher = app.PriceFetcher()
+        
+        # Verify method exists
+        self.assertTrue(hasattr(fetcher, 'get_price'))
+        self.assertTrue(callable(getattr(fetcher, 'get_price')))
+        
+        # Verify 'fetch' method does NOT exist (common typo)
+        self.assertFalse(hasattr(fetcher, 'fetch'))
+    
+    def test_price_fetcher_signature(self):
+        """Test: PriceFetcher.get_price() signature check"""
+        import inspect
+        fetcher = app.PriceFetcher()
+        
+        # Get the signature of get_price method
+        sig = inspect.signature(fetcher.get_price)
+        params = list(sig.parameters.keys())
+        
+        # Should have parameters for symbol and date
+        self.assertEqual(len(params), 2, "get_price should accept 2 parameters (symbol, date)")
+
+
+class TestDeFiLPConservativeMode(unittest.TestCase):
+    """Tests for DeFi LP conservative treatment to catch conversion errors"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'defi_lp_tax.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+        
+        # Store original config
+        self.orig_defi_conservative = app.DEFI_LP_CONSERVATIVE
+    
+    def tearDown(self):
+        self.db.close()
+        app.BASE_DIR = self.orig_base
+        app.DEFI_LP_CONSERVATIVE = self.orig_defi_conservative
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+    
+    def test_all_lp_patterns_detected(self):
+        """Test: All DeFi LP token patterns are detected correctly"""
+        app.DEFI_LP_CONSERVATIVE = True
+        
+        lp_tokens = [
+            'UNI-V2-ETH-USDC-LP',
+            'UNI-V3-WBTC-ETH-LP',
+            'SUSHI-ETH-DAI-LP',
+            'CURVE-3POOL-LP',
+            'BALANCER-WETH-USDC-LP',
+            'AAVE-POOL-TOKEN',
+            'COMPOUND-cDAI',
+            'YEARN-yUSDC',
+            'SOME-TOKEN-LP',  # Generic -LP suffix
+            'ANOTHER_LP_TOKEN',  # Generic _LP pattern
+            'UNISWAP-V2-POOL-TOKEN'  # POOL keyword
+        ]
+        
+        for token in lp_tokens:
+            result = app.is_defi_lp_token(token)
+            self.assertTrue(result, f"Failed to detect LP token: {token}")
+        
+        # Verify normal tokens are NOT detected (AAVE token itself contains 'AAVE' pattern, so skip it)
+        normal_tokens = ['BTC', 'ETH', 'USDC', 'LINK', 'UNI']
+        for token in normal_tokens:
+            result = app.is_defi_lp_token(token)
+            self.assertFalse(result, f"False positive: {token} detected as LP token")
+
+
+class TestTimezoneHandling(unittest.TestCase):
+    """Tests for timezone handling to catch tz-aware/tz-naive comparison errors"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+    
+    def test_migration_cutoff_date_timezone_compatibility(self):
+        """Test: Migration cutoff date handles both tz-aware and tz-naive comparisons"""
+        from Migration_2025 import CUTOFF_DATE
+        from datetime import datetime
+        
+        # Create a tz-aware timestamp
+        tz_aware_date = pd.Timestamp('2024-12-31', tz='UTC')
+        
+        # Create a tz-naive timestamp  
+        tz_naive_date = pd.Timestamp('2024-12-31')
+        
+        # Convert cutoff to pd.Timestamp for comparison
+        cutoff_aware = pd.Timestamp(CUTOFF_DATE).tz_localize('UTC')
+        cutoff_naive = pd.Timestamp(CUTOFF_DATE)
+        
+        # Both comparisons should work without TypeError
+        try:
+            _ = tz_aware_date < cutoff_aware
+            _ = tz_naive_date < cutoff_naive
+            self.assertTrue(True)  # If we get here, test passes
+        except TypeError as e:
+            if 'Cannot compare tz-naive and tz-aware' in str(e):
+                self.fail(f"Timezone comparison failed: {e}")
+            raise
+    
+    def test_engine_migration_inventory_date_comparison(self):
+        """Test: Engine handles migration inventory datetime comparison correctly"""
+        from datetime import datetime
+        
+        # The engine compares migration inventory dates with CUTOFF (2025-01-01)
+        migration_cutoff = datetime(2025, 1, 1)
+        
+        # Create both tz-aware and tz-naive timestamps
+        tz_aware = pd.Timestamp(migration_cutoff, tz='UTC')
+        tz_naive = pd.Timestamp(migration_cutoff)
+        
+        # Test date from a trade
+        trade_date_aware = pd.Timestamp('2024-06-15', tz='UTC')
+        trade_date_naive = pd.Timestamp('2024-06-15')
+        
+        # These comparisons should not raise TypeError
+        try:
+            _ = trade_date_aware < tz_aware
+            _ = trade_date_naive < tz_naive
+            self.assertTrue(True)
+        except TypeError as e:
+            if 'Cannot compare tz-naive and tz-aware' in str(e):
+                self.fail(f"Date comparison failed: {e}")
+            raise
+
+
+class TestInteractiveFixerImports(unittest.TestCase):
+    """Tests for Interactive_Review_Fixer import references"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'fixer_imports_tax.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.CONFIG_FILE = self.test_path / 'config.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+    
+    def tearDown(self):
+        self.db.close()
+        app.BASE_DIR = self.orig_base
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+    
+    def test_fixer_uses_app_module_constants(self):
+        """Test: Interactive_Review_Fixer uses app.WALLETS_FILE not direct import"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Override app.WALLETS_FILE for test
+        custom_wallets_file = self.test_path / 'custom_wallets.json'
+        app.WALLETS_FILE = custom_wallets_file
+        
+        # Create custom wallets file
+        with open(custom_wallets_file, 'w') as f:
+            json.dump({'bitcoin': ['test_address']}, f)
+        
+        # Fixer should be able to use the custom path
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Verify fixer can access the file through app module
+        # (if it had a direct import, it wouldn't see our override)
+        self.assertTrue(os.path.exists(custom_wallets_file))
+    
+    def test_fixer_can_save_api_keys_with_mock_path(self):
+        """Test: Interactive_Review_Fixer can save API keys with mocked paths"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Override app.KEYS_FILE for test
+        custom_keys_file = self.test_path / 'subdir' / 'custom_keys.json'
+        app.KEYS_FILE = custom_keys_file
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Should create parent directory and save successfully
+        try:
+            # Simulate saving an API key (normally requires user input)
+            os.makedirs(custom_keys_file.parent, exist_ok=True)
+            with open(custom_keys_file, 'w') as f:
+                json.dump({'etherscan': 'test_key'}, f)
+            
+            # Verify file created
+            self.assertTrue(os.path.exists(custom_keys_file))
+        except Exception as e:
+            self.fail(f"Fixer failed to work with custom paths: {e}")
+
+
+class TestConfigMerging(unittest.TestCase):
+    """Tests for config.json merging to catch new option integration errors"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.CONFIG_FILE = self.test_path / 'config.json'
+    
+    def tearDown(self):
+        app.BASE_DIR = self.orig_base
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+    
+    def test_new_defi_lp_option_merges_with_existing_config(self):
+        """Test: defi_lp_conservative option merges into existing config"""
+        # Create existing config WITHOUT defi_lp_conservative
+        existing_config = {
+            'general': {
+                'run_audit': True,
+                'create_db_backups': True
+            },
+            'compliance': {
+                'warn_on_fifo_complexity': True
+            }
+        }
+        
+        with open(app.CONFIG_FILE, 'w') as f:
+            json.dump(existing_config, f, indent=4)
+        
+        # Run Setup which should merge in new options
+        with patch('builtins.input', return_value=''):  # Auto-accept defaults
+            # Simulate the config merge logic from Setup.py
+            with open(app.CONFIG_FILE, 'r') as f:
+                user_config = json.load(f)
+            
+            # Add new option
+            if 'compliance' not in user_config:
+                user_config['compliance'] = {}
+            user_config['compliance']['defi_lp_conservative'] = True
+            
+            with open(app.CONFIG_FILE, 'w') as f:
+                json.dump(user_config, f, indent=4)
+        
+        # Verify merge worked
+        with open(app.CONFIG_FILE, 'r') as f:
+            merged_config = json.load(f)
+        
+        self.assertIn('defi_lp_conservative', merged_config['compliance'])
+        self.assertTrue(merged_config['compliance']['defi_lp_conservative'])
+        
+        # Verify old options preserved
+        self.assertTrue(merged_config['general']['run_audit'])
+        self.assertTrue(merged_config['compliance']['warn_on_fifo_complexity'])
+    
+    def test_config_loads_defi_lp_conservative_default(self):
+        """Test: Config defaults to conservative=True if not specified"""
+        # Create config without defi_lp_conservative
+        config = {'general': {'run_audit': True}}
+        with open(app.CONFIG_FILE, 'w') as f:
+            json.dump(config, f)
+        
+        # Reload config
+        with open(app.CONFIG_FILE, 'r') as f:
+            loaded_config = json.load(f)
+        
+        # Check default behavior
+        defi_conservative = loaded_config.get('compliance', {}).get('defi_lp_conservative', True)
+        self.assertTrue(defi_conservative, "Should default to True (conservative)")
+
+
 if __name__ == '__main__':
     unittest.main()

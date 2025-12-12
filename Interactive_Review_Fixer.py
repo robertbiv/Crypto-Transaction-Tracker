@@ -447,24 +447,42 @@ class InteractiveReviewFixer:
         print("These transactions have prices that deviate significantly from market value.")
         print("Most common cause: Entering 'Total Value' instead of 'Price Per Coin'.\n")
         
+        # Initialize PriceFetcher to get real market prices
+        from Crypto_Tax_Engine import PriceFetcher
+        fetcher = PriceFetcher()
+        
         for item in warning['items']:
             amount = float(item['amount'])
             reported_price = float(item.get('reported_price', 0))
-            market_price = float(item.get('market_price', 0))
+            coin = item['coin']
+            date_str = str(item['date']).split()[0]
+            
+            # Fetch real market price
+            market_price = 0
+            try:
+                market_price = float(fetcher.get_price(coin, pd.to_datetime(date_str, utc=True)))
+            except:
+                pass  # If fetch fails, market_price remains 0
             
             suggested_fix_price = 0
             if amount != 0:
                 suggested_fix_price = reported_price / amount
             
-            print(f"\n  {item['coin']} on {item['date']}")
+            print(f"\n  {coin} on {date_str}")
             print(f"    Amount: {amount}")
             print(f"    Current Price Entry: ${reported_price:,.2f}")
-            print(f"    Market Price:        ${market_price:,.2f}")
+            if market_price > 0:
+                print(f"    Market Price:        ${market_price:,.2f}")
+            else:
+                print(f"    Market Price:        Not available")
             
             print(f"\n    Option 1 (Fix 'Total as Unit'): Change price to ${suggested_fix_price:,.2f}")
             print(f"             (Use this if you entered the trade's total value in the price column)")
             
-            print(f"    Option 2 (Use Market Price):    Change price to ${market_price:,.2f}")
+            if market_price > 0:
+                print(f"    Option 2 (Use Market Price):    Change price to ${market_price:,.2f}")
+            else:
+                print(f"    Option 2 (Use Market Price):    [Not available - no price data found]")
             
             choice = input("    Choose fix (1/2), enter custom price, or 'skip': ").strip()
             
@@ -472,8 +490,11 @@ class InteractiveReviewFixer:
                 self._update_price(item['id'], Decimal(str(suggested_fix_price)))
                 print(f"    ✓ Fixed: Price updated to ${suggested_fix_price:,.2f}")
             elif choice == '2':
-                self._update_price(item['id'], Decimal(str(market_price)))
-                print(f"    ✓ Fixed: Price updated to market value ${market_price:,.2f}")
+                if market_price > 0:
+                    self._update_price(item['id'], Decimal(str(market_price)))
+                    print(f"    ✓ Fixed: Price updated to market value ${market_price:,.2f}")
+                else:
+                    print("    ✗ Market price not available. Please enter custom price or choose option 1.")
             elif choice.lower() == 'skip':
                 print("    → Skipped")
             else:
