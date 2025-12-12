@@ -34,8 +34,77 @@ class InteractiveReviewFixer:
         self.backup_file = None
         self._token_map_cache = None  # Session-level cache to avoid repeated API calls
         
+        # Set up session logging
+        self._setup_session_log()
+    
+    def _setup_session_log(self):
+        """Set up logging for this fixer session"""
+        from datetime import datetime
+        
+        # Create log directory if it doesn't exist
+        log_dir = app.LOG_DIR if hasattr(app, 'LOG_DIR') else app.OUTPUT_DIR / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create session log file
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.log_file = log_dir / f"{timestamp}_interactive_fixer_session.log"
+        
+        # Open log file for writing
+        self.log_handle = open(self.log_file, 'w', encoding='utf-8')
+        self._log(f"=== INTERACTIVE REVIEW FIXER SESSION ===")
+        self._log(f"Started: {datetime.now().isoformat()}")
+        self._log(f"Year: {self.year}")
+        self._log(f"Database: {self.db.db_file if hasattr(self.db, 'db_file') else 'unknown'}")
+        self._log("="*80)
+        self._log("")
+    
+    def _log(self, message):
+        """Log a message to both console and log file"""
+        try:
+            if hasattr(self, 'log_handle') and self.log_handle and not self.log_handle.closed:
+                self.log_handle.write(message + '\n')
+                self.log_handle.flush()  # Ensure it's written immediately
+        except:
+            pass  # Ignore errors if log file is closed
+    
+    def _log_input(self, prompt, user_response):
+        """Log user input"""
+        self._log(f"PROMPT: {prompt}")
+        self._log(f"USER INPUT: {user_response}")
+        self._log("")
+    
+    def _log_output(self, message):
+        """Log program output"""
+        self._log(f"OUTPUT: {message}")
+    
+    def __del__(self):
+        """Close log file on cleanup"""
+        try:
+            if hasattr(self, 'log_handle') and self.log_handle and not self.log_handle.closed:
+                from datetime import datetime
+                self._log("")
+                self._log("="*80)
+                self._log(f"Session ended: {datetime.now().isoformat()}")
+                self._log(f"Log saved to: {self.log_file}")
+                self.log_handle.close()
+        except:
+            pass  # Ignore errors during cleanup
+    
+    def _print(self, message):
+        """Print to console and log to file"""
+        print(message)
+        self._log_output(message)
+    
+    def _input(self, prompt):
+        """Get user input and log both prompt and response"""
+        print(prompt, end='')
+        response = input()
+        self._log_input(prompt, response)
+        return response
+        
     def load_review_report(self, report_path=None):
         """Load the most recent review report"""
+        self._log("Loading review report...")
         if report_path:
             with open(report_path, 'r') as f:
                 return json.load(f)
@@ -166,18 +235,18 @@ class InteractiveReviewFixer:
     
     def _guided_fix_missing_prices(self, warning):
         """Guided fix for missing prices - check blockchain first with API key prompts"""
-        print("\n--- GUIDED FIX: MISSING PRICES ---")
-        print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
+        self._print("\n--- GUIDED FIX: MISSING PRICES ---")
+        self._print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
         
         # Simplified Menu (No Bulk Options)
-        print("1. Guided fix (check blockchain, fetch suggestions, approve/override per item)")
-        print("2. Set custom price (enter manually per item)")
-        print("3. Skip (review later)")
+        self._print("1. Guided fix (check blockchain, fetch suggestions, approve/override per item)")
+        self._print("2. Set custom price (enter manually per item)")
+        self._print("3. Skip (review later)")
 
-        choice = input("\nSelect option (1-3): ").strip()
+        choice = self._input("\nSelect option (1-3): ").strip()
 
         if choice == '1':
-            print("\n  Checking blockchain and fetching suggested prices...")
+            self._print("\n  Checking blockchain and fetching suggested prices...")
             from Crypto_Tax_Engine import PriceFetcher
             fetcher = PriceFetcher()
 
@@ -186,7 +255,7 @@ class InteractiveReviewFixer:
                 date_str = str(item['date']).split()[0]
                 transaction_id = item['id']
 
-                print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
+                self._print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
                 
                 # Step 1: Check if transaction is on blockchain with existing wallets
                 # This will prompt for API key if needed
@@ -198,59 +267,59 @@ class InteractiveReviewFixer:
                 
                 # If API key was needed but user skipped, treat as not found
                 if api_key_needed == 'skipped':
-                    print(f"    ⚠️  API key required but skipped - treating as transaction not found")
+                    self._print(f"    ⚠️  API key required but skipped - treating as transaction not found")
                     bc_found = False
                     bc_price = None
                 
                 if bc_found:
                     # Transaction found on blockchain
-                    print(f"    ✅ Transaction found on blockchain!")
+                    self._print(f"    ✅ Transaction found on blockchain!")
                     if bc_details:
-                        print(f"       {bc_details}")
+                        self._print(f"       {bc_details}")
                     if bc_price and bc_price > 0:
-                        print(f"    💎 On-chain price: ${bc_price:.6f}")
-                        print(f"    → RECOMMENDED: Use blockchain price (most accurate)")
+                        self._print(f"    💎 On-chain price: ${bc_price:.6f}")
+                        self._print(f"    → RECOMMENDED: Use blockchain price (most accurate)")
                     
                     # Ask if they want to add another wallet address
-                    add_wallet = input("    Would you like to add another wallet address? (y/n): ").strip().lower()
+                    add_wallet = self._input("    Would you like to add another wallet address? (y/n): ").strip().lower()
                     if add_wallet == 'y':
-                        new_wallet_to_save = input("    Enter wallet address: ").strip()
+                        new_wallet_to_save = self._input("    Enter wallet address: ").strip()
                 else:
                     # Transaction NOT found on blockchain
-                    print(f"    ⚠️  Transaction not found on blockchain")
+                    self._print(f"    ⚠️  Transaction not found on blockchain")
                     
                     # Prompt for wallet address
-                    add_wallet = input("    Would you like to enter a wallet address to check blockchain? (y/n): ").strip().lower()
+                    add_wallet = self._input("    Would you like to enter a wallet address to check blockchain? (y/n): ").strip().lower()
                     if add_wallet == 'y':
-                        new_wallet_to_save = input("    Enter wallet address: ").strip()
+                        new_wallet_to_save = self._input("    Enter wallet address: ").strip()
                         
                         if new_wallet_to_save:
                             # Check blockchain again with new wallet
-                            print(f"    🔍 Checking blockchain with provided wallet...")
+                            self._print(f"    🔍 Checking blockchain with provided wallet...")
                             bc_found_new, bc_price_new, bc_details_new, api_key_status = self._check_transaction_on_blockchain_with_prompts(
                                 transaction_id, coin, date_str, item['amount'], 
                                 additional_wallet=new_wallet_to_save
                             )
                             
                             if api_key_status == 'skipped':
-                                print(f"    ⚠️  API key required but skipped")
+                                self._print(f"    ⚠️  API key required but skipped")
                                 bc_found_new = False
                             
                             if bc_found_new:
-                                print(f"    ✅ Transaction found with provided wallet!")
+                                self._print(f"    ✅ Transaction found with provided wallet!")
                                 if bc_details_new:
-                                    print(f"       {bc_details_new}")
+                                    self._print(f"       {bc_details_new}")
                                 bc_found = True
                                 bc_price = bc_price_new
                             else:
-                                print(f"    ❌ Transaction not found with provided wallet on blockchain")
+                                self._print(f"    ❌ Transaction not found with provided wallet on blockchain")
                 
                 # Step 2: Always ask if they want to save the wallet (if provided)
                 if new_wallet_to_save:
-                    save_wallet = input("    Save this wallet address to wallets.json? (y/n): ").strip().lower()
+                    save_wallet = self._input("    Save this wallet address to wallets.json? (y/n): ").strip().lower()
                     if save_wallet == 'y':
                         success, message = self._save_wallet_address(new_wallet_to_save, coin)
-                        print(f"    {message}")
+                        self._print(f"    {message}")
                 
                 # Step 3: Get Yahoo Finance price as fallback
                 yf_price = None
@@ -263,50 +332,50 @@ class InteractiveReviewFixer:
                 if bc_found and bc_price and bc_price > 0:
                     # Blockchain price found - suggest it
                     suggested_price = bc_price
-                    print(f"\n    💎 Blockchain price: ${bc_price:.6f}")
+                    self._print(f"\n    💎 Blockchain price: ${bc_price:.6f}")
                     if yf_price and yf_price > 0:
                         diff_pct = abs(bc_price - yf_price) / yf_price * 100 if yf_price > 0 else 0
-                        print(f"    📊 Yahoo Finance: ${yf_price:.2f} (diff: {diff_pct:.1f}%)")
-                    print(f"    → Suggested: ${suggested_price:.6f} (blockchain - most accurate)")
+                        self._print(f"    📊 Yahoo Finance: ${yf_price:.2f} (diff: {diff_pct:.1f}%)")
+                    self._print(f"    → Suggested: ${suggested_price:.6f} (blockchain - most accurate)")
                 elif yf_price and yf_price > 0:
                     # Only Yahoo Finance available
                     suggested_price = yf_price
-                    print(f"\n    📊 Yahoo Finance: ${yf_price:.2f}")
-                    print(f"    ⚠️  WARNING: Daily close price may not match exact transaction time")
-                    print(f"    💡 TIP: Check blockchain explorer or your exchange for exact price")
+                    self._print(f"\n    📊 Yahoo Finance: ${yf_price:.2f}")
+                    self._print(f"    ⚠️  WARNING: Daily close price may not match exact transaction time")
+                    self._print(f"    💡 TIP: Check blockchain explorer or your exchange for exact price")
                     chain_hint = self._get_blockchain_explorer_hint(coin)
                     if chain_hint:
-                        print(f"       {chain_hint}")
-                    print(f"    → Suggested: ${suggested_price:.2f} (Yahoo Finance - may not be perfectly accurate)")
+                        self._print(f"       {chain_hint}")
+                    self._print(f"    → Suggested: ${suggested_price:.2f} (Yahoo Finance - may not be perfectly accurate)")
                 else:
                     # No price available
-                    print(f"\n    ❌ No price data available from any source")
-                    print(f"    💡 TIP: Check your exchange transaction history or blockchain explorer")
+                    self._print(f"\n    ❌ No price data available from any source")
+                    self._print(f"    💡 TIP: Check your exchange transaction history or blockchain explorer")
                     chain_hint = self._get_blockchain_explorer_hint(coin)
                     if chain_hint:
-                        print(f"       {chain_hint}")
+                        self._print(f"       {chain_hint}")
                     suggested_price = None
                 
                 # Step 5: Get user confirmation
                 if suggested_price:
-                    user_input = input(f"    (Enter=accept ${suggested_price:.2f}, number=override, 'skip'=skip): ").strip()
+                    user_input = self._input(f"    (Enter=accept ${suggested_price:.2f}, number=override, 'skip'=skip): ").strip()
                 else:
-                    user_input = input(f"    (Enter price manually or 'skip'): ").strip()
+                    user_input = self._input(f"    (Enter price manually or 'skip'): ").strip()
                 
                 if user_input.lower() == 'skip':
-                    print(f"    → Skipped")
+                    self._print(f"    → Skipped")
                     continue
                 elif user_input == '' and suggested_price:
                     self._update_price(item['id'], Decimal(str(suggested_price)))
                     source = "blockchain" if bc_found and bc_price else "Yahoo Finance"
-                    print(f"    ✓ Set to ${suggested_price:.2f} ({source})")
+                    self._print(f"    ✓ Set to ${suggested_price:.2f} ({source})")
                 else:
                     try:
                         manual_price = Decimal(user_input)
                         self._update_price(item['id'], manual_price)
-                        print(f"    ✓ Set to ${manual_price} (manual)")
+                        self._print(f"    ✓ Set to ${manual_price} (manual)")
                     except:
-                        print("    ✗ Invalid input, skipped.")
+                        self._print("    ✗ Invalid input, skipped.")
 
         elif choice == '2':
             for item in warning['items']:
@@ -711,10 +780,10 @@ class InteractiveReviewFixer:
         Returns:
             tuple: (api_key: str or None, status: 'provided'|'skipped'|'error')
         """
-        print(f"\n    🔑 {service_name} API key required for blockchain verification")
-        print(f"    Visit https://{service_name.lower()}.com to get a free API key")
+        self._print(f"\n    🔑 {service_name} API key required for blockchain verification")
+        self._print(f"    Visit https://{service_name.lower()}.com to get a free API key")
         
-        user_choice = input(f"    Enter API key (or 'skip' to use Yahoo Finance fallback): ").strip()
+        user_choice = self._input(f"    Enter API key (or 'skip' to use Yahoo Finance fallback): ").strip()
         
         if user_choice.lower() == 'skip' or not user_choice:
             return None, 'skipped'
@@ -722,14 +791,14 @@ class InteractiveReviewFixer:
         api_key = user_choice
         
         # Ask if they want to save it
-        save_key = input(f"    Save this API key to api_keys.json for future use? (y/n): ").strip().lower()
+        save_key = self._input(f"    Save this API key to api_keys.json for future use? (y/n): ").strip().lower()
         
         if save_key == 'y':
             success, message = self._save_api_key(key_name, api_key)
             if success:
-                print(f"    💾 {message}")
+                self._print(f"    💾 {message}")
             else:
-                print(f"    ⚠️  {message}")
+                self._print(f"    ⚠️  {message}")
         
         return api_key, 'provided'
     

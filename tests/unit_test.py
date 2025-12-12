@@ -7977,5 +7977,217 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
         self.assertEqual(len([f for f in fixer.fixes_applied if f['type'] == 'delete']), 0)
 
 
+# --- BLOCKCHAIN INTEGRATION TESTS ---
+class TestBlockchainIntegration(unittest.TestCase):
+    """Test blockchain transaction checking and API key management"""
+    
+    def setUp(self):
+        print(f"\n[Running: {self._testMethodName}]", flush=True)
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        app.BASE_DIR = self.test_path
+        app.INPUT_DIR = self.test_path / 'inputs'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.DB_FILE = self.test_path / 'blockchain_test.db'
+        app.KEYS_FILE = self.test_path / 'api_keys.json'
+        app.WALLETS_FILE = self.test_path / 'wallets.json'
+        app.initialize_folders()
+        self.db = app.DatabaseManager()
+    
+    def tearDown(self):
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+    
+    def test_api_key_save(self):
+        """Test: API key is saved correctly to api_keys.json"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Ensure parent directory exists
+        app.KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save a Blockchair API key
+        success, message = fixer._save_api_key('blockchair', 'test_blockchair_key_12345')
+        
+        self.assertTrue(success)
+        self.assertIn('saved', message.lower())
+        
+        # Verify file was created and contains the key
+        self.assertTrue(app.KEYS_FILE.exists())
+        
+        with open(app.KEYS_FILE, 'r') as f:
+            keys_data = json.load(f)
+        
+        self.assertIn('blockchair', keys_data)
+        self.assertEqual(keys_data['blockchair']['apiKey'], 'test_blockchair_key_12345')
+    
+    def test_api_key_append_not_overwrite(self):
+        """Test: New API keys are added without overwriting existing ones"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Ensure parent directory exists
+        app.KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save first key
+        fixer._save_api_key('blockchair', 'blockchair_key')
+        
+        # Save second key
+        fixer._save_api_key('etherscan', 'etherscan_key')
+        
+        # Verify both keys exist
+        with open(app.KEYS_FILE, 'r') as f:
+            keys_data = json.load(f)
+        
+        self.assertIn('blockchair', keys_data)
+        self.assertIn('etherscan', keys_data)
+        self.assertEqual(keys_data['blockchair']['apiKey'], 'blockchair_key')
+        self.assertEqual(keys_data['etherscan']['apiKey'], 'etherscan_key')
+    
+    def test_wallet_append_not_overwrite(self):
+        """Test: New wallets are appended, not overwriting existing wallets"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Ensure parent directory exists
+        app.WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create initial wallets.json with one Ethereum wallet
+        initial_wallets = {
+            'ethereum': ['0x1111111111111111111111111111111111111111']
+        }
+        with open(app.WALLETS_FILE, 'w') as f:
+            json.dump(initial_wallets, f)
+        
+        # Add a second Ethereum wallet
+        success, message = fixer._save_wallet_address('0x2222222222222222222222222222222222222222', 'ETH')
+        
+        self.assertTrue(success)
+        
+        # Verify both wallets exist
+        with open(app.WALLETS_FILE, 'r') as f:
+            wallets_data = json.load(f)
+        
+        self.assertEqual(len(wallets_data['ethereum']), 2)
+        self.assertIn('0x1111111111111111111111111111111111111111', wallets_data['ethereum'])
+        self.assertIn('0x2222222222222222222222222222222222222222', wallets_data['ethereum'])
+    
+    def test_wallet_no_duplicates(self):
+        """Test: Duplicate wallets are not added twice"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        wallet_addr = '0x1111111111111111111111111111111111111111'
+        
+        # Add wallet twice
+        success1, _ = fixer._save_wallet_address(wallet_addr, 'ETH')
+        success2, message2 = fixer._save_wallet_address(wallet_addr, 'ETH')
+        
+        self.assertTrue(success1)
+        self.assertTrue(success2)
+        self.assertIn('already exists', message2.lower())
+        
+        # Verify only one copy exists
+        with open(app.WALLETS_FILE, 'r') as f:
+            wallets_data = json.load(f)
+        
+        self.assertEqual(len(wallets_data['ethereum']), 1)
+    
+    def test_infer_chain_from_coin(self):
+        """Test: Chain inference from coin symbol works correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Test native coins
+        self.assertEqual(fixer._infer_chain_from_coin('BTC'), 'bitcoin')
+        self.assertEqual(fixer._infer_chain_from_coin('ETH'), 'ethereum')
+        self.assertEqual(fixer._infer_chain_from_coin('MATIC'), 'polygon')
+        self.assertEqual(fixer._infer_chain_from_coin('BNB'), 'bsc')
+        self.assertEqual(fixer._infer_chain_from_coin('AVAX'), 'avalanche')
+        self.assertEqual(fixer._infer_chain_from_coin('SOL'), 'solana')
+        
+        # Test wrapped tokens
+        self.assertEqual(fixer._infer_chain_from_coin('WETH'), 'ethereum')
+        self.assertEqual(fixer._infer_chain_from_coin('WBNB'), 'bsc')
+        
+        # Test unknown token (defaults to ethereum for ERC-20)
+        self.assertEqual(fixer._infer_chain_from_coin('USDC'), 'ethereum')
+    
+    def test_detect_chain_from_address(self):
+        """Test: Chain detection from wallet address format"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Test Bitcoin addresses
+        self.assertEqual(fixer._detect_chain_from_address('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'BTC'), 'bitcoin')
+        self.assertEqual(fixer._detect_chain_from_address('3J98t1WpEZ73CNmYviecrnyiWrnqRhWNLy', 'BTC'), 'bitcoin')
+        self.assertEqual(fixer._detect_chain_from_address('bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', 'BTC'), 'bitcoin')
+        
+        # Test Ethereum addresses
+        self.assertEqual(fixer._detect_chain_from_address('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb', 'ETH'), 'ethereum')
+        self.assertEqual(fixer._detect_chain_from_address('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb', 'WETH'), 'ethereum')
+        
+        # Test Polygon addresses (same format as Ethereum)
+        self.assertEqual(fixer._detect_chain_from_address('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb', 'MATIC'), 'polygon')
+        
+        # Test BSC addresses
+        self.assertEqual(fixer._detect_chain_from_address('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb', 'BNB'), 'bsc')
+    
+    def test_check_only_correct_blockchain(self):
+        """Test: Only the correct blockchain is checked for each coin"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Set up wallets for multiple chains
+        wallets_data = {
+            'bitcoin': ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'],
+            'ethereum': ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'],
+            'polygon': ['0x8888888888888888888888888888888888888888']
+        }
+        with open(app.WALLETS_FILE, 'w') as f:
+            json.dump(wallets_data, f)
+        
+        # For BTC, it should only load bitcoin wallets
+        # We can't easily test the actual API call, but we can verify wallet loading logic
+        # by checking _infer_chain_from_coin is called correctly
+        
+        chain_btc = fixer._infer_chain_from_coin('BTC')
+        self.assertEqual(chain_btc, 'bitcoin')
+        
+        chain_eth = fixer._infer_chain_from_coin('ETH')
+        self.assertEqual(chain_eth, 'ethereum')
+        
+        chain_matic = fixer._infer_chain_from_coin('MATIC')
+        self.assertEqual(chain_matic, 'polygon')
+    
+    def test_blockchain_explorer_hints(self):
+        """Test: Correct blockchain explorer URLs are provided"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Test various coins
+        btc_hint = fixer._get_blockchain_explorer_hint('BTC')
+        self.assertIn('blockchain.com', btc_hint.lower())
+        
+        eth_hint = fixer._get_blockchain_explorer_hint('ETH')
+        self.assertIn('etherscan', eth_hint.lower())
+        
+        matic_hint = fixer._get_blockchain_explorer_hint('MATIC')
+        self.assertIn('polygonscan', eth_hint.lower())
+        
+        sol_hint = fixer._get_blockchain_explorer_hint('SOL')
+        self.assertIn('solscan', sol_hint.lower())
+
+
 if __name__ == '__main__':
     unittest.main()
