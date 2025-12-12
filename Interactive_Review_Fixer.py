@@ -5,6 +5,7 @@ Provides guided, interactive fixing of audit risk warnings.
 
 import json
 import shutil
+import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -19,10 +20,13 @@ TOKEN_CACHE_FILE = Path("configs/cached_token_addresses.json")
 CACHE_REFRESH_DAYS = 7  # Refresh cache every 7 days
 
 # API Rate Limiting Configuration (CoinGecko Free Tier: 10-30 calls/min)
+# For testing, set TEST_MODE=1 to reduce rate limit waits to 1 second (vs 60s production)
+TEST_MODE = os.environ.get('TEST_MODE') == '1'
 API_REQUEST_DELAY = 0.3  # Seconds between individual API requests (~3 calls/sec max)
 API_BATCH_DELAY = 2  # Seconds after processing 50 tokens
 API_MAX_RETRIES = 5  # Maximum retry attempts for failed requests
 API_INITIAL_BACKOFF = 1  # Initial backoff delay in seconds
+API_MAX_RETRY_WAIT = 1 if TEST_MODE else 60  # Max wait time for rate limit retries (1s test, 60s prod)
 
 class InteractiveReviewFixer:
     """Interactive tool to fix issues detected by Tax Reviewer"""
@@ -578,14 +582,16 @@ class InteractiveReviewFixer:
                     # Check for rate limiting (429) or server errors (5xx)
                     if response.status_code == 429:
                         retry_after = int(response.headers.get('Retry-After', delay))
+                        # Cap the retry wait time (5s in test mode, 60s in production)
+                        retry_after = min(retry_after, API_MAX_RETRY_WAIT)
                         print(f"  [Rate limit] Waiting {retry_after}s before retry...")
                         time.sleep(retry_after)
-                        delay = min(delay * 2, 60)  # Exponential backoff, max 60s
+                        delay = min(delay * 2, API_MAX_RETRY_WAIT)  # Exponential backoff
                         continue
                     elif response.status_code >= 500:
                         print(f"  [Server error {response.status_code}] Retrying in {delay}s...")
                         time.sleep(delay)
-                        delay = min(delay * 2, 60)
+                        delay = min(delay * 2, API_MAX_RETRY_WAIT)
                         continue
                     
                     response.raise_for_status()
