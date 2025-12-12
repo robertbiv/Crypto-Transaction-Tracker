@@ -247,29 +247,55 @@ class TaxReviewer:
                 defi_transactions.append(tx_info)
                 
                 # Track LP deposits/withdrawals separately for specific guidance
-                # Consider any DeFi token deposit as a potential LP deposit (conservative approach)
-                if action in ['DEPOSIT', 'BUY']:
+                # In conservative mode, LP deposits are converted to SWAP
+                # In aggressive mode, they remain as DEPOSIT
+                if action in ['DEPOSIT', 'BUY', 'SWAP']:
                     lp_deposits.append(tx_info)
                 elif action in ['WITHDRAWAL', 'SELL']:
                     lp_withdrawals.append(tx_info)
         
         # Warn about LP deposits (IRS treatment unclear)
         if lp_deposits:
-            self.warnings.append({
-                'severity': 'HIGH',
-                'category': 'DEFI_LP_DEPOSITS',
-                'title': 'DeFi Liquidity Pool Deposits - IRS Treatment Uncertain',
-                'count': len(lp_deposits),
-                'description': 'IRS COMPLIANCE ISSUE: The IRS has not explicitly ruled on whether depositing tokens into a Liquidity Pool '
-                              'is a taxable event (treated as selling crypto for an "LP Token") or a non-taxable deposit. '
-                              'Your code marks these as DEPOSIT (non-taxable), which is aggressive. '
-                              'A conservative auditor might argue that receiving an LP token in exchange for ETH is a taxable crypto-to-crypto swap.',
-                'items': lp_deposits[:10],
-                'action': 'RECOMMENDED: Treat LP deposits as taxable swaps (conservative). '
-                         'ALTERNATIVE: Mark as DEPOSIT but maintain documentation that you do not have dominion/control over the underlying assets. '
-                         'CONSULT: A tax professional familiar with DeFi for your specific situation. '
-                         'RISK: If audited, IRS may recharacterize as taxable swap and assess additional taxes + penalties.'
-            })
+            # Check if conservative mode is enabled
+            try:
+                import Crypto_Tax_Engine as app
+                conservative_mode = bool(app.GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True))
+            except:
+                conservative_mode = True
+            
+            if conservative_mode:
+                # Conservative mode: LP deposits converted to SWAP (taxable)
+                self.warnings.append({
+                    'severity': 'MEDIUM',
+                    'category': 'DEFI_LP_DEPOSITS',
+                    'title': 'DeFi Liquidity Pool Deposits - Conservative Treatment Applied',
+                    'count': len(lp_deposits),
+                    'description': 'IRS COMPLIANCE: The IRS has not explicitly ruled on LP deposit tax treatment. '
+                                  'Your system is using CONSERVATIVE mode (config: defi_lp_conservative=True). '
+                                  'LP deposits are automatically treated as taxable swaps (crypto-to-LP-token exchange). '
+                                  'This is the IRS-safe approach but may result in higher tax liability.',
+                    'items': lp_deposits[:10],
+                    'action': 'CURRENT SETTING: Conservative (taxable swaps). '
+                             'ALTERNATIVE: Set defi_lp_conservative=False in config.json to treat as non-taxable deposits (aggressive stance). '
+                             'CONSULT: A tax professional if you want to use aggressive treatment. '
+                             'NOTE: Conservative treatment protects against IRS challenges.'
+                })
+            else:
+                # Aggressive mode: LP deposits remain as DEPOSIT (non-taxable)
+                self.warnings.append({
+                    'severity': 'HIGH',
+                    'category': 'DEFI_LP_DEPOSITS',
+                    'title': 'DeFi Liquidity Pool Deposits - AGGRESSIVE Treatment (Non-Taxable)',
+                    'count': len(lp_deposits),
+                    'description': 'IRS COMPLIANCE ISSUE: Your system is using AGGRESSIVE mode (config: defi_lp_conservative=False). '
+                                  'LP deposits are marked as non-taxable DEPOSITS. The IRS has not explicitly ruled on this. '
+                                  'A conservative auditor might argue that receiving an LP token in exchange for ETH is a taxable crypto-to-crypto swap.',
+                    'items': lp_deposits[:10],
+                    'action': 'CURRENT SETTING: Aggressive (non-taxable deposits). '
+                             'RECOMMENDED: Set defi_lp_conservative=True in config.json to use conservative treatment (taxable swaps). '
+                             'CONSULT: A tax professional familiar with DeFi. '
+                             'RISK: If audited, IRS may recharacterize as taxable swap and assess additional taxes + penalties.'
+                })
         
         # Suggest review for other DeFi complexity
         if defi_transactions and not lp_deposits:

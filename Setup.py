@@ -211,10 +211,11 @@ def main():
             "compress_older_than_days": 30
         },
         "compliance": {
-            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_taxable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. collectibles can be flagged via prefixes/tokens.",
+            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_taxable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. defi_lp_conservative (Recommended=True) treats LP deposits as taxable swaps (conservative); setting False marks them as non-taxable deposits (aggressive, IRS may challenge). collectibles can be flagged via prefixes/tokens.",
             "strict_broker_mode": True,
             "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
             "staking_taxable_on_receipt": True,
+            "defi_lp_conservative": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"]
         },
