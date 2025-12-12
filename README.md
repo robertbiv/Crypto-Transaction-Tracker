@@ -647,3 +647,24 @@ Manual staking imports are treated identically to StakeTaxCSV imports:
 | Price showing as $0 | Verify `usd_value_at_time` is a valid number. Engine will backfill if missing. |
 | Duplicate imports | Deduplication uses date + coin + amount + protocol hash. Verify data is identical. |
 | Format errors | Check CSV column names match exactly (case-sensitive). Use comma delimiters. |
+
+## **🧪 Development & Testing**
+
+The project includes a comprehensive test suite located in the `tests/` directory.
+
+### **Running Tests**
+
+To run the full test suite (recommended):
+
+```bash
+# Windows
+& ".venv\Scripts\python.exe" tests/unit_test.py
+
+# Linux/Mac
+python3 tests/unit_test.py
+```
+
+This runner automatically enables `TEST_MODE` to speed up execution by reducing API rate limit wait times.
+
+For more details on running specific tests or using `pytest`, see [tests/README.md](tests/README.md).
+
