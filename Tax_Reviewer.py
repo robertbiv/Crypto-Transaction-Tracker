@@ -359,32 +359,86 @@ class TaxReviewer:
             })
 
     def _check_duplicate_suspects(self, df):
-        """Flag potential duplicate transactions (Same coin, amount, time)"""
-        # Create a signature for each trade
-        df['sig'] = df.apply(lambda x: f"{x['date']}_{x['coin']}_{float(x['amount']):.6f}_{x['action']}", axis=1)
-        duplicates = df[df.duplicated(subset=['sig'], keep=False)]
+        """Flag potential duplicate transactions with enhanced detection to reduce false positives
         
-        if not duplicates.empty:
-            # Group by signature to show pairs
+        Enhanced to include timestamp precision and distinguish between:
+        1. True duplicates (same source, likely double-import)
+        2. High-frequency trading (different sources, legitimate)
+        """
+        # Parse dates to extract timestamps with second precision
+        df['datetime_parsed'] = pd.to_datetime(df['date'], format='mixed', utc=True)
+        df['timestamp_sec'] = df['datetime_parsed'].dt.floor('s')  # Floor to nearest second
+        
+        # Create enhanced signature with timestamp precision
+        # Include price to distinguish between legitimate HFT at different prices
+        df['sig'] = df.apply(
+            lambda x: f"{x['timestamp_sec']}_{x['coin']}_{float(x['amount']):.8f}_{x['action']}_{float(x.get('price_usd', 0)):.2f}",
+            axis=1
+        )
+        
+        # Find exact duplicates (same signature)
+        exact_duplicates = df[df.duplicated(subset=['sig'], keep=False)]
+        
+        if not exact_duplicates.empty:
+            # Group by signature and analyze each group
             dupe_groups = []
-            for sig, group in duplicates.groupby('sig'):
-                if len(group) > 1:
-                    dupe_groups.append({
-                        'signature': sig,
-                        'ids': group['id'].tolist(),
-                        'count': len(group)
-                    })
+            
+            for sig, group in exact_duplicates.groupby('sig'):
+                if len(group) <= 1:
+                    continue
+                
+                # Check if duplicates are from different sources
+                sources = group['source'].unique()
+                batch_ids = group['batch_id'].unique()
+                
+                # Classify duplicate type
+                if len(sources) > 1 or len(batch_ids) > 1:
+                    # Likely true duplicate (same transaction imported from CSV and API)
+                    dupe_type = 'LIKELY_DUPLICATE'
+                    severity_note = 'Different sources/batches suggest double-import'
+                else:
+                    # Same source - could be legitimate HFT or error
+                    dupe_type = 'POSSIBLE_DUPLICATE'
+                    severity_note = 'Same source - verify if legitimate high-frequency trading'
+                
+                dupe_groups.append({
+                    'signature': sig,
+                    'ids': group['id'].tolist(),
+                    'sources': group['source'].tolist(),
+                    'batch_ids': group['batch_id'].tolist(),
+                    'count': len(group),
+                    'type': dupe_type,
+                    'note': severity_note
+                })
             
             if dupe_groups:
-                self.warnings.append({
-                    'severity': 'HIGH',
-                    'category': 'DUPLICATE_TRANSACTIONS',
-                    'title': 'Suspected Duplicate Transactions',
-                    'count': len(dupe_groups),
-                    'description': 'Found transactions with identical Date, Coin, Amount, and Action but different IDs. This often happens when importing via both API and CSV.',
-                    'items': dupe_groups[:10],
-                    'action': 'Check these IDs in your database. If they are duplicates, delete one.'
-                })
+                # Separate likely duplicates from possible
+                likely_dupes = [d for d in dupe_groups if d['type'] == 'LIKELY_DUPLICATE']
+                possible_dupes = [d for d in dupe_groups if d['type'] == 'POSSIBLE_DUPLICATE']
+                
+                # Warn about likely duplicates
+                if likely_dupes:
+                    self.warnings.append({
+                        'severity': 'HIGH',
+                        'category': 'DUPLICATE_TRANSACTIONS',
+                        'title': 'Likely Duplicate Transactions (Cross-Source)',
+                        'count': len(likely_dupes),
+                        'description': 'Found transactions with identical Date (to the second), Coin, Amount, Price, and Action from different sources/batches. This typically indicates the same transaction was imported via both API and CSV.',
+                        'items': likely_dupes[:10],
+                        'action': 'These are likely true duplicates. Use Interactive Review Fixer to delete one copy from each pair.'
+                    })
+                
+                # Suggest review for possible duplicates (HFT traders)
+                if possible_dupes:
+                    self.suggestions.append({
+                        'severity': 'MEDIUM',
+                        'category': 'DUPLICATE_TRANSACTIONS',
+                        'title': 'Possible Duplicates (Same-Source)',
+                        'count': len(possible_dupes),
+                        'description': 'Found transactions with identical parameters from the same source. For high-frequency traders, multiple orders at the exact same time and price may be legitimate.',
+                        'items': possible_dupes[:10],
+                        'action': 'Review these manually. If you use HFT bots, these may be legitimate. Otherwise, they could be import errors.'
+                    })
 
     def _check_price_anomalies(self, df):
         """Flag potential price entry errors: Price Per Unit ≈ Total Value
