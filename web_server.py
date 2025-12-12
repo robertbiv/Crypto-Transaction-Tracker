@@ -15,7 +15,7 @@ import hmac
 import hashlib
 import base64
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for
@@ -135,8 +135,10 @@ def validate_api_signature(data, timestamp, signature):
     """Validate API request signature"""
     # Check timestamp is recent (within 5 minutes)
     try:
-        request_time = datetime.fromisoformat(timestamp)
-        if datetime.now() - request_time > timedelta(minutes=5):
+        from datetime import timezone
+        request_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        if now - request_time > timedelta(minutes=5):
             return False
     except:
         return False
@@ -264,9 +266,9 @@ def generate_self_signed_cert():
         ).serial_number(
             x509.random_serial_number()
         ).not_valid_before(
-            datetime.utcnow()
+            datetime.now(timezone.utc)
         ).not_valid_after(
-            datetime.utcnow() + timedelta(days=365)
+            datetime.now(timezone.utc) + timedelta(days=365)
         ).add_extension(
             x509.SubjectAlternativeName([
                 x509.DNSName(u"localhost"),
