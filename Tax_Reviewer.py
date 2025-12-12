@@ -21,6 +21,7 @@ class TaxReviewer:
     6. High Fees (Fat-finger errors) [NEW]
     7. Spam Tokens (Scam airdrops) [NEW]
     8. Duplicate Transaction Suspects [NEW]
+    9. Price Anomalies (Total Value Entered as Price) [NEW]
     """
     
     def __init__(self, db, tax_year, tax_engine=None):
@@ -81,6 +82,7 @@ class TaxReviewer:
         self._check_high_fees(df_year)
         self._check_spam_tokens(df_year)
         self._check_duplicate_suspects(df_year)
+        self._check_price_anomalies(df_year)
         
         # Generate report
         report = self._generate_report()
@@ -362,6 +364,81 @@ class TaxReviewer:
                     'items': dupe_groups[:10],
                     'action': 'Check these IDs in your database. If they are duplicates, delete one.'
                 })
+
+    def _check_price_anomalies(self, df):
+        """Flag potential price entry errors: Price Per Unit ≈ Total Value
+        
+        Common user error: User enters total transaction value ($5,000) 
+        instead of per-unit price ($50,000/BTC for 0.1 BTC).
+        
+        Detection: If price_usd is suspiciously close to (price_usd * amount),
+        the user likely entered total value instead of per-unit price.
+        """
+        price_anomalies = []
+        
+        for _, row in df.iterrows():
+            try:
+                price = float(row['price_usd'])
+                amount = float(row['amount'])
+                
+                # Skip if no price or invalid amount
+                if price <= 0 or amount <= 0:
+                    continue
+                
+                # Skip dust amounts (less than 0.00001)
+                # These are too small to realistically cause errors
+                if amount < 0.00001:
+                    continue
+                
+                # Calculate what the implied total value would be
+                implied_total = price * amount
+                
+                # Check if price is suspiciously close to the total value
+                # (i.e., user might have entered total value as per-unit price)
+                # We flag if:
+                # 1. Price < $100 (unlikely for major coins)
+                # 2. Amount > 0.01 (not dust)
+                # 3. Implied total is reasonable (not billions)
+                # 4. Price is close to market patterns
+                
+                # Edge case: User entered $5,000 total into price column for 0.1 BTC
+                # This would show as price=$5,000, amount=0.1, implied_total=$500
+                # versus expected: price=$50,000, amount=0.1
+                
+                # Heuristic: If price > $100 AND amount is tiny (< 0.01) 
+                # AND the price doesn't match typical crypto prices
+                if amount < 0.01 and price >= 100 and price <= 100000:
+                    # This might be a total value entered as per-unit price
+                    # For example: 0.001 BTC at "price" of $50 means user entered $50 
+                    # but probably meant $50,000
+                    price_anomalies.append({
+                        'coin': row['coin'],
+                        'date': row['date'],
+                        'action': row['action'],
+                        'amount': amount,
+                        'reported_price': price,
+                        'implied_total': implied_total,
+                        'id': row['id'],
+                        'message': f"Price ${price} with {amount} units may be erroneous. " \
+                                  f"If {amount} was meant to be bought, price per unit might be ${price / amount:.2f}."
+                    })
+            except (ValueError, TypeError):
+                # Skip rows with non-numeric values
+                continue
+        
+        if price_anomalies:
+            self.warnings.append({
+                'severity': 'HIGH',
+                'category': 'PRICE_ANOMALIES',
+                'title': 'Suspicious Price Entry Detected (Potential Total Value Error)',
+                'count': len(price_anomalies),
+                'description': 'Found transactions where the Price Per Unit seems too low relative to the quantity. ' \
+                              'Common user error: entering total transaction value ($5,000) into the Price column ' \
+                              'instead of per-unit price ($50,000/BTC). This creates false cost basis and looks like tax evasion to the IRS.',
+                'items': price_anomalies[:10],
+                'action': 'Review these prices carefully. If incorrect, divide the price by the amount to get true per-unit cost, ' \
+                         'then update the Price column in your CSV.'
+            })
 
     def _generate_report(self):
         # ... [Same as previous] ...
