@@ -239,7 +239,8 @@ class DatabaseManager:
 
     def get_last_timestamp(self, source):
         res = self.cursor.execute("SELECT date FROM trades WHERE source=? ORDER BY date DESC LIMIT 1", (source,)).fetchone()
-        return int(pd.to_datetime(res[0]).timestamp()*1000) if res else 1262304000000
+        return int(pd.to_datetime(res[0], utc=True).timestamp()*1000) if res else 1262304000000
+
 
     def save_trade(self, t):
         try:
@@ -329,7 +330,8 @@ class Ingestor:
         
         for idx, r in df.iterrows():
             try:
-                d = pd.to_datetime(r.get('date', r.get('timestamp', datetime.now())))
+                # Force UTC timezone for all datetime parsing to avoid wash sale window errors
+                d = pd.to_datetime(r.get('date', r.get('timestamp', datetime.now())), utc=True)
                 tx_type = str(r.get('type', r.get('kind', 'trade'))).lower()
                 sent_c = r.get('sent_coin', r.get('sent_asset', r.get('coin', None)))
                 sent_a = to_decimal(r.get('sent_amount', r.get('amount', 0)))
@@ -594,7 +596,7 @@ class TaxEngine:
                             if source not in self.holdings_by_source[coin]: self.holdings_by_source[coin][source] = []
                             for lot in lots:
                                 self.holdings_by_source[coin][source].append({
-                                    'a': to_decimal(lot['a']), 'p': to_decimal(lot['p']), 'd': pd.to_datetime(lot['d'])
+                                    'a': to_decimal(lot['a']), 'p': to_decimal(lot['p']), 'd': pd.to_datetime(lot['d'], utc=True)
                                 })
                     migration_loaded = True
                 except Exception as e: logger.warning(f"Failed to load migration: {e}")
@@ -604,7 +606,7 @@ class TaxEngine:
         # FIX: Avoid double-counting history if migration loaded
         if migration_loaded:
             logger.info("Skipping pre-2025 history (Migration Inventory loaded).")
-            df['temp_date'] = pd.to_datetime(df['date'])
+            df['temp_date'] = pd.to_datetime(df['date'], utc=True)
             df = df[df['temp_date'] >= datetime(2025, 1, 1)]
 
         all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN'])]
@@ -612,10 +614,10 @@ class TaxEngine:
         for _, r in all_buys.iterrows():
             c = r['coin']
             if c not in all_buys_dict: all_buys_dict[c] = []
-            all_buys_dict[c].append(pd.to_datetime(r['date']))
+            all_buys_dict[c].append(pd.to_datetime(r['date'], utc=True))
 
         for _, t in df.iterrows():
-            d = pd.to_datetime(t['date'])
+            d = pd.to_datetime(t['date'], utc=True)
             if d.year > self.year: continue
             is_yr = (d.year == self.year)
             src = t['source'] if pd.notna(t['source']) else 'DEFAULT'
@@ -654,7 +656,7 @@ class TaxEngine:
                     if nearby:
                         rep_qty = Decimal('0')
                         for bd in nearby:
-                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'])==bd) & (df['action'].isin(['BUY','INCOME']))]
+                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], utc=True)==bd) & (df['action'].isin(['BUY','INCOME']))]
                             rep_qty += to_decimal(recs['amount'].sum())
                         if rep_qty > 0:
                             prop = min(rep_qty / amt, Decimal('1.0'))
@@ -870,7 +872,7 @@ if __name__ == "__main__":
         StakeTaxCSVManager(db).run()
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():
-            p = bf.get_price(r['coin'], pd.to_datetime(r['date']))
+            p = bf.get_price(r['coin'], pd.to_datetime(r['date'], utc=True))
             if p: db.update_price(r['id'], p)
         db.commit()
         y = input("\nEnter Tax Year: ")

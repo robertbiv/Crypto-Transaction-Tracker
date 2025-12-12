@@ -18,6 +18,12 @@ from Crypto_Tax_Engine import DatabaseManager, logger, WALLETS_FILE, KEYS_FILE
 TOKEN_CACHE_FILE = Path("configs/cached_token_addresses.json")
 CACHE_REFRESH_DAYS = 7  # Refresh cache every 7 days
 
+# API Rate Limiting Configuration (CoinGecko Free Tier: 10-30 calls/min)
+API_REQUEST_DELAY = 0.3  # Seconds between individual API requests (~3 calls/sec max)
+API_BATCH_DELAY = 2  # Seconds after processing 50 tokens
+API_MAX_RETRIES = 5  # Maximum retry attempts for failed requests
+API_INITIAL_BACKOFF = 1  # Initial backoff delay in seconds
+
 class InteractiveReviewFixer:
     """Interactive tool to fix issues detected by Tax Reviewer"""
     
@@ -28,8 +34,77 @@ class InteractiveReviewFixer:
         self.backup_file = None
         self._token_map_cache = None  # Session-level cache to avoid repeated API calls
         
+        # Set up session logging
+        self._setup_session_log()
+    
+    def _setup_session_log(self):
+        """Set up logging for this fixer session"""
+        from datetime import datetime
+        
+        # Create log directory if it doesn't exist
+        log_dir = app.LOG_DIR if hasattr(app, 'LOG_DIR') else app.OUTPUT_DIR / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create session log file
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.log_file = log_dir / f"{timestamp}_interactive_fixer_session.log"
+        
+        # Open log file for writing
+        self.log_handle = open(self.log_file, 'w', encoding='utf-8')
+        self._log(f"=== INTERACTIVE REVIEW FIXER SESSION ===")
+        self._log(f"Started: {datetime.now().isoformat()}")
+        self._log(f"Year: {self.year}")
+        self._log(f"Database: {self.db.db_file if hasattr(self.db, 'db_file') else 'unknown'}")
+        self._log("="*80)
+        self._log("")
+    
+    def _log(self, message):
+        """Log a message to both console and log file"""
+        try:
+            if hasattr(self, 'log_handle') and self.log_handle and not self.log_handle.closed:
+                self.log_handle.write(message + '\n')
+                self.log_handle.flush()  # Ensure it's written immediately
+        except:
+            pass  # Ignore errors if log file is closed
+    
+    def _log_input(self, prompt, user_response):
+        """Log user input"""
+        self._log(f"PROMPT: {prompt}")
+        self._log(f"USER INPUT: {user_response}")
+        self._log("")
+    
+    def _log_output(self, message):
+        """Log program output"""
+        self._log(f"OUTPUT: {message}")
+    
+    def __del__(self):
+        """Close log file on cleanup"""
+        try:
+            if hasattr(self, 'log_handle') and self.log_handle and not self.log_handle.closed:
+                from datetime import datetime
+                self._log("")
+                self._log("="*80)
+                self._log(f"Session ended: {datetime.now().isoformat()}")
+                self._log(f"Log saved to: {self.log_file}")
+                self.log_handle.close()
+        except:
+            pass  # Ignore errors during cleanup
+    
+    def _print(self, message):
+        """Print to console and log to file"""
+        print(message)
+        self._log_output(message)
+    
+    def _input(self, prompt):
+        """Get user input and log both prompt and response"""
+        print(prompt, end='')
+        response = input()
+        self._log_input(prompt, response)
+        return response
+        
     def load_review_report(self, report_path=None):
         """Load the most recent review report"""
+        self._log("Loading review report...")
         if report_path:
             with open(report_path, 'r') as f:
                 return json.load(f)
@@ -159,64 +234,148 @@ class InteractiveReviewFixer:
                 print("    → Kept as-is")
     
     def _guided_fix_missing_prices(self, warning):
-        """Guided fix for missing prices - show suggestions and let user accept/override"""
-        print("\n--- GUIDED FIX: MISSING PRICES ---")
-        print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
+        """Guided fix for missing prices - check blockchain first with API key prompts"""
+        self._print("\n--- GUIDED FIX: MISSING PRICES ---")
+        self._print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
         
         # Simplified Menu (No Bulk Options)
-        print("1. Guided fix (fetch suggestions, approve/override per item)")
-        print("2. Set custom price (enter manually per item)")
-        print("3. Skip (review later)")
+        self._print("1. Guided fix (check blockchain, fetch suggestions, approve/override per item)")
+        self._print("2. Set custom price (enter manually per item)")
+        self._print("3. Skip (review later)")
 
-        choice = input("\nSelect option (1-3): ").strip()
+        choice = self._input("\nSelect option (1-3): ").strip()
 
         if choice == '1':
-            print("\n  Fetching suggested prices...")
+            self._print("\n  Checking blockchain and fetching suggested prices...")
             from Crypto_Tax_Engine import PriceFetcher
             fetcher = PriceFetcher()
 
             for item in warning['items']:
                 coin = item['coin']
                 date_str = str(item['date']).split()[0]
+                transaction_id = item['id']
 
-                # 1) Try blockchain context
-                bc_price, bc_msg = self._try_blockchain_price(coin, date_str)
-
-                # 2) Yahoo Finance fallback
+                self._print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
+                
+                # Step 1: Check if transaction is on blockchain with existing wallets
+                # This will prompt for API key if needed
+                bc_found, bc_price, bc_details, api_key_needed = self._check_transaction_on_blockchain_with_prompts(
+                    transaction_id, coin, date_str, item['amount']
+                )
+                
+                new_wallet_to_save = None
+                
+                # If API key was needed but user skipped, treat as not found
+                if api_key_needed == 'skipped':
+                    self._print(f"    ⚠️  API key required but skipped - treating as transaction not found")
+                    bc_found = False
+                    bc_price = None
+                
+                if bc_found:
+                    # Transaction found on blockchain
+                    self._print(f"    ✅ Transaction found on blockchain!")
+                    if bc_details:
+                        self._print(f"       {bc_details}")
+                    if bc_price and bc_price > 0:
+                        self._print(f"    💎 On-chain price: ${bc_price:.6f}")
+                        self._print(f"    → RECOMMENDED: Use blockchain price (most accurate)")
+                    
+                    # Ask if they want to add another wallet address
+                    add_wallet = self._input("    Would you like to add another wallet address? (y/n): ").strip().lower()
+                    if add_wallet == 'y':
+                        new_wallet_to_save = self._input("    Enter wallet address: ").strip()
+                else:
+                    # Transaction NOT found on blockchain
+                    self._print(f"    ⚠️  Transaction not found on blockchain")
+                    
+                    # Prompt for wallet address
+                    add_wallet = self._input("    Would you like to enter a wallet address to check blockchain? (y/n): ").strip().lower()
+                    if add_wallet == 'y':
+                        new_wallet_to_save = self._input("    Enter wallet address: ").strip()
+                        
+                        if new_wallet_to_save:
+                            # Check blockchain again with new wallet
+                            self._print(f"    🔍 Checking blockchain with provided wallet...")
+                            bc_found_new, bc_price_new, bc_details_new, api_key_status = self._check_transaction_on_blockchain_with_prompts(
+                                transaction_id, coin, date_str, item['amount'], 
+                                additional_wallet=new_wallet_to_save
+                            )
+                            
+                            if api_key_status == 'skipped':
+                                self._print(f"    ⚠️  API key required but skipped")
+                                bc_found_new = False
+                            
+                            if bc_found_new:
+                                self._print(f"    ✅ Transaction found with provided wallet!")
+                                if bc_details_new:
+                                    self._print(f"       {bc_details_new}")
+                                bc_found = True
+                                bc_price = bc_price_new
+                            else:
+                                self._print(f"    ❌ Transaction not found with provided wallet on blockchain")
+                
+                # Step 2: Always ask if they want to save the wallet (if provided)
+                if new_wallet_to_save:
+                    save_wallet = self._input("    Save this wallet address to wallets.json? (y/n): ").strip().lower()
+                    if save_wallet == 'y':
+                        success, message = self._save_wallet_address(new_wallet_to_save, coin)
+                        self._print(f"    {message}")
+                
+                # Step 3: Get Yahoo Finance price as fallback
                 yf_price = None
                 try:
-                    yf_price = fetcher.get_price(coin, pd.to_datetime(date_str))
+                    yf_price = fetcher.get_price(coin, pd.to_datetime(date_str, utc=True))
                 except Exception as e:
                     yf_price = None
-
-                suggested_price = bc_price if bc_price is not None else yf_price
-
-                print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
-                if bc_price is not None:
-                    print(f"    On-chain: ${bc_price} ({bc_msg})")
                 
-                if yf_price is not None and yf_price > 0:
-                    print(f"    Yahoo:    ${yf_price}")
-
-                if suggested_price is not None and suggested_price > 0:
-                    print(f"    → Suggested: ${suggested_price}")
+                # Step 4: Determine what to suggest
+                if bc_found and bc_price and bc_price > 0:
+                    # Blockchain price found - suggest it
+                    suggested_price = bc_price
+                    self._print(f"\n    💎 Blockchain price: ${bc_price:.6f}")
+                    if yf_price and yf_price > 0:
+                        diff_pct = abs(bc_price - yf_price) / yf_price * 100 if yf_price > 0 else 0
+                        self._print(f"    📊 Yahoo Finance: ${yf_price:.2f} (diff: {diff_pct:.1f}%)")
+                    self._print(f"    → Suggested: ${suggested_price:.6f} (blockchain - most accurate)")
+                elif yf_price and yf_price > 0:
+                    # Only Yahoo Finance available
+                    suggested_price = yf_price
+                    self._print(f"\n    📊 Yahoo Finance: ${yf_price:.2f}")
+                    self._print(f"    ⚠️  WARNING: Daily close price may not match exact transaction time")
+                    self._print(f"    💡 TIP: Check blockchain explorer or your exchange for exact price")
+                    chain_hint = self._get_blockchain_explorer_hint(coin)
+                    if chain_hint:
+                        self._print(f"       {chain_hint}")
+                    self._print(f"    → Suggested: ${suggested_price:.2f} (Yahoo Finance - may not be perfectly accurate)")
                 else:
-                    print("    → Suggested: unavailable")
-
-                user_input = input("    (Enter=accept, number=override, 'skip'=skip): ").strip()
-
+                    # No price available
+                    self._print(f"\n    ❌ No price data available from any source")
+                    self._print(f"    💡 TIP: Check your exchange transaction history or blockchain explorer")
+                    chain_hint = self._get_blockchain_explorer_hint(coin)
+                    if chain_hint:
+                        self._print(f"       {chain_hint}")
+                    suggested_price = None
+                
+                # Step 5: Get user confirmation
+                if suggested_price:
+                    user_input = self._input(f"    (Enter=accept ${suggested_price:.2f}, number=override, 'skip'=skip): ").strip()
+                else:
+                    user_input = self._input(f"    (Enter price manually or 'skip'): ").strip()
+                
                 if user_input.lower() == 'skip':
+                    self._print(f"    → Skipped")
                     continue
-                elif user_input == '' and suggested_price is not None and suggested_price > 0:
-                    self._update_price(item['id'], suggested_price)
-                    print(f"    ✓ Set to ${suggested_price}")
+                elif user_input == '' and suggested_price:
+                    self._update_price(item['id'], Decimal(str(suggested_price)))
+                    source = "blockchain" if bc_found and bc_price else "Yahoo Finance"
+                    self._print(f"    ✓ Set to ${suggested_price:.2f} ({source})")
                 else:
                     try:
                         manual_price = Decimal(user_input)
                         self._update_price(item['id'], manual_price)
-                        print(f"    ✓ Set to ${manual_price}")
+                        self._print(f"    ✓ Set to ${manual_price} (manual)")
                     except:
-                        print("    ✗ Invalid input, skipped.")
+                        self._print("    ✗ Invalid input, skipped.")
 
         elif choice == '2':
             for item in warning['items']:
@@ -372,7 +531,8 @@ class InteractiveReviewFixer:
         return {}
 
     def _fetch_token_addresses_from_api(self):
-        """Fetch token contract addresses from CoinGecko API. Returns dict: {chain: {symbol: contract_address}}"""
+        """Fetch token contract addresses from CoinGecko API with exponential backoff. 
+        Returns dict: {chain: {symbol: contract_address}}"""
         print("\n[*] Fetching token addresses from CoinGecko API...")
         token_map = {}
         
@@ -387,6 +547,42 @@ class InteractiveReviewFixer:
             'fantom': 'fantom'
         }
         
+        def fetch_with_retry(url, params=None, max_retries=API_MAX_RETRIES, initial_delay=API_INITIAL_BACKOFF):
+            """Fetch URL with exponential backoff on rate limit errors"""
+            delay = initial_delay
+            for attempt in range(max_retries):
+                try:
+                    response = requests.get(url, params=params, timeout=30)
+                    
+                    # Check for rate limiting (429) or server errors (5xx)
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', delay))
+                        print(f"  [Rate limit] Waiting {retry_after}s before retry...")
+                        time.sleep(retry_after)
+                        delay = min(delay * 2, 60)  # Exponential backoff, max 60s
+                        continue
+                    elif response.status_code >= 500:
+                        print(f"  [Server error {response.status_code}] Retrying in {delay}s...")
+                        time.sleep(delay)
+                        delay = min(delay * 2, 60)
+                        continue
+                    
+                    response.raise_for_status()
+                    return response
+                    
+                except requests.exceptions.Timeout:
+                    print(f"  [Timeout] Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+                except requests.exceptions.RequestException as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    print(f"  [Error] {str(e)[:100]}... Retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay = min(delay * 2, 60)
+            
+            raise requests.exceptions.RequestException(f"Failed after {max_retries} retries")
+        
         try:
             # Fetch top 250 tokens by market cap (free tier limit)
             url = "https://api.coingecko.com/api/v3/coins/markets"
@@ -398,20 +594,18 @@ class InteractiveReviewFixer:
                 'sparkline': False
             }
             
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            response = fetch_with_retry(url, params=params)
             tokens = response.json()
             
             # For each token, get detailed info including contract addresses
             for i, token in enumerate(tokens):
                 if i > 0 and i % 50 == 0:
                     print(f"  Processed {i}/{len(tokens)} tokens...")
-                    time.sleep(1)  # Rate limiting
+                    time.sleep(API_BATCH_DELAY)  # Batch delay for free tier rate limiting (10-30 calls/min)
                 
                 try:
                     detail_url = f"https://api.coingecko.com/api/v3/coins/{token['id']}"
-                    detail_response = requests.get(detail_url, timeout=10)
-                    detail_response.raise_for_status()
+                    detail_response = fetch_with_retry(detail_url)
                     detail = detail_response.json()
                     
                     symbol = detail.get('symbol', '').upper()
@@ -425,9 +619,10 @@ class InteractiveReviewFixer:
                                 token_map[chain] = {}
                             token_map[chain][symbol] = contract_addr
                     
-                    time.sleep(0.1)  # Rate limiting between requests
+                    time.sleep(API_REQUEST_DELAY)  # Request delay respects free tier (~3 calls/sec max)
                     
-                except Exception:
+                except Exception as e:
+                    print(f"  [Skipped] {token.get('id', 'unknown')}: {str(e)[:50]}")
                     continue  # Skip failed tokens
             
             print(f"[*] Fetched {sum(len(tokens) for tokens in token_map.values())} token addresses across {len(token_map)} chains")
@@ -435,6 +630,7 @@ class InteractiveReviewFixer:
             
         except Exception as e:
             print(f"[!] Error fetching from CoinGecko: {e}")
+            print(f"[!] This may be due to rate limiting. Try again later or use cached data.")
             return {}
     
     def _get_cached_token_addresses(self):
@@ -484,6 +680,571 @@ class InteractiveReviewFixer:
         # Store in session cache
         self._token_map_cache = token_map
         return token_map
+    
+    def _save_wallet_address(self, wallet_address, coin):
+        """Save wallet address to wallets.json in the appropriate chain section
+        
+        Returns: (success: bool, message: str)
+        """
+        # Detect chain from wallet address format
+        chain = self._detect_chain_from_address(wallet_address, coin)
+        
+        if not chain:
+            return False, f"Could not determine blockchain for {coin}"
+        
+        # Load or create wallets.json
+        try:
+            if WALLETS_FILE.exists():
+                with open(WALLETS_FILE, 'r') as f:
+                    wallets = json.load(f)
+            else:
+                wallets = {}
+        except Exception as e:
+            return False, f"Error reading wallets.json: {e}"
+        
+        # Initialize chain section if needed
+        if chain not in wallets:
+            wallets[chain] = []
+        
+        # Convert to list if it's a dict with 'addresses' key
+        if isinstance(wallets[chain], dict):
+            if 'addresses' in wallets[chain]:
+                wallets[chain] = wallets[chain]['addresses']
+            else:
+                wallets[chain] = []
+        
+        # Add wallet if not already present
+        if wallet_address not in wallets[chain]:
+            wallets[chain].append(wallet_address)
+            
+            # Save back to file
+            try:
+                WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                with open(WALLETS_FILE, 'w') as f:
+                    json.dump(wallets, f, indent=2)
+                return True, f"✓ Saved wallet to {chain} section in wallets.json"
+            except Exception as e:
+                return False, f"Error saving wallets.json: {e}"
+        else:
+            return True, f"Wallet already exists in {chain} section"
+    
+    def _detect_chain_from_address(self, address, coin):
+        """Detect blockchain from wallet address format and coin symbol
+        
+        Returns: chain name (str) or None
+        """
+        address = address.strip()
+        coin_upper = coin.upper()
+        
+        # Bitcoin addresses (legacy, segwit, native segwit)
+        if address.startswith('1') or address.startswith('3') or address.startswith('bc1'):
+            if coin_upper in ['BTC', 'BITCOIN']:
+                return 'bitcoin'
+        
+        # Ethereum and EVM chains (0x prefix, 42 chars)
+        if address.startswith('0x') and len(address) == 42:
+            # Try to infer from coin
+            if coin_upper in ['ETH', 'WETH', 'ETHEREUM']:
+                return 'ethereum'
+            elif coin_upper in ['MATIC', 'POLYGON']:
+                return 'polygon'
+            elif coin_upper in ['BNB', 'WBNB']:
+                return 'bsc'
+            elif coin_upper in ['AVAX', 'WAVAX']:
+                return 'avalanche'
+            elif coin_upper in ['FTM', 'FANTOM']:
+                return 'fantom'
+            elif 'ARBITRUM' in coin_upper or 'ARB' == coin_upper:
+                return 'arbitrum'
+            elif 'OPTIMISM' in coin_upper or 'OP' == coin_upper:
+                return 'optimism'
+            else:
+                # Default to ethereum for unknown EVM tokens
+                return 'ethereum'
+        
+        # Solana addresses (base58, typically 32-44 chars, no 0x prefix)
+        if not address.startswith('0x') and 32 <= len(address) <= 44:
+            if coin_upper in ['SOL', 'SOLANA']:
+                return 'solana'
+        
+        # Couldn't determine
+        return None
+    
+    def _prompt_for_api_key(self, service_name, key_name):
+        """Prompt user to enter API key and optionally save it
+        
+        Args:
+            service_name: Human-readable service name (e.g., "Blockchair", "Etherscan")
+            key_name: Key name in api_keys.json (e.g., "blockchair", "etherscan")
+        
+        Returns:
+            tuple: (api_key: str or None, status: 'provided'|'skipped'|'error')
+        """
+        self._print(f"\n    🔑 {service_name} API key required for blockchain verification")
+        self._print(f"    Visit https://{service_name.lower()}.com to get a free API key")
+        
+        user_choice = self._input(f"    Enter API key (or 'skip' to use Yahoo Finance fallback): ").strip()
+        
+        if user_choice.lower() == 'skip' or not user_choice:
+            return None, 'skipped'
+        
+        api_key = user_choice
+        
+        # Ask if they want to save it
+        save_key = self._input(f"    Save this API key to api_keys.json for future use? (y/n): ").strip().lower()
+        
+        if save_key == 'y':
+            success, message = self._save_api_key(key_name, api_key)
+            if success:
+                self._print(f"    💾 {message}")
+            else:
+                self._print(f"    ⚠️  {message}")
+        
+        return api_key, 'provided'
+    
+    def _save_api_key(self, key_name, api_key):
+        """Save API key to api_keys.json
+        
+        Args:
+            key_name: Key name (e.g., "blockchair", "etherscan", "polygonscan")
+            api_key: The API key value
+        
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # Load existing keys or create new structure
+            if KEYS_FILE.exists():
+                with open(KEYS_FILE, 'r') as f:
+                    keys_data = json.load(f)
+            else:
+                keys_data = {}
+            
+            # Ensure proper structure
+            if key_name not in keys_data:
+                keys_data[key_name] = {}
+            
+            # Save the API key
+            keys_data[key_name]['apiKey'] = api_key
+            
+            # Write back to file
+            KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(KEYS_FILE, 'w') as f:
+                json.dump(keys_data, f, indent=2)
+            
+            return True, f"API key saved to {KEYS_FILE.name}"
+            
+        except Exception as e:
+            return False, f"Error saving API key: {str(e)}"
+    
+    def _check_transaction_on_blockchain_with_prompts(self, transaction_id, coin, date_str, amount, additional_wallet=None):
+        """Check blockchain with API key prompting if needed
+        
+        Args:
+            transaction_id: Transaction ID from database
+            coin: Coin symbol (e.g., 'BTC', 'ETH')
+            date_str: Date string of transaction (YYYY-MM-DD format)
+            amount: Transaction amount
+            additional_wallet: Optional additional wallet address to check
+        
+        Returns:
+            tuple: (found: bool, price: float or None, details: str or None, api_key_status: str)
+        """
+        # Load wallets first
+        wallets_to_check = []
+        
+        if WALLETS_FILE.exists():
+            try:
+                with open(WALLETS_FILE, 'r') as f:
+                    wallets_data = json.load(f)
+                
+                # Only check the correct blockchain for this coin
+                chain = self._infer_chain_from_coin(coin)
+                
+                if chain and chain in wallets_data:
+                    wallet_list = wallets_data[chain]
+                    if isinstance(wallet_list, list):
+                        wallets_to_check.extend(wallet_list)
+                    elif isinstance(wallet_list, dict) and 'addresses' in wallet_list:
+                        wallets_to_check.extend(wallet_list['addresses'])
+            except Exception as e:
+                pass
+        
+        # Add additional wallet if provided
+        if additional_wallet:
+            wallets_to_check.append(additional_wallet)
+        
+        if not wallets_to_check:
+            return False, None, "No wallet addresses configured for this blockchain", 'no_wallets'
+        
+        # Load API keys
+        api_keys = {}
+        if KEYS_FILE.exists():
+            try:
+                with open(KEYS_FILE) as f:
+                    api_keys = json.load(f)
+            except Exception:
+                pass
+        
+        coin_upper = coin.upper()
+        
+        # Route to appropriate blockchain and check/prompt for API key
+        if coin_upper in ['BTC', 'BITCOIN']:
+            # Bitcoin requires Blockchair
+            blockchair_key = api_keys.get('blockchair', {}).get('apiKey')
+            
+            if not blockchair_key:
+                # Prompt for API key
+                blockchair_key, status = self._prompt_for_api_key('Blockchair', 'blockchair')
+                if status == 'skipped':
+                    return False, None, "Blockchair API key required but skipped", 'skipped'
+            
+            found, price, details = self._check_bitcoin_transaction(wallets_to_check, date_str, amount, blockchair_key)
+            return found, price, details, 'ok'
+        
+        else:
+            # EVM chains - will check within _check_evm_transaction
+            found, price, details = self._check_evm_transaction_with_prompts(wallets_to_check, coin_upper, date_str, amount, api_keys)
+            return found, price, details, 'ok'
+    
+    def _check_transaction_on_blockchain(self, transaction_id, coin, date_str, amount, additional_wallet=None):
+        """Check if transaction exists on blockchain with wallet addresses using Etherscan/Blockchair
+        
+        Args:
+            transaction_id: Transaction ID from database
+            coin: Coin symbol (e.g., 'BTC', 'ETH')
+            date_str: Date string of transaction (YYYY-MM-DD format)
+            amount: Transaction amount
+            additional_wallet: Optional additional wallet address to check
+        
+        Returns:
+            tuple: (found: bool, price: float or None, details: str or None)
+        """
+        # Load wallets and API keys
+        wallets_to_check = []
+        
+        if WALLETS_FILE.exists():
+            try:
+                with open(WALLETS_FILE, 'r') as f:
+                    wallets_data = json.load(f)
+                
+                # Determine which chain this coin belongs to - ONLY CHECK THAT CHAIN
+                chain = self._infer_chain_from_coin(coin)
+                
+                if chain and chain in wallets_data:
+                    wallet_list = wallets_data[chain]
+                    if isinstance(wallet_list, list):
+                        wallets_to_check.extend(wallet_list)
+                    elif isinstance(wallet_list, dict) and 'addresses' in wallet_list:
+                        wallets_to_check.extend(wallet_list['addresses'])
+            except Exception as e:
+                pass  # Continue with empty wallet list
+        
+        # Add additional wallet if provided
+        if additional_wallet:
+            wallets_to_check.append(additional_wallet)
+        
+        if not wallets_to_check:
+            return False, None, "No wallet addresses found"
+        
+        # Load API keys
+        moralis_key = None
+        blockchair_key = None
+        if KEYS_FILE.exists():
+            try:
+                with open(KEYS_FILE) as f:
+                    keys = json.load(f)
+                blockchair_key = keys.get('blockchair', {}).get('apiKey') or None
+            except Exception:
+                pass
+        
+        coin_upper = coin.upper()
+        
+        # Route to appropriate blockchain API (ONLY the correct one for this coin)
+        if coin_upper in ['BTC', 'BITCOIN']:
+            # Use Blockchair for Bitcoin
+            return self._check_bitcoin_transaction(wallets_to_check, date_str, amount, blockchair_key)
+        else:
+            # Use Etherscan for Ethereum and EVM chains
+            return self._check_evm_transaction(wallets_to_check, coin_upper, date_str, amount)
+    
+    def _check_bitcoin_transaction(self, wallets, date_str, amount, blockchair_key):
+        """Check Bitcoin transaction on blockchain using Blockchair API
+        
+        Returns: (found: bool, price: float or None, details: str or None)
+        """
+        if not blockchair_key:
+            return False, None, "Blockchair API key not configured - cannot check Bitcoin transactions"
+        
+        import datetime as dt
+        
+        try:
+            # Parse date
+            tx_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            for wallet in wallets:
+                try:
+                    # Check Blockchair API for wallet transactions
+                    url = f"https://api.blockchair.com/bitcoin/addresses/{wallet}"
+                    params = {'key': blockchair_key}
+                    
+                    response = requests.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if data.get('data') and wallet in data['data']:
+                        wallet_data = data['data'][wallet]
+                        
+                        # Get transactions for this wallet
+                        tx_url = f"https://api.blockchair.com/bitcoin/transactions"
+                        tx_params = {
+                            'q': f'receiver({wallet})',
+                            'key': blockchair_key,
+                            'limit': 100,
+                            'offset': 0
+                        }
+                        
+                        tx_response = requests.get(tx_url, params=tx_params, timeout=10)
+                        tx_response.raise_for_status()
+                        tx_data = tx_response.json()
+                        
+                        # Search for matching transaction
+                        if tx_data.get('data'):
+                            for tx in tx_data['data']:
+                                # Check if this transaction matches
+                                tx_time = dt.datetime.fromtimestamp(tx.get('time', 0)).date()
+                                
+                                # Match by date (within 1 day) and look for amount
+                                if abs((tx_time - tx_date).days) <= 1:
+                                    # Blockchair doesn't provide price in transaction data
+                                    # Return success with indication to use external price
+                                    return True, None, f"✓ Found Bitcoin transaction on {tx_time} at {wallet[:16]}..."
+                    
+                    time.sleep(0.5)  # Rate limiting for Blockchair
+                    
+                except Exception as e:
+                    logger.debug(f"Blockchair check failed for {wallet}: {str(e)[:100]}")
+                    continue
+        
+        except Exception as e:
+            return False, None, f"Blockchair lookup error: {str(e)[:100]}"
+        
+        return False, None, f"Bitcoin transaction not found in {len(wallets)} wallet(s)"
+    
+    def _check_evm_transaction_with_prompts(self, wallets, coin, date_str, amount, api_keys):
+        """Check EVM transaction with API key prompting if needed
+        
+        Returns: (found: bool, price: float or None, details: str or None)
+        """
+        import datetime as dt
+        
+        # Map coins to their API services
+        coin_to_service = {
+            'ETH': ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'),
+            'WETH': ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'),
+            'MATIC': ('Polygonscan', 'polygonscan', 'https://api.polygonscan.com/api'),
+            'BNB': ('BSCScan', 'bscscan', 'https://api.bscscan.com/api'),
+            'WBNB': ('BSCScan', 'bscscan', 'https://api.bscscan.com/api'),
+            'AVAX': ('Snowtrace', 'snowtrace', 'https://api.snowtrace.io/api'),
+            'WAVAX': ('Snowtrace', 'snowtrace', 'https://api.snowtrace.io/api'),
+            'FTM': ('FTMScan', 'ftmscan', 'https://api.ftmscan.com/api'),
+        }
+        
+        # Get service info for this coin (default to Etherscan)
+        service_name, key_name, api_url = coin_to_service.get(coin, ('Etherscan', 'etherscan', 'https://api.etherscan.io/api'))
+        
+        # Check if we have the API key
+        api_key = api_keys.get(key_name, {}).get('apiKey')
+        
+        if not api_key:
+            # Prompt for API key
+            api_key, status = self._prompt_for_api_key(service_name, key_name)
+            if status == 'skipped' or not api_key:
+                return False, None, f"{service_name} API key required but skipped"
+        
+        # Now check the transaction with the API key
+        return self._check_evm_transaction(wallets, coin, date_str, amount, api_key, api_url)
+    
+    def _check_evm_transaction(self, wallets, coin, date_str, amount, api_key=None, api_url=None):
+        """Check Ethereum/EVM transaction on blockchain using Etherscan-compatible API
+        
+        Returns: (found: bool, price: float or None, details: str or None)
+        """
+        import datetime as dt
+        
+        # Map chains to Etherscan-compatible APIs
+        chain_apis = {
+            'ETH': {
+                'name': 'Ethereum',
+                'api_url': 'https://api.etherscan.io/api',
+                'key_env': 'ETHERSCAN_API_KEY'
+            },
+            'MATIC': {
+                'name': 'Polygon',
+                'api_url': 'https://api.polygonscan.com/api',
+                'key_env': 'POLYGONSCAN_API_KEY'
+            },
+            'BNB': {
+                'name': 'BSC',
+                'api_url': 'https://api.bscscan.com/api',
+                'key_env': 'BSCSCAN_API_KEY'
+            },
+            'AVAX': {
+                'name': 'Avalanche',
+                'api_url': 'https://api.snowtrace.io/api',
+                'key_env': 'SNOWTRACE_API_KEY'
+            },
+            'FTM': {
+                'name': 'Fantom',
+                'api_url': 'https://api.ftmscan.com/api',
+                'key_env': 'FTMSCAN_API_KEY'
+            }
+        }
+        
+        # Use provided api_url or default to Ethereum for ERC-20 tokens
+        if not api_url:
+            chain_info = chain_apis.get(coin, chain_apis.get('ETH', {}))
+            api_url = chain_info.get('api_url')
+            chain_name = chain_info.get('name', 'EVM Chain')
+        
+        if not api_url:
+            return False, None, f"API not configured for {coin}"
+        
+        # Use provided api_key or placeholder
+        if not api_key:
+            api_key = 'YourApiKeyToken'  # Placeholder
+        
+        try:
+            tx_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            for wallet in wallets:
+                try:
+                    # Check normal transactions (ETH transfers)
+                    if coin in ['ETH', 'WETH']:
+                        params = {
+                            'module': 'account',
+                            'action': 'txlist',
+                            'address': wallet,
+                            'startblock': 0,
+                            'endblock': 99999999,
+                            'sort': 'desc',
+                            'apikey': api_key
+                        }
+                        
+                        response = requests.get(api_url, params=params, timeout=10)
+                        response.raise_for_status()
+                        data = response.json()
+                        
+                        if data.get('result') and isinstance(data['result'], list):
+                            for tx in data['result']:
+                                tx_time = dt.datetime.fromtimestamp(int(tx.get('timeStamp', 0))).date()
+                                tx_value = float(int(tx.get('value', 0)) / 1e18)  # Convert wei to ETH
+                                
+                                # Match by date (within 1 day) and approximate amount
+                                if abs((tx_time - tx_date).days) <= 1:
+                                    if abs(tx_value - float(amount)) < float(amount) * 0.01:  # Within 1% match
+                                        # Found matching transaction
+                                        tx_hash = tx.get('hash', 'unknown')
+                                        return True, None, f"✓ Found {coin} transaction {tx_hash[:16]}... on {tx_time} from {wallet[:16]}..."
+                    
+                    # Check ERC-20 token transfers
+                    else:
+                        params = {
+                            'module': 'account',
+                            'action': 'tokentxlist',
+                            'address': wallet,
+                            'startblock': 0,
+                            'endblock': 99999999,
+                            'sort': 'desc',
+                            'apikey': 'YourApiKeyToken'  # Placeholder - would use from keys.json
+                        }
+                        
+                        response = requests.get(api_url, params=params, timeout=10)
+                        response.raise_for_status()
+                        data = response.json()
+                        
+                        if data.get('result') and isinstance(data['result'], list):
+                            for tx in data['result']:
+                                tx_time = dt.datetime.fromtimestamp(int(tx.get('timeStamp', 0))).date()
+                                token_symbol = tx.get('tokenSymbol', '')
+                                
+                                # Match by date and token symbol
+                                if abs((tx_time - tx_date).days) <= 1 and token_symbol.upper() == coin.upper():
+                                    tx_hash = tx.get('hash', 'unknown')
+                                    return True, None, f"✓ Found {coin} transaction {tx_hash[:16]}... on {tx_time} from {wallet[:16]}..."
+                    
+                    time.sleep(0.2)  # Rate limiting for Etherscan-compatible APIs
+                    
+                except Exception as e:
+                    logger.debug(f"EVM check failed for {wallet}: {str(e)[:100]}")
+                    continue
+        
+        except Exception as e:
+            return False, None, f"{chain_name} lookup error: {str(e)[:100]}"
+        
+        return False, None, f"{coin} transaction not found in {len(wallets)} wallet(s) on {chain_name}"
+    
+    def _infer_chain_from_coin(self, coin):
+        """Infer blockchain network from coin symbol
+        
+        Returns:
+            str: Chain name (e.g., 'ethereum', 'bitcoin') or None
+        """
+        coin_upper = coin.upper()
+        
+        # Native coins
+        if coin_upper in ['BTC', 'BITCOIN']:
+            return 'bitcoin'
+        elif coin_upper in ['ETH', 'WETH', 'ETHEREUM']:
+            return 'ethereum'
+        elif coin_upper in ['MATIC', 'POLYGON']:
+            return 'polygon'
+        elif coin_upper in ['BNB', 'WBNB']:
+            return 'bsc'
+        elif coin_upper in ['AVAX', 'WAVAX']:
+            return 'avalanche'
+        elif coin_upper in ['FTM', 'FANTOM']:
+            return 'fantom'
+        elif coin_upper in ['SOL', 'SOLANA']:
+            return 'solana'
+        elif 'ARBITRUM' in coin_upper or coin_upper == 'ARB':
+            return 'arbitrum'
+        elif 'OPTIMISM' in coin_upper or coin_upper == 'OP':
+            return 'optimism'
+        
+        # For ERC-20 tokens, default to ethereum
+        # In a real implementation, you'd check token contract addresses
+        return 'ethereum'
+    
+    def _get_blockchain_explorer_hint(self, coin):
+        """Get blockchain explorer suggestion based on coin
+        
+        Returns:
+            str: Helpful message with explorer URL or None
+        """
+        coin_upper = coin.upper()
+        
+        if coin_upper in ['BTC', 'BITCOIN']:
+            return "Blockchain Explorer: https://www.blockchain.com/explorer or https://blockchair.com/bitcoin"
+        elif coin_upper in ['ETH', 'WETH', 'ETHEREUM'] or 'ETH' in coin_upper:
+            return "Blockchain Explorer: https://etherscan.io"
+        elif coin_upper in ['MATIC', 'POLYGON']:
+            return "Blockchain Explorer: https://polygonscan.com"
+        elif coin_upper in ['BNB', 'WBNB']:
+            return "Blockchain Explorer: https://bscscan.com"
+        elif coin_upper in ['AVAX', 'WAVAX']:
+            return "Blockchain Explorer: https://snowtrace.io"
+        elif coin_upper in ['FTM', 'FANTOM']:
+            return "Blockchain Explorer: https://ftmscan.com"
+        elif coin_upper in ['SOL', 'SOLANA']:
+            return "Blockchain Explorer: https://solscan.io or https://explorer.solana.com"
+        elif 'ARBITRUM' in coin_upper or coin_upper == 'ARB':
+            return "Blockchain Explorer: https://arbiscan.io"
+        elif 'OPTIMISM' in coin_upper or coin_upper == 'OP':
+            return "Blockchain Explorer: https://optimistic.etherscan.io"
+        
+        # Default to Ethereum for ERC-20 tokens
+        return "Blockchain Explorer: https://etherscan.io (for Ethereum) or check your exchange"
     
     def _try_blockchain_price(self, coin, date_str):
         """Attempt on-chain pricing using wallets/key context. Returns (price, message)."""
