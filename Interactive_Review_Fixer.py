@@ -4,9 +4,10 @@ Provides guided, interactive fixing of audit risk warnings.
 """
 
 import json
+import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import pandas as pd
 import requests
 import time
@@ -112,6 +113,8 @@ class InteractiveReviewFixer:
                 self._guided_fix_duplicates(warning)
             elif category == 'HIGH_FEES':
                 self._guided_fix_high_fees(warning)
+            elif category == 'PRICE_ANOMALIES':
+                self._guided_fix_price_anomalies(warning)
             else:
                 self._generic_fix_prompt(warning)
         
@@ -428,6 +431,75 @@ class InteractiveReviewFixer:
         
         else:
             print("\n[SKIPPED] Invalid choice. This warning will appear again next time.")
+    
+    def _guided_fix_price_anomalies(self, warning):
+        """Guided smart fix for price anomaly warnings - auto-suggest per-unit price"""
+        from Crypto_Tax_Engine import PriceFetcher
+        
+        print("\n--- GUIDED FIX: PRICE ANOMALIES (Smart Detection) ---")
+        print("Price anomaly detection found transactions where the price likely represents")
+        print("TOTAL TRANSACTION VALUE instead of PER-UNIT PRICE.\n")
+        print("Common example:")
+        print("  User entered: 0.1 BTC @ $5,000 (WRONG: $5,000 is the total value)")
+        print("  Should be: 0.1 BTC @ $50,000 (CORRECT: per-unit price)\n")
+        
+        pf = PriceFetcher()
+        fixed_count = 0
+        
+        for item in warning['items']:
+            transaction_id = item.get('id')
+            coin = item['coin']
+            date = item['date']
+            amount = float(item['amount'])
+            reported_price = float(item['reported_price'])
+            
+            # Auto-calculate what the per-unit price should be
+            # If user entered total value instead of per-unit: suggested = reported_price / amount
+            suggested_per_unit = reported_price / amount if amount > 0 else reported_price
+            implied_total = reported_price * amount
+            
+            print(f"\n  Transaction ID: {transaction_id}")
+            print(f"  Date: {date} | Coin: {coin} | Amount: {amount}")
+            print(f"  Currently entered: ${reported_price:.2f} per unit")
+            print(f"  → This would mean total value of: ${implied_total:.2f}")
+            
+            # Try to fetch current market price for context
+            try:
+                current_market_price = float(pf.get_price(coin, date))
+                if current_market_price > 0:
+                    print(f"  → Historical market price (~{date}): ${current_market_price:.2f} per unit")
+            except:
+                pass
+            
+            print(f"\n  SUGGESTED FIX: ${suggested_per_unit:.2f} per unit")
+            print(f"  → Total value would be: ${suggested_per_unit * amount:.2f}")
+            
+            response = input("\n    Accept suggestion? (y/n/custom): ").strip().lower()
+            
+            if response == 'y':
+                # Apply the automated fix
+                self._update_price(transaction_id, Decimal(str(suggested_per_unit)))
+                print(f"    ✓ Updated price to ${suggested_per_unit:.2f} per unit")
+                fixed_count += 1
+            elif response == 'n':
+                print("    → Keeping original price")
+            elif response == 'custom':
+                try:
+                    custom_price = input("    Enter custom per-unit price: $").strip()
+                    custom_decimal = Decimal(str(custom_price))
+                    self._update_price(transaction_id, custom_decimal)
+                    print(f"    ✓ Updated price to ${float(custom_decimal):.2f} per unit")
+                    fixed_count += 1
+                except (ValueError, InvalidOperation):
+                    print("    ✗ Invalid price entered, keeping original")
+            else:
+                print("    → Keeping original price")
+        
+        # Summary
+        print(f"\n--- PRICE ANOMALY FIX SUMMARY ---")
+        print(f"Fixed {fixed_count} out of {len(warning['items'])} price anomalies")
+        if fixed_count > 0:
+            print("These changes will be staged (not committed until you confirm at the end).")
     
     def _generic_fix_prompt(self, warning):
         """Generic handler for unimplemented fix types"""
