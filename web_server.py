@@ -586,6 +586,12 @@ def setup_page():
         return redirect(url_for('login'))
     return render_template('setup.html')
 
+@app.route('/setup/wizard', methods=['GET'])
+@login_required
+def setup_wizard():
+    """Setup Wizard page shown after account creation"""
+    return render_template('setup_wizard.html')
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -1156,13 +1162,18 @@ def api_wizard_run_setup():
             return jsonify({'error': 'Setup.py not found'}), 404
         
         # Run the script and capture output (shell=False for security)
+        env = os.environ.copy()
+        env['SETUP_WIZARD_MODE'] = '1'
+        
         result = subprocess.run(
             [sys.executable, str(setup_script)],
             capture_output=True,
             text=True,
             cwd=str(BASE_DIR),
-            timeout=30,
-            shell=False  # Explicitly set for security
+            timeout=60,
+            shell=False,  # Explicitly set for security
+            stdin=subprocess.DEVNULL, # Prevent interactive prompts
+            env=env
         )
         
         return jsonify({

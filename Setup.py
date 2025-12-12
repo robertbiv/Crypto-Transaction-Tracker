@@ -228,7 +228,13 @@ def main():
     validate_json(CONFIG_FILE, config_data)
     
     print("\n[DONE] Configuration files updated/created.")
-    input("\nPress Enter...")
+    # Only ask for input if not running in wizard mode and is a TTY
+    if os.environ.get('SETUP_WIZARD_MODE') != '1':
+        try:
+            if sys.stdin.isatty():
+                input("\nPress Enter...")
+        except:
+            pass
 
 if __name__ == "__main__":
     main()

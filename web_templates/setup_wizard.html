@@ -575,10 +575,18 @@
     </div>
     
     <script>
-        let currentStep = 1;
+        // Start at step 2 since account is already created via first_time_setup
+        let currentStep = 2;
         const totalSteps = 5;
-        let accountCreated = false;
+        let accountCreated = true;
         let setupScriptRan = false;
+
+        // Initialize wizard on load
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateProgress();
+            // Auto-start setup script
+            await runSetupScript();
+        });
         
         // Password strength checker
         function checkPasswordStrength(password) {
