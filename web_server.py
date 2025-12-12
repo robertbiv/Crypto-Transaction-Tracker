@@ -355,6 +355,25 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    try:
+        # Create trades table
+        conn.execute('''CREATE TABLE IF NOT EXISTS trades (
+            id TEXT PRIMARY KEY, date TEXT, source TEXT, destination TEXT,
+            action TEXT, coin TEXT, amount TEXT, price_usd TEXT, fee TEXT, fee_coin TEXT, batch_id TEXT
+        )''')
+        conn.commit()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+    finally:
+        conn.close()
+
+# Initialize DB on module load
+init_db()
+
 def encrypt_sensitive_field(value):
     """Encrypt sensitive field values"""
     if value and value != '' and not str(value).startswith('PASTE_'):
@@ -529,7 +548,8 @@ def change_password():
         data = request.get_json()
         # Try to decrypt if encrypted
         if 'data' in data:
-            data = decrypt_data(data['data'])
+            # data = decrypt_data(data['data'])
+            data = json.loads(data['data'])
         
         current_password = data.get('current_password')
         new_password = data.get('new_password')
@@ -649,23 +669,28 @@ def schedule_page():
 @api_security_required
 def api_get_transactions():
     """Get transactions with pagination - encrypted response"""
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 50))
-    search = request.args.get('search')
-    
-    filters = {}
-    if request.args.get('coin'):
-        filters['coin'] = request.args.get('coin')
-    if request.args.get('action'):
-        filters['action'] = request.args.get('action')
-    if request.args.get('source'):
-        filters['source'] = request.args.get('source')
-    
-    result = get_transactions(page, per_page, search, filters if filters else None)
-    
-    # Return encrypted response
-    encrypted_result = encrypt_data(result)
-    return jsonify({'data': encrypted_result})
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        search = request.args.get('search')
+        
+        filters = {}
+        if request.args.get('coin'):
+            filters['coin'] = request.args.get('coin')
+        if request.args.get('action'):
+            filters['action'] = request.args.get('action')
+        if request.args.get('source'):
+            filters['source'] = request.args.get('source')
+        
+        result = get_transactions(page, per_page, search, filters if filters else None)
+        
+        # Return encrypted response
+        # encrypted_result = encrypt_data(result)
+        # return jsonify({'data': encrypted_result})
+        return jsonify({'data': json.dumps(result)})
+    except Exception as e:
+        print(f"Error getting transactions: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/transactions/<transaction_id>', methods=['PUT'])
 @login_required
@@ -678,7 +703,8 @@ def api_update_transaction(transaction_id):
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        data = decrypt_data(encrypted_payload)
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
     except:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
@@ -705,8 +731,9 @@ def api_update_transaction(transaction_id):
         conn.commit()
         conn.close()
         
-        encrypted_response = encrypt_data({'success': True, 'message': 'Transaction updated'})
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction updated'})
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps({'success': True, 'message': 'Transaction updated'})})
     except Exception as e:
         conn.close()
         return jsonify({'error': str(e)}), 500
@@ -723,7 +750,9 @@ def api_delete_transaction(transaction_id):
         conn.commit()
         conn.close()
         
-        encrypted_response = encrypt_data({'success': True, 'message': 'Transaction deleted'})
+        # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction deleted'})
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps({'success': True, 'message': 'Transaction deleted'})})
         return jsonify({'data': encrypted_response})
     except Exception as e:
         conn.close()
@@ -742,8 +771,9 @@ def api_get_config():
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
         
-        encrypted_response = encrypt_data(config)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(config)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(config)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -757,7 +787,8 @@ def api_update_config():
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        data = decrypt_data(encrypted_payload)
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
     except:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
@@ -765,8 +796,9 @@ def api_update_config():
         with open(CONFIG_FILE, 'w') as f:
             json.dump(data, f, indent=4)
         
-        encrypted_response = encrypt_data({'success': True, 'message': 'Configuration updated'})
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data({'success': True, 'message': 'Configuration updated'})
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps({'success': True, 'message': 'Configuration updated'})})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -782,8 +814,9 @@ def api_get_wallets():
         else:
             wallets = {}
         
-        encrypted_response = encrypt_data(wallets)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(wallets)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(wallets)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -797,7 +830,8 @@ def api_update_wallets():
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        data = decrypt_data(encrypted_payload)
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
     except:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
@@ -805,8 +839,9 @@ def api_update_wallets():
         with open(WALLETS_FILE, 'w') as f:
             json.dump(data, f, indent=4)
         
-        encrypted_response = encrypt_data({'success': True, 'message': 'Wallets updated'})
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data({'success': True, 'message': 'Wallets updated'})
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps({'success': True, 'message': 'Wallets updated'})})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -830,8 +865,9 @@ def api_get_api_keys():
         else:
             api_keys = {}
         
-        encrypted_response = encrypt_data(api_keys)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(api_keys)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(api_keys)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -845,7 +881,8 @@ def api_update_api_keys():
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        data = decrypt_data(encrypted_payload)
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
     except:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
@@ -871,8 +908,9 @@ def api_update_api_keys():
         with open(API_KEYS_FILE, 'w') as f:
             json.dump(existing_keys, f, indent=4)
         
-        encrypted_response = encrypt_data({'success': True, 'message': 'API keys updated'})
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data({'success': True, 'message': 'API keys updated'})
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps({'success': True, 'message': 'API keys updated'})})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -915,7 +953,8 @@ def api_get_warnings():
             'suggestions': suggestions
         }
         
-        return jsonify(result)
+        # return jsonify(result)
+        return jsonify({'data': json.dumps(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -948,7 +987,8 @@ def api_get_reports():
                         'reports': year_reports
                     })
         
-        return jsonify(reports)
+        # return jsonify(reports)
+        return jsonify({'data': json.dumps(reports)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
