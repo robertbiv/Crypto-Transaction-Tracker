@@ -1052,12 +1052,12 @@ def api_wizard_create_account():
         if len(password) < 8:
             return jsonify({'error': 'Password must be at least 8 characters'}), 400
         
-        # Create user
+        # Create user (setup not completed yet)
         users = {
             username: {
                 'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
                 'created_at': datetime.now(timezone.utc).isoformat(),
-                'setup_completed': True
+                'setup_completed': False  # Will be set to True when wizard completes
             }
         }
         
@@ -1080,13 +1080,14 @@ def api_wizard_run_setup():
         if not setup_script.exists():
             return jsonify({'error': 'Setup.py not found'}), 404
         
-        # Run the script and capture output
+        # Run the script and capture output (shell=False for security)
         result = subprocess.run(
             [sys.executable, str(setup_script)],
             capture_output=True,
             text=True,
             cwd=str(BASE_DIR),
-            timeout=30
+            timeout=30,
+            shell=False  # Explicitly set for security
         )
         
         return jsonify({
@@ -1181,8 +1182,10 @@ def api_wizard_complete():
         return jsonify({'error': 'No user account found'}), 403
     
     try:
-        # Get the user (should only be one at this point)
+        # Get the user (validate only one exists during wizard)
         users = load_users()
+        if len(users) != 1:
+            return jsonify({'error': 'Invalid setup state - expected exactly one user'}), 500
         username = list(users.keys())[0]
         
         # Mark setup as completed
