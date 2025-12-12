@@ -715,8 +715,7 @@ class TaxReviewer:
         the IRS requires that you maintain contemporaneous records identifying which specific lots are being sold
         AT THE TIME OF THE SALE. This software applies HIFO retroactively at year-end, which is technically aggressive.
         """
-        # Check if HIFO is configured
-        import Crypto_Tax_Engine as app
+        # Check if HIFO is configured (app imported at module level)
         acct_method = str(app.GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')).upper()
         
         if acct_method == 'HIFO':
