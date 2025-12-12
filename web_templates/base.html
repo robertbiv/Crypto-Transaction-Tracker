@@ -283,7 +283,14 @@
                     headers['X-Request-Timestamp'] = timestamp;
                     
                     // Generate signature (simplified for client)
-                    const data = options.body ? JSON.parse(options.body) : {};
+                    let data = {};
+                    if (options.body) {
+                        try {
+                            data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+                        } catch (e) {
+                            data = {};
+                        }
+                    }
                     const message = JSON.stringify(data) + timestamp;
                     
                     // Use SubtleCrypto API for HMAC
