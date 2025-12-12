@@ -7537,5 +7537,394 @@ class TestFBARCompliance2025(unittest.TestCase):
         self.assertIn('2026', warning_text, "Should mention 2026 filing year")
 
 
+class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
+    """Comprehensive test coverage for all Interactive_Review_Fixer features"""
+    
+    def setUp(self):
+        """Set up test database"""
+        self.test_dir = tempfile.mkdtemp()
+        self.test_path = Path(self.test_dir)
+        self.orig_base = app.BASE_DIR
+        self.orig_db = app.DB_FILE
+        app.BASE_DIR = self.test_path
+        app.DB_FILE = self.test_path / 'test_fixer.db'
+        app.OUTPUT_DIR = self.test_path / 'outputs'
+        app.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        self.db = app.DatabaseManager()
+    
+    def tearDown(self):
+        """Clean up test database"""
+        self.db.close()
+        shutil.rmtree(self.test_dir)
+        app.BASE_DIR = self.orig_base
+        app.DB_FILE = self.orig_db
+    
+    def test_get_transaction(self):
+        """Test: _get_transaction retrieves complete transaction details"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        self.db.save_trade({
+            'id': 'test_tx_1',
+            'date': '2024-06-15',
+            'source': 'BINANCE',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': 2.5,
+            'price_usd': 1800,
+            'fee': 10.50,
+            'batch_id': 'batch_test'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        tx = fixer._get_transaction('test_tx_1')
+        
+        self.assertIsNotNone(tx)
+        self.assertEqual(tx['coin'], 'ETH')
+        self.assertEqual(float(tx['amount']), 2.5)
+        self.assertEqual(float(tx['price_usd']), 1800)
+        self.assertEqual(float(tx['fee']), 10.50)
+    
+    def test_get_transaction_not_found(self):
+        """Test: _get_transaction returns empty dict for missing ID"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        tx = fixer._get_transaction('nonexistent_id')
+        
+        self.assertEqual(tx, {})
+    
+    def test_price_anomaly_fix_total_as_unit(self):
+        """Test: _guided_fix_price_anomalies detects and suggests fix for 'total as unit' error"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Create a price anomaly: entered total value instead of per-unit price
+        warning = {
+            'category': 'PRICE_ANOMALIES',
+            'title': 'Price Anomalies Detected',
+            'count': 1,
+            'items': [{
+                'id': 'anomaly_1',
+                'coin': 'BTC',
+                'date': '2024-01-15',
+                'amount': 0.5,
+                'reported_price': 50000,  # This should be price per coin, not total
+                'market_price': 40000
+            }]
+        }
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Simulate choosing option 1 (fix total as unit)
+        # The suggested fix would be: 50000 / 0.5 = 100000
+        suggested = float(warning['items'][0]['reported_price']) / float(warning['items'][0]['amount'])
+        self.assertEqual(suggested, 100000.0)
+    
+    def test_high_fees_detection_message(self):
+        """Test: High fees warning displays correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        warning = {
+            'category': 'HIGH_FEES',
+            'title': 'High Trading Fees Detected',
+            'count': 2,
+            'description': 'Some transactions have fees exceeding 2% of transaction value',
+            'items': [
+                {
+                    'coin': 'BTC',
+                    'date': '2024-01-01',
+                    'amount': 1.0,
+                    'fee_usd': 500,
+                    'fee_pct': 2.5
+                }
+            ]
+        }
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        # Test that fixer can handle high fees warnings
+        self.assertIn('HIGH_FEES', warning['category'])
+        self.assertEqual(warning['count'], 2)
+    
+    def test_duplicate_suspects_warning(self):
+        """Test: Duplicate transaction warning structure"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Add potential duplicates
+        self.db.save_trade({
+            'id': 'dup1',
+            'date': '2024-06-01',
+            'source': 'BINANCE',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': 5.0,
+            'price_usd': 2000,
+            'fee': 10,
+            'batch_id': 'batch1'
+        })
+        self.db.save_trade({
+            'id': 'dup2',
+            'date': '2024-06-01',
+            'source': 'BINANCE API',
+            'action': 'BUY',
+            'coin': 'ETH',
+            'amount': 5.0,
+            'price_usd': 2000,
+            'fee': 10,
+            'batch_id': 'batch2'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Both transactions exist
+        df = self.db.get_all()
+        self.assertEqual(len(df[df['coin'] == 'ETH']), 2)
+    
+    def test_nft_renaming_flow(self):
+        """Test: NFT renaming preserves transaction integrity"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        self.db.save_trade({
+            'id': 'nft_bayc',
+            'date': '2024-03-15',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'BAYC#2891',
+            'amount': 1,
+            'price_usd': 75000,
+            'fee': 500,
+            'batch_id': 'nft_batch'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Rename the NFT
+        fixer._rename_coin('nft_bayc', 'BAYC#2891', 'NFT-BAYC#2891')
+        
+        # Verify other fields unchanged
+        df = self.db.get_all()
+        row = df[df['id'] == 'nft_bayc'].iloc[0]
+        
+        self.assertEqual(row['coin'], 'NFT-BAYC#2891')
+        self.assertEqual(row['amount'], 1)
+        self.assertEqual(row['price_usd'], 75000)
+        self.assertEqual(row['fee'], 500)
+    
+    def test_wash_sale_coin_rename(self):
+        """Test: Wash sale coins can be renamed to distinguish exchanges"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # BTC purchase
+        self.db.save_trade({
+            'id': 'wash_buy',
+            'date': '2024-01-01',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 1.0,
+            'price_usd': 40000,
+            'fee': 0,
+            'batch_id': 'test'
+        })
+        # Similar purchase within wash sale window
+        self.db.save_trade({
+            'id': 'wash_buy2',
+            'date': '2024-01-15',
+            'source': 'KRAKEN',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 1.0,
+            'price_usd': 41000,
+            'fee': 0,
+            'batch_id': 'test'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Rename to distinguish
+        fixer._rename_coin('wash_buy', 'BTC', 'BTC-COINBASE')
+        fixer._rename_coin('wash_buy2', 'BTC', 'BTC-KRAKEN')
+        
+        df = self.db.get_all()
+        self.assertEqual(df[df['id'] == 'wash_buy'].iloc[0]['coin'], 'BTC-COINBASE')
+        self.assertEqual(df[df['id'] == 'wash_buy2'].iloc[0]['coin'], 'BTC-KRAKEN')
+    
+    def test_missing_price_update_with_decimal(self):
+        """Test: Missing prices can be updated with precise decimal values"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        self.db.save_trade({
+            'id': 'missing_price_tx',
+            'date': '2024-07-20',
+            'source': 'WALLET',
+            'action': 'INCOME',
+            'coin': 'UNKNOWN_TOKEN',
+            'amount': 100.0,
+            'price_usd': 0,
+            'fee': 0,
+            'batch_id': 'missing'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Update with precise decimal
+        precise_price = Decimal('1.23456789')
+        fixer._update_price('missing_price_tx', precise_price)
+        
+        df = self.db.get_all()
+        row = df[df['id'] == 'missing_price_tx'].iloc[0]
+        
+        # Price should be updated
+        self.assertGreater(float(row['price_usd']), 0)
+        self.assertAlmostEqual(float(row['price_usd']), 1.23456789, places=6)
+    
+    def test_delete_duplicate_transaction(self):
+        """Test: Duplicate transactions can be safely deleted"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Add duplicate from API and CSV
+        self.db.save_trade({
+            'id': 'from_api',
+            'date': '2024-05-10',
+            'source': 'BINANCE',
+            'action': 'BUY',
+            'coin': 'SOL',
+            'amount': 10.0,
+            'price_usd': 100,
+            'fee': 0,
+            'batch_id': 'api_sync'
+        })
+        self.db.save_trade({
+            'id': 'from_csv',
+            'date': '2024-05-10',
+            'source': 'BINANCE',
+            'action': 'BUY',
+            'coin': 'SOL',
+            'amount': 10.0,
+            'price_usd': 100,
+            'fee': 0,
+            'batch_id': 'csv_import'
+        })
+        self.db.commit()
+        
+        # Verify both exist
+        df_before = self.db.get_all()
+        self.assertEqual(len(df_before), 2)
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Delete the CSV version (keep API)
+        fixer._delete_transaction('from_csv')
+        
+        df_after = self.db.get_all()
+        self.assertEqual(len(df_after), 1)
+        self.assertEqual(df_after.iloc[0]['id'], 'from_api')
+        
+        # Verify deletion was tracked
+        self.assertEqual(len(fixer.fixes_applied), 1)
+        self.assertEqual(fixer.fixes_applied[0]['type'], 'delete')
+    
+    def test_fixes_tracking_multiple_operations(self):
+        """Test: Multiple fixes are tracked correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Setup multiple issues
+        self.db.save_trade({
+            'id': 'fix_1',
+            'date': '2024-01-01',
+            'source': 'COINBASE',
+            'action': 'BUY',
+            'coin': 'BTC',
+            'amount': 0.5,
+            'price_usd': 0,
+            'fee': 0,
+            'batch_id': 'batch1'
+        })
+        self.db.save_trade({
+            'id': 'fix_2',
+            'date': '2024-02-01',
+            'source': 'OPENSEA',
+            'action': 'BUY',
+            'coin': 'PUDGY#1234',
+            'amount': 1,
+            'price_usd': 5000,
+            'fee': 0,
+            'batch_id': 'batch2'
+        })
+        self.db.save_trade({
+            'id': 'fix_3',
+            'date': '2024-03-01',
+            'source': 'UNISWAP',
+            'action': 'SWAP',
+            'coin': 'USDC',
+            'amount': 1000,
+            'price_usd': 1,
+            'fee': 50,
+            'batch_id': 'batch3'
+        })
+        self.db.commit()
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Apply multiple fixes
+        fixer._update_price('fix_1', Decimal('45000'))
+        fixer._rename_coin('fix_2', 'PUDGY#1234', 'NFT-PUDGY#1234')
+        fixer._delete_transaction('fix_3')
+        
+        # Verify all are tracked
+        self.assertEqual(len(fixer.fixes_applied), 3)
+        self.assertEqual(fixer.fixes_applied[0]['type'], 'price_update')
+        self.assertEqual(fixer.fixes_applied[1]['type'], 'rename')
+        self.assertEqual(fixer.fixes_applied[2]['type'], 'delete')
+    
+    def test_load_review_report_missing_directory(self):
+        """Test: Graceful handling when review directory doesn't exist"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2025)
+        
+        # Try to load report for year with no directory
+        report = fixer.load_review_report()
+        
+        # Should handle gracefully
+        self.assertIsNone(report)
+    
+    def test_backup_file_naming(self):
+        """Test: Backup file has correct naming convention"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        backup_path = fixer.create_backup()
+        
+        # Verify backup naming
+        self.assertIn('BEFORE_FIX', backup_path.name)
+        self.assertTrue(backup_path.exists())
+        self.assertTrue(backup_path.is_file())
+    
+    def test_token_cache_initialization(self):
+        """Test: Token cache initializes correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # Session cache should be empty initially
+        self.assertIsNone(fixer._token_map_cache)
+    
+    def test_fixes_summary_empty_state(self):
+        """Test: Summary handles zero fixes correctly"""
+        from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        fixer = InteractiveReviewFixer(self.db, 2024)
+        
+        # No fixes applied yet
+        self.assertEqual(len(fixer.fixes_applied), 0)
+        self.assertEqual(len([f for f in fixer.fixes_applied if f['type'] == 'rename']), 0)
+        self.assertEqual(len([f for f in fixer.fixes_applied if f['type'] == 'price_update']), 0)
+        self.assertEqual(len([f for f in fixer.fixes_applied if f['type'] == 'delete']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

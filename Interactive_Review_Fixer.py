@@ -113,7 +113,7 @@ class InteractiveReviewFixer:
                 self._guided_fix_duplicates(warning)
             elif category == 'HIGH_FEES':
                 self._guided_fix_high_fees(warning)
-            elif category == 'PRICE_ANOMALIES':
+            elif category == 'PRICE_ANOMALIES' or category == 'PRICE_ANOMALIES':
                 self._guided_fix_price_anomalies(warning)
             else:
                 self._generic_fix_prompt(warning)
@@ -161,70 +161,14 @@ class InteractiveReviewFixer:
     def _guided_fix_missing_prices(self, warning):
         """Guided fix for missing prices - show suggestions and let user accept/override"""
         print("\n--- GUIDED FIX: MISSING PRICES ---")
-        print("For each transaction, we'll show suggested prices from available sources.")
-        print("You can accept (Enter), override (number), or skip (type 'skip').\n")
+        print(f"Found {len(warning['items'])} transactions with missing/zero prices.")
         
-        from Crypto_Tax_Engine import PriceFetcher
-        fetcher = PriceFetcher()
-
-        for item in warning['items']:
-            coin = item['coin']
-            date_str = str(item['date']).split()[0]
-
-            # 1) Try blockchain context (if wallets available)
-            bc_price, bc_msg = self._try_blockchain_price(coin, date_str)
-
-            # 2) Yahoo Finance fallback
-            yf_price = None
-            try:
-                yf_price = fetcher.get_price(coin, pd.to_datetime(date_str))
-            except Exception as e:
-                yf_price = None
-
-            # Pick best suggestion
-            suggested_price = bc_price if bc_price is not None else yf_price
-
-            print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
-            if bc_price is not None:
-                print(f"    On-chain price: ${bc_price}")
-            else:
-                print(f"    On-chain: {bc_msg}")
-
-            if yf_price is not None and yf_price > 0:
-                print(f"    Yahoo Finance: ${yf_price}")
-            else:
-                print("    Yahoo Finance: unavailable")
-
-            if suggested_price is not None and suggested_price > 0:
-                print(f"    → Suggested: ${suggested_price}")
-            else:
-                print("    → Suggested: unavailable (enter manually or skip)")
-
-            user_input = input("    (Enter=accept, number=override, 'skip'=skip this, 'skip-all'=skip all remaining): ").strip()
-
-            if user_input.lower() == 'skip-all':
-                print("\n[SKIPPED] Remaining missing prices will appear again next time you run the fixer.")
-                break
-            elif user_input.lower() == 'skip':
-                print("    → Skipped this transaction")
-                continue
-            elif user_input == '' and suggested_price is not None and suggested_price > 0:
-                self._update_price(item['id'], suggested_price)
-                print(f"    ✓ Set to ${suggested_price}")
-            else:
-                try:
-                    manual_price = Decimal(user_input)
-                    self._update_price(item['id'], manual_price)
-                    print(f"    ✓ Set to ${manual_price}")
-                except:
-                    print("    ✗ Invalid input, skipped this transaction")
+        # Simplified Menu (No Bulk Options)
         print("1. Guided fix (fetch suggestions, approve/override per item)")
-        print("2. Set custom price for each transaction")
-        print("3. Set all to $0 (mark as basis-only, no income)")
-        print("4. Delete transactions (if spam/invalid)")
-        print("5. Skip")
+        print("2. Set custom price (enter manually per item)")
+        print("3. Skip (review later)")
 
-        choice = input("\nSelect option (1-5): ").strip()
+        choice = input("\nSelect option (1-3): ").strip()
 
         if choice == '1':
             print("\n  Fetching suggested prices...")
@@ -235,7 +179,7 @@ class InteractiveReviewFixer:
                 coin = item['coin']
                 date_str = str(item['date']).split()[0]
 
-                # 1) Try blockchain context (if wallets available)
+                # 1) Try blockchain context
                 bc_price, bc_msg = self._try_blockchain_price(coin, date_str)
 
                 # 2) Yahoo Finance fallback
@@ -244,31 +188,24 @@ class InteractiveReviewFixer:
                     yf_price = fetcher.get_price(coin, pd.to_datetime(date_str))
                 except Exception as e:
                     yf_price = None
-                    print(f"  ✗ {coin} ({date_str}): error fetching Yahoo price - {e}")
 
-                # Pick best suggestion
                 suggested_price = bc_price if bc_price is not None else yf_price
 
                 print(f"\n  {coin} on {date_str} (amount: {item['amount']})")
                 if bc_price is not None:
-                    print(f"    On-chain price (wallets present): ${bc_price} ({bc_msg})")
-                else:
-                    print(f"    On-chain price: unavailable ({bc_msg})")
-
+                    print(f"    On-chain: ${bc_price} ({bc_msg})")
+                
                 if yf_price is not None and yf_price > 0:
-                    print(f"    Yahoo Finance: ${yf_price}")
-                else:
-                    print("    Yahoo Finance: unavailable")
+                    print(f"    Yahoo:    ${yf_price}")
 
                 if suggested_price is not None and suggested_price > 0:
-                    print(f"    Suggested: ${suggested_price}")
+                    print(f"    → Suggested: ${suggested_price}")
                 else:
-                    print("    Suggested: unavailable")
+                    print("    → Suggested: unavailable")
 
-                user_input = input("    Accept suggested? (Enter=accept, number=override, 'skip'=skip): ").strip()
+                user_input = input("    (Enter=accept, number=override, 'skip'=skip): ").strip()
 
                 if user_input.lower() == 'skip':
-                    print("    Skipped.")
                     continue
                 elif user_input == '' and suggested_price is not None and suggested_price > 0:
                     self._update_price(item['id'], suggested_price)
@@ -292,82 +229,21 @@ class InteractiveReviewFixer:
                 except:
                     print(f"    ✗ Invalid price, skipping")
 
-        elif choice == '3':
-            confirm = input("  Set all to $0? This means no taxable income. (yes/no): ").strip().lower()
-            if confirm in ['yes', 'y']:
-                for item in warning['items']:
-                    self._update_price(item['id'], 0)
-                print(f"  ✓ Set {len(warning['items'])} price(s) to $0")
-
-        elif choice == '4':
-            print("\n  WARNING: This will permanently delete transactions!")
-            confirm = input("  Are you sure? Type 'DELETE' to confirm: ").strip()
-            if confirm == 'DELETE':
-                for item in warning['items']:
-                    self._delete_transaction(item['id'])
-                print(f"  ✓ Deleted {len(warning['items'])} transaction(s)")
-            else:
-                print("  Deletion cancelled.")
-
-        elif choice == '5':
-            print("\n[SKIPPED] This warning will appear again next time you run the fixer.")
-            print("Fix the underlying issue to resolve this warning permanently.")
-
         else:
-            print("\n[SKIPPED] Invalid choice. This warning will appear again next time.")
+            print("\n[SKIPPED] Will review later.")
     
     def _guided_fix_duplicates(self, warning):
         """Guided fix for duplicate transactions - review each group"""
         print("\n--- GUIDED FIX: DUPLICATES ---")
-        print("Review each duplicate group and choose which transaction to keep.\n")
+        print(f"Found {len(warning['items'])} potential duplicate groups.")
         
-        for item in warning['items']:
-            ids = item['ids']
-            print(f"\n  Duplicate group: {item['signature']}")
-            
-            # Show details of each
-            for idx, tid in enumerate(ids, 1):
-                trade = self._get_transaction(tid)
-                print(f"    {idx}. ID={tid}, Source={trade.get('source')}, Batch={trade.get('batch_id')}")
-            
-            keep = input(f"  Which one to KEEP? (1-{len(ids)}, 'skip'=skip this group, 'skip-all'=skip all remaining): ").strip()
-            
-            if keep.lower() == 'skip-all':
-                print("\n[SKIPPED] Remaining duplicates will appear again next time you run the fixer.")
-                break
-            elif keep.lower() == 'skip':
-                print("    → Skipped this group")
-                continue
-            elif keep.isdigit() and 1 <= int(keep) <= len(ids):
-                keep_idx = int(keep) - 1
-                keep_id = ids[keep_idx]
-                
-                for idx, tid in enumerate(ids):
-                    if idx != keep_idx:
-                        self._delete_transaction(tid)
-                        print(f"    ✓ Deleted: {tid}")
-                
-                print(f"    ✓ Kept: {keep_id}")
-            else:
-                print("    ✗ Invalid choice, skipped this group")
-        print("1. Auto-delete duplicates (keep first occurrence)")
-        print("2. Review each duplicate and choose which to keep")
-        print("3. Skip (review later)")
+        # Simplified Menu (No Bulk Options)
+        print("1. Review each duplicate and choose which to keep")
+        print("2. Skip (review later)")
         
-        choice = input("\nSelect option (1-3): ").strip()
+        choice = input("\nSelect option (1-2): ").strip()
         
         if choice == '1':
-            for item in warning['items']:
-                ids = item['ids']
-                keep_id = ids[0]
-                delete_ids = ids[1:]
-                
-                print(f"\n  Keeping: {keep_id}")
-                for del_id in delete_ids:
-                    self._delete_transaction(del_id)
-                    print(f"  ✓ Deleted: {del_id}")
-        
-        elif choice == '2':
             for item in warning['items']:
                 ids = item['ids']
                 print(f"\n  Duplicate group: {item['signature']}")
@@ -377,7 +253,7 @@ class InteractiveReviewFixer:
                     trade = self._get_transaction(tid)
                     print(f"    {idx}. ID={tid}, Source={trade.get('source')}, Batch={trade.get('batch_id')}")
                 
-                keep = input(f"  Which one to KEEP? (1-{len(ids)}) or 'all' to skip: ").strip()
+                keep = input(f"  Which one to KEEP? (1-{len(ids)}) or 'skip': ").strip()
                 
                 if keep.isdigit() and 1 <= int(keep) <= len(ids):
                     keep_idx = int(keep) - 1
@@ -387,19 +263,12 @@ class InteractiveReviewFixer:
                         if idx != keep_idx:
                             self._delete_transaction(tid)
                             print(f"    ✓ Deleted: {tid}")
-                    
                     print(f"    ✓ Kept: {keep_id}")
-                elif keep.lower() == 'all':
-                    print("    Skipped this group")
                 else:
-                    print("    Invalid choice, skipping group")
-        
-        elif choice == '3':
-            print("\n[SKIPPED] This warning will appear again next time you run the fixer.")
-            print("Fix the underlying issue to resolve this warning permanently.")
+                    print("    Skipped this group")
         
         else:
-            print("\n[SKIPPED] Invalid choice. This warning will appear again next time.")
+            print("\n[SKIPPED] Will review later.")
     
     def _guided_fix_high_fees(self, warning):
         """Guided fix for high fee warnings - show details for manual review"""
@@ -412,94 +281,49 @@ class InteractiveReviewFixer:
         
         print("\n  Edit these in your source CSV files and re-import if corrections needed.")
         input("\nPress Enter to continue...")
-        print("Note: High fees in processed tax data can't be modified directly.")
-        print("You need to fix the source CSV/database and re-run calculations.")
-        print("\n1. Show transaction IDs for manual CSV editing")
-        print("2. Skip (review later)")
-        
-        choice = input("\nSelect option (1-2): ").strip()
-        
-        if choice == '1':
-            print("\n  Transaction details:")
-            for item in warning['items']:
-                print(f"    Date: {item['date']}, Coin: {item['coin']}, Fee: ${item['fee_usd']}")
-            print("\n  Edit these in your source CSV and re-import.")
-        
-        elif choice == '2':
-            print("\n[SKIPPED] This warning will appear again next time you run the fixer.")
-            print("Fix the underlying issue to resolve this warning permanently.")
-        
-        else:
-            print("\n[SKIPPED] Invalid choice. This warning will appear again next time.")
     
     def _guided_fix_price_anomalies(self, warning):
-        """Guided smart fix for price anomaly warnings - auto-suggest per-unit price"""
-        from Crypto_Tax_Engine import PriceFetcher
-        
-        print("\n--- GUIDED FIX: PRICE ANOMALIES (Smart Detection) ---")
-        print("Price anomaly detection found transactions where the price likely represents")
-        print("TOTAL TRANSACTION VALUE instead of PER-UNIT PRICE.\n")
-        print("Common example:")
-        print("  User entered: 0.1 BTC @ $5,000 (WRONG: $5,000 is the total value)")
-        print("  Should be: 0.1 BTC @ $50,000 (CORRECT: per-unit price)\n")
-        
-        pf = PriceFetcher()
-        fixed_count = 0
+        """Guided fix for price anomalies - suggest correcting 'Total as Unit' errors"""
+        print("\n--- GUIDED FIX: PRICE ANOMALIES ---")
+        print("These transactions have prices that deviate significantly from market value.")
+        print("Most common cause: Entering 'Total Value' instead of 'Price Per Coin'.\n")
         
         for item in warning['items']:
-            transaction_id = item.get('id')
-            coin = item['coin']
-            date = item['date']
             amount = float(item['amount'])
-            reported_price = float(item['reported_price'])
+            reported_price = float(item.get('reported_price', 0))
+            market_price = float(item.get('market_price', 0))
             
-            # Auto-calculate what the per-unit price should be
-            # If user entered total value instead of per-unit: suggested = reported_price / amount
-            suggested_per_unit = reported_price / amount if amount > 0 else reported_price
-            implied_total = reported_price * amount
+            suggested_fix_price = 0
+            if amount != 0:
+                suggested_fix_price = reported_price / amount
             
-            print(f"\n  Transaction ID: {transaction_id}")
-            print(f"  Date: {date} | Coin: {coin} | Amount: {amount}")
-            print(f"  Currently entered: ${reported_price:.2f} per unit")
-            print(f"  → This would mean total value of: ${implied_total:.2f}")
+            print(f"\n  {item['coin']} on {item['date']}")
+            print(f"    Amount: {amount}")
+            print(f"    Current Price Entry: ${reported_price:,.2f}")
+            print(f"    Market Price:        ${market_price:,.2f}")
             
-            # Try to fetch current market price for context
-            try:
-                current_market_price = float(pf.get_price(coin, date))
-                if current_market_price > 0:
-                    print(f"  → Historical market price (~{date}): ${current_market_price:.2f} per unit")
-            except:
-                pass
+            print(f"\n    Option 1 (Fix 'Total as Unit'): Change price to ${suggested_fix_price:,.2f}")
+            print(f"             (Use this if you entered the trade's total value in the price column)")
             
-            print(f"\n  SUGGESTED FIX: ${suggested_per_unit:.2f} per unit")
-            print(f"  → Total value would be: ${suggested_per_unit * amount:.2f}")
+            print(f"    Option 2 (Use Market Price):    Change price to ${market_price:,.2f}")
             
-            response = input("\n    Accept suggestion? (y/n/custom): ").strip().lower()
+            choice = input("    Choose fix (1/2), enter custom price, or 'skip': ").strip()
             
-            if response == 'y':
-                # Apply the automated fix
-                self._update_price(transaction_id, Decimal(str(suggested_per_unit)))
-                print(f"    ✓ Updated price to ${suggested_per_unit:.2f} per unit")
-                fixed_count += 1
-            elif response == 'n':
-                print("    → Keeping original price")
-            elif response == 'custom':
-                try:
-                    custom_price = input("    Enter custom per-unit price: $").strip()
-                    custom_decimal = Decimal(str(custom_price))
-                    self._update_price(transaction_id, custom_decimal)
-                    print(f"    ✓ Updated price to ${float(custom_decimal):.2f} per unit")
-                    fixed_count += 1
-                except (ValueError, InvalidOperation):
-                    print("    ✗ Invalid price entered, keeping original")
+            if choice == '1':
+                self._update_price(item['id'], Decimal(str(suggested_fix_price)))
+                print(f"    ✓ Fixed: Price updated to ${suggested_fix_price:,.2f}")
+            elif choice == '2':
+                self._update_price(item['id'], Decimal(str(market_price)))
+                print(f"    ✓ Fixed: Price updated to market value ${market_price:,.2f}")
+            elif choice.lower() == 'skip':
+                print("    → Skipped")
             else:
-                print("    → Keeping original price")
-        
-        # Summary
-        print(f"\n--- PRICE ANOMALY FIX SUMMARY ---")
-        print(f"Fixed {fixed_count} out of {len(warning['items'])} price anomalies")
-        if fixed_count > 0:
-            print("These changes will be staged (not committed until you confirm at the end).")
+                try:
+                    custom = Decimal(choice)
+                    self._update_price(item['id'], custom)
+                    print(f"    ✓ Fixed: Price updated to ${custom}")
+                except:
+                    print("    ✗ Invalid input, skipped.")
     
     def _generic_fix_prompt(self, warning):
         """Generic handler for unimplemented fix types"""
@@ -537,20 +361,6 @@ class InteractiveReviewFixer:
             'type': 'delete',
             'id': transaction_id
         })
-    
-    def _add_note_to_transaction(self, transaction_id, note):
-        """Add a note to transaction (if notes column exists, staged)"""
-        # Check if notes column exists
-        try:
-            self.db.cursor.execute("UPDATE trades SET notes = ? WHERE id = ?", (note, transaction_id))
-            self.fixes_applied.append({
-                'type': 'note',
-                'id': transaction_id,
-                'note': note
-            })
-        except:
-            # Notes column doesn't exist, skip
-            pass
     
     def _get_transaction(self, transaction_id):
         """Get transaction details"""
@@ -725,70 +535,27 @@ class InteractiveReviewFixer:
         if coin_upper == 'BTC' and 'bitcoin' in chains_present:
             if not blockchair_key:
                 return None, "Blockchair key missing; cannot fetch BTC on-chain price"
-            # Historical price via Blockchair market endpoint not implemented here (kept safe offline)
             return None, "BTC present but on-chain price not implemented; falling back to Yahoo"
 
         # EVM/Solana native via Moralis (requires key)
         if moralis_key:
-            # Find any chain that matches this native coin
             for chain, native_symbol in native_map.items():
                 if chain in chains_present and native_symbol == coin_upper:
-                    # We would call Moralis native price; keep offline-safe placeholder.
                     return None, f"{coin_upper} present on {chain}, but on-chain historical price not implemented; using Yahoo"
 
         # ERC-20 tokens - check cached contract addresses
         token_map = self._get_cached_token_addresses()
         
-        # Check each configured chain for this token
         for chain in chains_present:
             if chain in token_map and coin_upper in token_map[chain]:
                 contract_addr = token_map[chain][coin_upper]
-                
-                # Check if we have Moralis key for EVM chains
                 if chain != 'bitcoin':
                     if not moralis_key:
                         return None, f"Found {coin_upper} contract on {chain}, but Moralis key missing"
-                    
-                    # API infrastructure ready but not implemented yet to keep offline-safe
                     return None, f"Found {coin_upper} contract on {chain} ({contract_addr[:10]}...), but on-chain price not implemented; using Yahoo"
         
-        # Token not found in cache
         return None, f"no contract found for {coin_upper}; using Yahoo"
-    
-    def _export_wash_sale_report(self, warning):
-        """Export detailed wash sale report"""
-        output_dir = app.OUTPUT_DIR / f"Year_{self.year}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = output_dir / f"WASH_SALE_DETAILS_{timestamp}.json"
-        
-        with open(filename, 'w') as f:
-            json.dump(warning, f, indent=2, default=str)
-        
-        return filename
-    
-    def restore_from_backup(self, backup_path=None):
-        """Restore database from backup file"""
-        if backup_path is None:
-            backup_path = self.backup_file
-        
-        if not backup_path or not Path(backup_path).exists():
-            print(f"\n✗ Backup file not found: {backup_path}")
-            return False
-        
-        try:
-            print(f"\n[*] Restoring database from {Path(backup_path).name}...")
-            shutil.copy2(backup_path, app.DB_FILE)
-            print("\n✓ Database successfully restored from backup!")
-            print("\nYou may need to reconnect your DatabaseManager:")
-            print("  db = DatabaseManager()")
-            print("  db.connect()")
-            return True
-        except Exception as e:
-            print(f"\n✗ Error restoring backup: {e}")
-            return False
-    
+
     def _print_summary(self):
         """Print summary of changes and prompt to save or discard"""
         print("\n" + "="*80)
@@ -803,32 +570,28 @@ class InteractiveReviewFixer:
         renames = [f for f in self.fixes_applied if f['type'] == 'rename']
         prices = [f for f in self.fixes_applied if f['type'] == 'price_update']
         deletes = [f for f in self.fixes_applied if f['type'] == 'delete']
-        notes = [f for f in self.fixes_applied if f['type'] == 'note']
         
         print(f"\nTotal staged changes: {len(self.fixes_applied)}")
         if renames:
             print(f"  - {len(renames)} rename(s)")
-            for fix in renames[:5]:  # Show first 5
+            for fix in renames[:5]:
                 print(f"      • ID {fix['id']}: {fix['old']} → {fix['new']}")
             if len(renames) > 5:
                 print(f"      ... and {len(renames)-5} more")
         
         if prices:
             print(f"  - {len(prices)} price update(s)")
-            for fix in prices[:5]:  # Show first 5
+            for fix in prices[:5]:
                 print(f"      • ID {fix['id']}: ${fix['price']}")
             if len(prices) > 5:
                 print(f"      ... and {len(prices)-5} more")
         
         if deletes:
             print(f"  - {len(deletes)} deletion(s)")
-            for fix in deletes[:5]:  # Show first 5
+            for fix in deletes[:5]:
                 print(f"      • ID {fix['id']}")
             if len(deletes) > 5:
                 print(f"      ... and {len(deletes)-5} more")
-        
-        if notes:
-            print(f"  - {len(notes)} note(s) added")
         
         print("\n" + "="*80)
         print("SAVE OR DISCARD?")
