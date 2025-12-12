@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .year-section {
+        margin-bottom: 32px;
+    }
+    
+    .year-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid var(--md-sys-color-primary);
+    }
+    
+    .year-header h2 {
+        margin: 0;
+        color: var(--md-sys-color-primary);
+    }
+    
+    .reports-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+    }
+    
+    .report-card {
+        background: white;
+        border: 1px solid var(--md-sys-color-surface-variant);
+        border-radius: 8px;
+        padding: 16px;
+        transition: box-shadow 0.2s;
+    }
+    
+    .report-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .report-name {
+        font-weight: 500;
+        font-size: 1rem;
+        margin-bottom: 8px;
+        color: var(--md-sys-color-on-surface);
+    }
+    
+    .report-meta {
+        display: flex;
+        justify-content: space-between;
+        color: var(--md-sys-color-on-surface-variant);
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+    }
+    
+    .report-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .chart-container {
+        margin-bottom: 24px;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Tax Reports & Downloads</h1>
+
+<div class="card">
+    <h2 class="card-title">Generate New Reports</h2>
+    <p style="margin-bottom: 16px;">Start a new tax calculation run to generate updated reports.</p>
+    <div style="display: flex; gap: 12px;">
+        <button class="btn btn-primary" onclick="runTaxCalculation()">
+            <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
+            Run Tax Calculation
+        </button>
+        <button class="btn btn-secondary" onclick="uploadCSV()">
+            <span class="material-icons" style="vertical-align: middle;">upload_file</span>
+            Upload CSV
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Gains & Losses Chart</h2>
+    <div id="chartContainer" class="chart-container">
+        <canvas id="gainsLossesChart"></canvas>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Available Reports</h2>
+    <div id="reportsContainer">
+        <p>Loading reports...</p>
+    </div>
+</div>
+
+<!-- File upload modal -->
+<input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleFileUpload()">
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let chart = null;
+    
+    async function loadReports() {
+        try {
+            const response = await api.get('/api/reports');
+            const years = JSON.parse(response.data);
+            
+            const container = document.getElementById('reportsContainer');
+            
+            if (years.length === 0) {
+                container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No reports generated yet. Run tax calculation to generate reports.</p>';
+                return;
+            }
+            
+            container.innerHTML = years.map(yearData => `
+                <div class="year-section">
+                    <div class="year-header">
+                        <h2>${yearData.year}</h2>
+                        <span style="color: var(--md-sys-color-on-surface-variant);">${yearData.reports.length} reports</span>
+                    </div>
+                    <div class="reports-grid">
+                        ${yearData.reports.map(report => `
+                            <div class="report-card">
+                                <div class="report-name">${report.name}</div>
+                                <div class="report-meta">
+                                    <span>${formatFileSize(report.size)}</span>
+                                    <span>${formatDate(report.modified)}</span>
+                                </div>
+                                <div class="report-actions">
+                                    <button class="btn btn-primary" onclick="downloadReport('${report.path}', '${report.name}')">
+                                        <span class="material-icons" style="vertical-align: middle; font-size: 18px;">download</span>
+                                        Download
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Error loading reports:', error);
+            showAlert('Failed to load reports: ' + error.message, 'error');
+        }
+    }
+    
+    async function loadGainsLossesChart() {
+        try {
+            const response = await api.get('/api/stats');
+            const stats = JSON.parse(response.data);
+            
+            if (!stats.gains_losses) {
+                document.getElementById('chartContainer').innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No gains/losses data available. Run tax calculation first.</p>';
+                return;
+            }
+            
+            const gl = stats.gains_losses;
+            
+            const ctx = document.getElementById('gainsLossesChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Short-Term Gains', 'Short-Term Losses', 'Long-Term Gains', 'Long-Term Losses'],
+                    datasets: [{
+                        label: 'USD Value',
+                        data: [
+                            parseFloat(gl['Short-Term Gains'] || gl['short_term_gains'] || 0),
+                            parseFloat(gl['Short-Term Losses'] || gl['short_term_losses'] || 0),
+                            parseFloat(gl['Long-Term Gains'] || gl['long_term_gains'] || 0),
+                            parseFloat(gl['Long-Term Losses'] || gl['long_term_losses'] || 0)
+                        ],
+                        backgroundColor: [
+                            '#4CAF50',
+                            '#F44336',
+                            '#2196F3',
+                            '#FF9800'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Capital Gains & Losses'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error loading chart:', error);
+        }
+    }
+    
+    async function downloadReport(path, filename) {
+        try {
+            window.location.href = `/api/reports/download/${encodeURIComponent(path)}`;
+        } catch (error) {
+            showAlert('Failed to download report: ' + error.message, 'error');
+        }
+    }
+    
+    async function runTaxCalculation() {
+        if (!confirm('Start tax calculation? This may take several minutes.')) {
+            return;
+        }
+        
+        try {
+            const response = await api.post('/api/run', {});
+            const result = JSON.parse(response.data);
+            showAlert(result.message, 'success');
+            
+            // Reload reports after a delay
+            setTimeout(() => {
+                loadReports();
+                loadGainsLossesChart();
+            }, 5000);
+        } catch (error) {
+            showAlert('Failed to start calculation: ' + error.message, 'error');
+        }
+    }
+    
+    function uploadCSV() {
+        document.getElementById('csvFileInput').click();
+    }
+    
+    async function handleFileUpload() {
+        const fileInput = document.getElementById('csvFileInput');
+        const file = fileInput.files[0];
+        
+        if (!file) return;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            // Initialize CSRF token
+            await api.initCSRF();
+            
+            const response = await fetch('/api/csv-upload', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': api.csrfToken,
+                    'X-Request-Timestamp': new Date().toISOString()
+                },
+                body: formData,
+                credentials: 'same-origin'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Upload failed');
+            }
+            
+            const result = await response.json();
+            const data = JSON.parse(result.data);
+            showAlert(data.message, 'success');
+            
+            // Clear file input
+            fileInput.value = '';
+        } catch (error) {
+            showAlert('Failed to upload file: ' + error.message, 'error');
+        }
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    function formatDate(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleDateString();
+    }
+    
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadReports();
+        loadGainsLossesChart();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .config-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+        border-bottom: 2px solid var(--md-sys-color-surface-variant);
+    }
+    
+    .config-tab {
+        padding: 12px 24px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--md-sys-color-on-surface-variant);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+    }
+    
+    .config-tab.active {
+        color: var(--md-sys-color-primary);
+        border-bottom-color: var(--md-sys-color-primary);
+    }
+    
+    .config-panel {
+        display: none;
+    }
+    
+    .config-panel.active {
+        display: block;
+    }
+    
+    .json-editor {
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        min-height: 400px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Configuration</h1>
+
+<div class="card">
+    <div class="config-tabs">
+        <button class="config-tab active" onclick="switchTab('general')">General Settings</button>
+        <button class="config-tab" onclick="switchTab('wallets')">Wallets</button>
+        <button class="config-tab" onclick="switchTab('apikeys')">API Keys</button>
+    </div>
+    
+    <!-- General Settings Panel -->
+    <div id="generalPanel" class="config-panel active">
+        <h3 class="card-title">Configuration (config.json)</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Edit your tax engine configuration. Changes take effect after restarting the application.
+        </p>
+        <textarea id="configEditor" class="form-input json-editor"></textarea>
+        <button class="btn btn-primary" onclick="saveConfig()" style="margin-top: 16px;">Save Configuration</button>
+    </div>
+    
+    <!-- Wallets Panel -->
+    <div id="walletsPanel" class="config-panel">
+        <h3 class="card-title">Wallets (wallets.json)</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Add your public wallet addresses for blockchain auditing. Never paste private keys!
+        </p>
+        <textarea id="walletsEditor" class="form-input json-editor"></textarea>
+        <button class="btn btn-primary" onclick="saveWallets()" style="margin-top: 16px;">Save Wallets</button>
+    </div>
+    
+    <!-- API Keys Panel -->
+    <div id="apikeysPanel" class="config-panel">
+        <h3 class="card-title">API Keys (api_keys.json)</h3>
+        <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+            Add Read-Only API keys for exchanges. Masked values (*****) will not be updated.
+        </p>
+        <div class="alert alert-warning">
+            <strong>⚠️ Security Notice:</strong> All API keys are encrypted in transit. Only add Read-Only keys with no withdrawal permissions.
+        </div>
+        <textarea id="apikeysEditor" class="form-input json-editor"></textarea>
+        <button class="btn btn-primary" onclick="saveApiKeys()" style="margin-top: 16px;">Save API Keys</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentTab = 'general';
+    
+    function switchTab(tab) {
+        // Update tab buttons
+        document.querySelectorAll('.config-tab').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        // Update panels
+        document.querySelectorAll('.config-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        document.getElementById(tab + 'Panel').classList.add('active');
+        
+        currentTab = tab;
+    }
+    
+    async function loadConfig() {
+        try {
+            const response = await api.get('/api/config');
+            const config = JSON.parse(response.data);
+            document.getElementById('configEditor').value = JSON.stringify(config, null, 2);
+        } catch (error) {
+            showAlert('Failed to load configuration: ' + error.message, 'error');
+        }
+    }
+    
+    async function loadWallets() {
+        try {
+            const response = await api.get('/api/wallets');
+            const wallets = JSON.parse(response.data);
+            document.getElementById('walletsEditor').value = JSON.stringify(wallets, null, 2);
+        } catch (error) {
+            showAlert('Failed to load wallets: ' + error.message, 'error');
+        }
+    }
+    
+    async function loadApiKeys() {
+        try {
+            const response = await api.get('/api/api-keys');
+            const apiKeys = JSON.parse(response.data);
+            document.getElementById('apikeysEditor').value = JSON.stringify(apiKeys, null, 2);
+        } catch (error) {
+            showAlert('Failed to load API keys: ' + error.message, 'error');
+        }
+    }
+    
+    async function saveConfig() {
+        try {
+            const configText = document.getElementById('configEditor').value;
+            const config = JSON.parse(configText);
+            
+            await api.put('/api/config', config);
+            const result = JSON.parse((await api.get('/api/config')).data);
+            
+            showAlert('Configuration saved successfully', 'success');
+        } catch (error) {
+            if (error.message.includes('JSON')) {
+                showAlert('Invalid JSON format', 'error');
+            } else {
+                showAlert('Failed to save configuration: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    async function saveWallets() {
+        try {
+            const walletsText = document.getElementById('walletsEditor').value;
+            const wallets = JSON.parse(walletsText);
+            
+            await api.put('/api/wallets', wallets);
+            showAlert('Wallets saved successfully', 'success');
+        } catch (error) {
+            if (error.message.includes('JSON')) {
+                showAlert('Invalid JSON format', 'error');
+            } else {
+                showAlert('Failed to save wallets: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    async function saveApiKeys() {
+        try {
+            const apiKeysText = document.getElementById('apikeysEditor').value;
+            const apiKeys = JSON.parse(apiKeysText);
+            
+            await api.put('/api/api-keys', apiKeys);
+            showAlert('API keys saved successfully. Masked values were not updated.', 'success');
+            
+            // Reload to show updated masked values
+            await loadApiKeys();
+        } catch (error) {
+            if (error.message.includes('JSON')) {
+                showAlert('Invalid JSON format', 'error');
+            } else {
+                showAlert('Failed to save API keys: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    // Load all data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadConfig();
+        loadWallets();
+        loadApiKeys();
+    });
+</script>
+{% endblock %}
