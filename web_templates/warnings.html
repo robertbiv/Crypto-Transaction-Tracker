@@ -137,7 +137,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     async function loadWarnings() {
         try {
             const response = await api.get('/api/warnings');

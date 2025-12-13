@@ -67,19 +67,19 @@
 <div class="card">
     <h2 class="card-title">Quick Actions</h2>
     <div class="action-buttons">
-        <button class="btn btn-primary" onclick="runTaxCalculation()">
+        <button class="btn btn-primary" id="btnRunTax">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
             Run Tax Calculation
         </button>
-        <button class="btn btn-secondary" onclick="window.location.href='/transactions'">
+        <button class="btn btn-secondary" id="btnViewTransactions">
             <span class="material-icons" style="vertical-align: middle;">list</span>
             View Transactions
         </button>
-        <button class="btn btn-secondary" onclick="window.location.href='/warnings'">
+        <button class="btn btn-secondary" id="btnCheckWarnings">
             <span class="material-icons" style="vertical-align: middle;">warning</span>
             Check Warnings
         </button>
-        <button class="btn btn-secondary" onclick="window.location.href='/reports'">
+        <button class="btn btn-secondary" id="btnDownloadReports">
             <span class="material-icons" style="vertical-align: middle;">download</span>
             Download Reports
         </button>
@@ -102,7 +102,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     async function loadDashboardData() {
         try {
             // First, run system health check on login
@@ -237,6 +237,20 @@
     }
     
     // Load data on page load
-    document.addEventListener('DOMContentLoaded', loadDashboardData);
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDashboardData();
+        
+        const btnRunTax = document.getElementById('btnRunTax');
+        if (btnRunTax) btnRunTax.addEventListener('click', runTaxCalculation);
+        
+        const btnViewTransactions = document.getElementById('btnViewTransactions');
+        if (btnViewTransactions) btnViewTransactions.addEventListener('click', () => window.location.href='/transactions');
+        
+        const btnCheckWarnings = document.getElementById('btnCheckWarnings');
+        if (btnCheckWarnings) btnCheckWarnings.addEventListener('click', () => window.location.href='/warnings');
+        
+        const btnDownloadReports = document.getElementById('btnDownloadReports');
+        if (btnDownloadReports) btnDownloadReports.addEventListener('click', () => window.location.href='/reports');
+    });
 </script>
 {% endblock %}

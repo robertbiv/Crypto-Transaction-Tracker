@@ -44,7 +44,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     async function runTaxCalculation() {
         if (!confirm('Start tax calculation? This may take several minutes.')) {
             return;

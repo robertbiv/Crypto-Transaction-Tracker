@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, g
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -61,16 +61,27 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
+@app.before_request
+def generate_nonce():
+    """Generate a nonce for CSP"""
+    g.csp_nonce = secrets.token_hex(16)
+
+@app.context_processor
+def inject_nonce():
+    """Inject nonce into templates"""
+    return dict(csp_nonce=getattr(g, 'csp_nonce', ''))
+
 @app.after_request
 def add_security_headers(response):
     """Add security headers to response"""
+    nonce = getattr(g, 'csp_nonce', '')
+    
     # Content Security Policy
-    # Allow scripts from self and inline (for now, until we move to external files)
-    # Allow styles from self, inline, and Google Fonts
-    # Allow fonts from self and Google Fonts
+    # Strict CSP: No unsafe-inline, No unsafe-eval
+    # Scripts allowed only with correct nonce
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "  # unsafe-eval needed for some libraries/legacy code
+        f"script-src 'self' 'nonce-{nonce}'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data:; "
