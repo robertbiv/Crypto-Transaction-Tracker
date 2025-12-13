@@ -1,0 +1,16 @@
+STRESS TEST EXPECTED RESULTS (GOLDEN MASTER)
+============================================
+Verified Date: 2025-12-13
+Status: FROZEN / GOLDEN MASTER
+
+Total Income (Staking/Mining/Airdrop): $26,246.29
+Short Term Capital Gains: $166,134.38
+Long Term Capital Gains: $82,175.37
+
+EXPECTED WARNINGS / ANOMALIES:
+- MISSING BASIS: 10.0 MYSTERY sold from ... (Strict Mode)
+- Zero Price: Engine will attempt to fetch price for JUNK
+- WASH SALE: Loss on WASH sale should be disallowed
+
+Note: These values are the 'Golden Master' results verified against the Crypto Tax Engine.
+The generator script's internal calculation was an approximation; these are the actual engine results.
