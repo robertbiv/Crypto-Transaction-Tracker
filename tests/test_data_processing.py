@@ -5,17 +5,28 @@ class TestCSVParsingAndIngestion(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
-        self.orig_base = app.BASE_DIR
-        app.BASE_DIR = self.test_path
-        app.INPUT_DIR = self.test_path / 'inputs'
-        app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'csv_test.db'
+        
+        # Patch globals
+        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'csv_test.db')
+        
+        self.base_patcher.start()
+        self.input_patcher.start()
+        self.output_patcher.start()
+        self.db_patcher.start()
+        
         app.initialize_folders()
         self.db = app.DatabaseManager()
+
     def tearDown(self):
         self.db.close()
+        self.db_patcher.stop()
+        self.output_patcher.stop()
+        self.input_patcher.stop()
+        self.base_patcher.stop()
         shutil.rmtree(self.test_dir)
-        app.BASE_DIR = self.orig_base
     
     def test_csv_missing_headers(self):
         """Test: CSV with missing required headers is skipped gracefully"""
