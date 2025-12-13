@@ -72,13 +72,22 @@
 {% block content %}
 <h1 style="margin-bottom: 24px;">Tax Reports & Downloads</h1>
 
+<div id="updateNotice" class="alert alert-warning" style="display: none; margin-bottom: 24px;">
+    <span class="material-icons" style="margin-right: 12px;">info</span>
+    <span><strong>New Data Detected:</strong> You have added or modified transactions since the last report generation. Please run the tax calculation to update your reports.</span>
+</div>
+
 <div class="card">
     <h2 class="card-title">Generate New Reports</h2>
     <p style="margin-bottom: 16px;">Start a new tax calculation run to generate updated reports.</p>
-    <div style="display: flex; gap: 12px;">
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
         <button class="btn btn-primary" onclick="runTaxCalculation()">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
             Run Tax Calculation
+        </button>
+        <button class="btn btn-secondary" onclick="runCascadeCalculation()" style="background-color: #FF9800; color: white;">
+            <span class="material-icons" style="vertical-align: middle;">history</span>
+            Full Recalculation (Cascade)
         </button>
         <button class="btn btn-secondary" onclick="uploadCSV()">
             <span class="material-icons" style="vertical-align: middle;">upload_file</span>
@@ -243,9 +252,31 @@
             setTimeout(() => {
                 loadReports();
                 loadGainsLossesChart();
+                checkStatus();
             }, 5000);
         } catch (error) {
             showAlert('Failed to start calculation: ' + error.message, 'error');
+        }
+    }
+
+    async function runCascadeCalculation() {
+        if (!confirm('WARNING: Cascade Recalculation will re-process ALL years starting from your first transaction.\n\nThis will overwrite previous reports and may change your tax liability for past years.\n\nAre you sure you want to continue?')) {
+            return;
+        }
+        
+        try {
+            const response = await api.post('/api/run', { cascade: true });
+            const result = JSON.parse(response.data);
+            showAlert(result.message + ' (Cascade Mode)', 'success');
+            
+            // Reload reports after a delay
+            setTimeout(() => {
+                loadReports();
+                loadGainsLossesChart();
+                checkStatus();
+            }, 5000);
+        } catch (error) {
+            showAlert('Failed to start cascade calculation: ' + error.message, 'error');
         }
     }
     
@@ -303,10 +334,32 @@
         return date.toLocaleDateString();
     }
     
+    async function checkStatus() {
+        try {
+            const response = await api.get('/api/status');
+            const status = JSON.parse(response.data);
+            
+            if (status.last_data_change && status.last_run) {
+                const dataChange = new Date(status.last_data_change);
+                const lastRun = new Date(status.last_run);
+                
+                if (dataChange > lastRun) {
+                    document.getElementById('updateNotice').style.display = 'flex';
+                }
+            } else if (status.last_data_change && !status.last_run) {
+                // Data exists but never run
+                document.getElementById('updateNotice').style.display = 'flex';
+            }
+        } catch (error) {
+            console.error('Error checking status:', error);
+        }
+    }
+
     // Load data on page load
     document.addEventListener('DOMContentLoaded', () => {
         loadReports();
         loadGainsLossesChart();
+        checkStatus();
     });
 </script>
 {% endblock %}

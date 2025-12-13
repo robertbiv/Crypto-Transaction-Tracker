@@ -25,6 +25,8 @@
             --md-sys-color-on-surface-variant: #49454F;
             --md-sys-color-error: #B3261E;
             --md-sys-color-on-error: #FFFFFF;
+            --md-sys-color-success: #2E7D32;
+            --md-sys-color-on-success: #FFFFFF;
         }
         
         * {
@@ -124,6 +126,16 @@
             background: var(--md-sys-color-secondary);
             color: var(--md-sys-color-on-secondary);
         }
+
+        .btn-success {
+            background: var(--md-sys-color-success);
+            color: var(--md-sys-color-on-success);
+        }
+        
+        .btn-success:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            filter: brightness(1.1);
+        }
         
         /* Tables */
         table {
@@ -222,6 +234,48 @@
                 padding: 8px;
             }
         }
+
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--md-sys-color-primary-container);
+            border-top: 5px solid var(--md-sys-color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-content {
+            text-align: center;
+            max-width: 400px;
+            padding: 20px;
+        }
+        
+        .error-icon {
+            font-size: 64px;
+            color: var(--md-sys-color-error);
+            margin-bottom: 16px;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -250,18 +304,102 @@
         {% block content %}{% endblock %}
     </div>
     
+    <!-- Loading/Error Overlay -->
+    <div id="loading-overlay">
+        <div id="loading-spinner" class="spinner"></div>
+        <div id="loading-message" style="font-size: 1.2rem; font-weight: 500; color: var(--md-sys-color-primary);">Connecting to server...</div>
+        
+        <div id="error-content" class="error-content" style="display: none;">
+            <span class="material-icons error-icon">cloud_off</span>
+            <h2 style="margin-bottom: 8px; color: var(--md-sys-color-on-surface);">Connection Failed</h2>
+            <p style="margin-bottom: 24px; color: var(--md-sys-color-on-surface-variant);">Unable to reach the server or database. Please check if the application is running.</p>
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 8px;">refresh</span>
+                Retry Connection
+            </button>
+        </div>
+    </div>
+    
     <script>
         // Secure API client with encryption and CSRF protection
         class SecureAPIClient {
             constructor() {
                 this.csrfToken = null;
+                this.loadingTimeout = null;
+                this.activeRequests = 0;
+            }
+            
+            showLoading() {
+                this.activeRequests++;
+                
+                // Only show if request takes longer than 500ms and no loading is currently scheduled/shown
+                if (this.activeRequests === 1 && !this.loadingTimeout) {
+                    this.loadingTimeout = setTimeout(() => {
+                        const overlay = document.getElementById('loading-overlay');
+                        const spinner = document.getElementById('loading-spinner');
+                        const message = document.getElementById('loading-message');
+                        const error = document.getElementById('error-content');
+                        
+                        if (overlay && spinner && message && error) {
+                            // Don't show if we're already showing an error
+                            if (error.style.display === 'block') return;
+                            
+                            overlay.style.display = 'flex';
+                            spinner.style.display = 'block';
+                            message.style.display = 'block';
+                            error.style.display = 'none';
+                        }
+                    }, 500);
+                }
+            }
+
+            hideLoading() {
+                this.activeRequests--;
+                if (this.activeRequests < 0) this.activeRequests = 0;
+
+                if (this.activeRequests === 0) {
+                    if (this.loadingTimeout) {
+                        clearTimeout(this.loadingTimeout);
+                        this.loadingTimeout = null;
+                    }
+                    const overlay = document.getElementById('loading-overlay');
+                    // Only hide if we are not showing an error
+                    if (overlay && overlay.style.display === 'flex' && document.getElementById('error-content').style.display === 'none') {
+                        overlay.style.display = 'none';
+                    }
+                }
+            }
+
+            showError() {
+                if (this.loadingTimeout) {
+                    clearTimeout(this.loadingTimeout);
+                    this.loadingTimeout = null;
+                }
+                const overlay = document.getElementById('loading-overlay');
+                const spinner = document.getElementById('loading-spinner');
+                const message = document.getElementById('loading-message');
+                const error = document.getElementById('error-content');
+                
+                if (overlay && spinner && message && error) {
+                    overlay.style.display = 'flex';
+                    spinner.style.display = 'none';
+                    message.style.display = 'none';
+                    error.style.display = 'block';
+                }
             }
             
             async initCSRF() {
                 if (!this.csrfToken) {
-                    const response = await fetch('/api/csrf-token');
-                    const data = await response.json();
-                    this.csrfToken = data.csrf_token;
+                    try {
+                        const response = await fetch('/api/csrf-token');
+                        if (!response.ok) throw new Error('Failed to get CSRF token');
+                        const data = await response.json();
+                        this.csrfToken = data.csrf_token;
+                    } catch (e) {
+                        console.error('CSRF Init Error:', e);
+                        this.showError();
+                        throw e;
+                    }
                 }
                 return this.csrfToken;
             }
@@ -273,63 +411,82 @@
             }
             
             async request(url, options = {}) {
-                await this.initCSRF();
+                this.showLoading();
                 
-                const timestamp = new Date().toISOString();
-                const headers = {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': this.csrfToken,
-                    ...options.headers
-                };
-                
-                // For write operations, add timestamp and signature
-                if (['POST', 'PUT', 'DELETE'].includes(options.method)) {
-                    headers['X-Request-Timestamp'] = timestamp;
+                try {
+                    await this.initCSRF();
                     
-                    // Generate signature (simplified for client)
-                    let data = {};
-                    if (options.body) {
-                        try {
-                            data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
-                        } catch (e) {
-                            data = {};
+                    const timestamp = new Date().toISOString();
+                    const headers = {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': this.csrfToken,
+                        ...options.headers
+                    };
+                    
+                    // For write operations, add timestamp and signature
+                    if (['POST', 'PUT', 'DELETE'].includes(options.method)) {
+                        headers['X-Request-Timestamp'] = timestamp;
+                        
+                        // Generate signature (simplified for client)
+                        let data = {};
+                        if (options.body) {
+                            try {
+                                data = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+                            } catch (e) {
+                                data = {};
+                            }
                         }
+                        const message = JSON.stringify(data) + timestamp;
+                        
+                        // Use SubtleCrypto API for HMAC
+                        const encoder = new TextEncoder();
+                        const key = await window.crypto.subtle.importKey(
+                            'raw',
+                            encoder.encode(this.csrfToken),
+                            { name: 'HMAC', hash: 'SHA-256' },
+                            false,
+                            ['sign']
+                        );
+                        const signature = await window.crypto.subtle.sign(
+                            'HMAC',
+                            key,
+                            encoder.encode(message)
+                        );
+                        const signatureHex = Array.from(new Uint8Array(signature))
+                            .map(b => b.toString(16).padStart(2, '0'))
+                            .join('');
+                        
+                        headers['X-Request-Signature'] = signatureHex;
                     }
-                    const message = JSON.stringify(data) + timestamp;
                     
-                    // Use SubtleCrypto API for HMAC
-                    const encoder = new TextEncoder();
-                    const key = await window.crypto.subtle.importKey(
-                        'raw',
-                        encoder.encode(this.csrfToken),
-                        { name: 'HMAC', hash: 'SHA-256' },
-                        false,
-                        ['sign']
-                    );
-                    const signature = await window.crypto.subtle.sign(
-                        'HMAC',
-                        key,
-                        encoder.encode(message)
-                    );
-                    const signatureHex = Array.from(new Uint8Array(signature))
-                        .map(b => b.toString(16).padStart(2, '0'))
-                        .join('');
+                    const response = await fetch(url, {
+                        ...options,
+                        headers,
+                        credentials: 'same-origin'
+                    });
                     
-                    headers['X-Request-Signature'] = signatureHex;
+                    this.hideLoading();
+
+                    if (!response.ok) {
+                        // If server error (500+), show connection error screen
+                        if (response.status >= 500) {
+                            this.showError();
+                            throw new Error('Server Error');
+                        }
+                        const error = await response.json();
+                        throw new Error(error.error || 'Request failed');
+                    }
+                    
+                    return response.json();
+                } catch (error) {
+                    // If network error (fetch failed), show connection error screen
+                    if (error.name === 'TypeError' || error.message === 'Failed to fetch' || error.message === 'Server Error') {
+                        this.showError();
+                    } else {
+                        this.hideLoading();
+                    }
+                    throw error;
                 }
-                
-                const response = await fetch(url, {
-                    ...options,
-                    headers,
-                    credentials: 'same-origin'
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Request failed');
-                }
-                
-                return response.json();
             }
             
             async get(url) {

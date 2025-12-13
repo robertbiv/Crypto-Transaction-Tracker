@@ -104,6 +104,25 @@ The server will start on **https://localhost:5000**
 - View security status
 - System information
 
+## ⚙️ Configuration Guide
+
+### Target Tax Year
+The **Target Tax Year** setting controls which year the tax engine processes.
+
+- **Auto-Current Year (Default)**: Leave the field **empty**.
+  - The system automatically uses the current calendar year (e.g., 2025).
+  - It also checks and finalizes the previous year (e.g., 2024) to ensure correct opening balances.
+  - This is the recommended "set it and forget it" mode.
+
+- **Specific Year**: Enter a year (e.g., `2024`).
+  - The system forces the calculation to run for that specific year.
+  - Useful for re-generating past reports or auditing historical data.
+  - **Note**: Remember to clear this field to return to automatic mode.
+
+### Accounting Method
+- **FIFO (First In, First Out)**: Sells the oldest coins first.
+- **HIFO (Highest In, First Out)**: Sells the most expensive coins first (often results in lower taxes).
+
 ## 🔐 Security Best Practices
 
 ### 1. Change Default Password

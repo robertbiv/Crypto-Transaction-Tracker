@@ -28,6 +28,7 @@ CURRENT_YEAR_OVERRIDE = None
 KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 CONFIG_FILE = BASE_DIR / 'config.json'
+STATUS_FILE = BASE_DIR / 'status.json'
 
 logger = logging.getLogger("crypto_tax_engine")
 logger.setLevel(logging.INFO)
@@ -70,6 +71,40 @@ class ApiAuthError(Exception): pass
 def initialize_folders():
     for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
         if not d.exists(): d.mkdir(parents=True)
+
+def get_status():
+    """Get system status including timestamps"""
+    default_status = {
+        'last_data_change': None,
+        'last_run': None,
+        'last_run_success': False
+    }
+    if not STATUS_FILE.exists():
+        return default_status
+    try:
+        with open(STATUS_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return default_status
+
+def update_status(key, value):
+    """Update a specific status key"""
+    status = get_status()
+    status[key] = value
+    try:
+        with open(STATUS_FILE, 'w') as f:
+            json.dump(status, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to update status: {e}")
+
+def mark_data_changed():
+    """Mark that data has changed (requires re-run)"""
+    update_status('last_data_change', datetime.now().isoformat())
+
+def mark_run_complete(success=True):
+    """Mark that calculation run completed"""
+    update_status('last_run', datetime.now().isoformat())
+    update_status('last_run_success', success)
 
 def load_config():
     defaults = {

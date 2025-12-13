@@ -124,6 +124,10 @@
         </select>
         
         <button class="btn btn-primary" onclick="loadTransactions()">Apply Filters</button>
+        <button class="btn btn-success" onclick="openAddModal()">
+            <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">add</span>
+            Add Transaction
+        </button>
     </div>
     
     <div style="overflow-x: auto;">
@@ -217,6 +221,71 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
                 <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Transaction Modal -->
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add Transaction</h2>
+            <span class="modal-close material-icons" onclick="closeAddModal()">close</span>
+        </div>
+        
+        <form id="addForm">
+            <div class="form-group">
+                <label class="form-label">Date (YYYY-MM-DD HH:MM:SS)</label>
+                <input type="text" id="addDate" class="form-input" placeholder="2024-01-01 12:00:00" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Action</label>
+                <select id="addAction" class="form-input" required>
+                    <option value="BUY">BUY</option>
+                    <option value="SELL">SELL</option>
+                    <option value="TRADE">TRADE</option>
+                    <option value="TRANSFER">TRANSFER</option>
+                    <option value="INCOME">INCOME</option>
+                    <option value="DEPOSIT">DEPOSIT</option>
+                    <option value="WITHDRAW">WITHDRAW</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Coin</label>
+                <input type="text" id="addCoin" class="form-input" placeholder="BTC" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Amount</label>
+                <input type="text" id="addAmount" class="form-input" placeholder="0.00000000" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Price USD</label>
+                <input type="text" id="addPriceUsd" class="form-input" placeholder="0.00">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Fee</label>
+                <input type="text" id="addFee" class="form-input" placeholder="0.00">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Fee Coin</label>
+                <input type="text" id="addFeeCoin" class="form-input" placeholder="ETH">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Source</label>
+                <input type="text" id="addSource" class="form-input" placeholder="Manual" value="Manual">
+            </div>
+            
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Transaction</button>
             </div>
         </form>
     </div>
@@ -390,5 +459,83 @@
     
     // Load transactions on page load
     document.addEventListener('DOMContentLoaded', loadTransactions);
+
+    // Add Modal Functions
+    function openAddModal() {
+        document.getElementById('addModal').style.display = 'flex';
+        // Set default date to now
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 19).replace('T', ' ');
+        document.getElementById('addDate').value = dateStr;
+    }
+
+    function closeAddModal() {
+        document.getElementById('addModal').style.display = 'none';
+        document.getElementById('addForm').reset();
+    }
+
+    // Handle Add Form Submission
+    document.getElementById('addForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const transactionData = {
+            date: document.getElementById('addDate').value,
+            action: document.getElementById('addAction').value,
+            coin: document.getElementById('addCoin').value,
+            amount: document.getElementById('addAmount').value,
+            price_usd: document.getElementById('addPriceUsd').value,
+            fee: document.getElementById('addFee').value,
+            fee_coin: document.getElementById('addFeeCoin').value,
+            source: document.getElementById('addSource').value
+        };
+
+        try {
+            // Use the api wrapper if available, otherwise fetch
+            if (typeof api !== 'undefined') {
+                await api.post('/api/transactions', transactionData);
+            } else {
+                const response = await fetch('/api/transactions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        data: JSON.stringify(transactionData)
+                    })
+                });
+                const result = await response.json();
+                if (result.status !== 'success') throw new Error(result.message);
+            }
+            
+            closeAddModal();
+            loadTransactions();
+            // Show success message if showAlert is defined
+            if (typeof showAlert === 'function') {
+                showAlert('Transaction added successfully', 'success');
+            } else {
+                alert('Transaction added successfully');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (typeof showAlert === 'function') {
+                showAlert('Error adding transaction: ' + error.message, 'error');
+            } else {
+                alert('Error adding transaction');
+            }
+        }
+    });
+
+    // Close modals when clicking outside
+    window.onclick = function(event) {
+        const editModal = document.getElementById('editModal');
+        const addModal = document.getElementById('addModal');
+        if (event.target == editModal) {
+            if (typeof closeEditModal === 'function') closeEditModal();
+            else editModal.classList.remove('active');
+        }
+        if (event.target == addModal) {
+            closeAddModal();
+        }
+    }
 </script>
 {% endblock %}

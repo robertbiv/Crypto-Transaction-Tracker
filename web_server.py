@@ -26,6 +26,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 import bcrypt
 import jwt
+import Crypto_Tax_Engine as tax_app  # Import for status updates
 
 # Configuration paths - avoid importing full engine to reduce dependencies
 BASE_DIR = Path(__file__).parent
@@ -604,7 +605,7 @@ def setup_page():
     # If users already exist, redirect to login
     if USERS_FILE.exists():
         return redirect(url_for('login'))
-    return render_template('setup.html')
+    return render_template('first_time_setup.html')
 
 @app.route('/setup/wizard', methods=['GET'])
 @login_required
@@ -666,7 +667,7 @@ def schedule_page():
 
 @app.route('/api/transactions', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_transactions():
     """Get transactions with pagination - encrypted response"""
     try:
@@ -692,9 +693,70 @@ def api_get_transactions():
         print(f"Error getting transactions: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/transactions', methods=['POST'])
+@login_required
+@web_security_required
+def api_create_transaction():
+    """Create a new transaction"""
+    # Decrypt request data
+    encrypted_payload = request.get_json().get('data')
+    if not encrypted_payload:
+        return jsonify({'error': 'Missing data'}), 400
+    
+    try:
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
+    except:
+        return jsonify({'error': 'Invalid data format'}), 400
+    
+    required_fields = ['date', 'action', 'coin', 'amount']
+    for field in required_fields:
+        if field not in data or not data[field]:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+            
+    conn = get_db_connection()
+    
+    try:
+        # Generate a unique ID
+        import uuid
+        tx_id = str(uuid.uuid4())
+        
+        # Prepare values with defaults
+        values = (
+            tx_id,
+            data.get('date'),
+            data.get('source', 'Manual'),
+            data.get('destination', ''),
+            data.get('action'),
+            data.get('coin'),
+            data.get('amount'),
+            data.get('price_usd', 0),
+            data.get('fee', 0),
+            data.get('fee_coin', '')
+        )
+        
+        query = """
+            INSERT INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, fee_coin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        conn.execute(query, values)
+        conn.commit()
+        conn.close()
+        
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
+        return jsonify({'status': 'success', 'message': 'Transaction created', 'id': tx_id})
+    except Exception as e:
+        if conn:
+            conn.close()
+        print(f"Error creating transaction: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/transactions/<transaction_id>', methods=['PUT'])
 @login_required
-@api_security_required
+@web_security_required
 def api_update_transaction(transaction_id):
     """Update a transaction - requires encrypted request"""
     # Decrypt request data
@@ -731,6 +793,9 @@ def api_update_transaction(transaction_id):
         conn.commit()
         conn.close()
         
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
         # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction updated'})
         # return jsonify({'data': encrypted_response})
         return jsonify({'data': json.dumps({'success': True, 'message': 'Transaction updated'})})
@@ -740,7 +805,7 @@ def api_update_transaction(transaction_id):
 
 @app.route('/api/transactions/<transaction_id>', methods=['DELETE'])
 @login_required
-@api_security_required
+@web_security_required
 def api_delete_transaction(transaction_id):
     """Delete a transaction"""
     conn = get_db_connection()
@@ -750,10 +815,12 @@ def api_delete_transaction(transaction_id):
         conn.commit()
         conn.close()
         
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
         # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction deleted'})
         # return jsonify({'data': encrypted_response})
         return jsonify({'data': json.dumps({'success': True, 'message': 'Transaction deleted'})})
-        return jsonify({'data': encrypted_response})
     except Exception as e:
         conn.close()
         return jsonify({'error': str(e)}), 500
@@ -764,7 +831,7 @@ def api_delete_transaction(transaction_id):
 
 @app.route('/api/config', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_config():
     """Get configuration - encrypted response"""
     try:
@@ -779,7 +846,7 @@ def api_get_config():
 
 @app.route('/api/config', methods=['PUT'])
 @login_required
-@api_security_required
+@web_security_required
 def api_update_config():
     """Update configuration - requires encrypted request"""
     encrypted_payload = request.get_json().get('data')
@@ -804,7 +871,7 @@ def api_update_config():
 
 @app.route('/api/wallets', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_wallets():
     """Get wallets - encrypted response"""
     try:
@@ -822,7 +889,7 @@ def api_get_wallets():
 
 @app.route('/api/wallets', methods=['PUT'])
 @login_required
-@api_security_required
+@web_security_required
 def api_update_wallets():
     """Update wallets - requires encrypted request"""
     encrypted_payload = request.get_json().get('data')
@@ -847,7 +914,7 @@ def api_update_wallets():
 
 @app.route('/api/api-keys', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_api_keys():
     """Get API keys (masked for security) - encrypted response"""
     try:
@@ -873,7 +940,7 @@ def api_get_api_keys():
 
 @app.route('/api/api-keys', methods=['PUT'])
 @login_required
-@api_security_required
+@web_security_required
 def api_update_api_keys():
     """Update API keys - requires encrypted request"""
     encrypted_payload = request.get_json().get('data')
@@ -974,9 +1041,13 @@ def api_get_reports():
                 year_reports = []
                 
                 for report_file in year_folder.glob('*.csv'):
+                    # Use forward slashes for web paths, regardless of OS
+                    rel_path = report_file.relative_to(BASE_DIR)
+                    web_path = str(rel_path).replace('\\', '/')
+                    
                     year_reports.append({
                         'name': report_file.name,
-                        'path': str(report_file.relative_to(BASE_DIR)),
+                        'path': web_path,
                         'size': report_file.stat().st_size,
                         'modified': datetime.fromtimestamp(report_file.stat().st_mtime).isoformat()
                     })
@@ -1067,7 +1138,8 @@ def api_get_stats():
             'gains_losses': gains_losses
         }
         
-        return jsonify(result)
+        # return jsonify(result)
+        return jsonify({'data': json.dumps(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1077,7 +1149,7 @@ def api_get_stats():
 
 @app.route('/api/csv-upload', methods=['POST'])
 @login_required
-@api_security_required
+@web_security_required
 def api_upload_csv():
     """Upload CSV files"""
     if 'file' not in request.files:
@@ -1096,43 +1168,66 @@ def api_upload_csv():
         filepath = UPLOAD_FOLDER / filename
         file.save(str(filepath))
         
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
         result = {
             'success': True,
             'message': f'File {filename} uploaded successfully',
             'filename': filename
         }
         
-        encrypted_response = encrypt_data(result)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(result)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/run', methods=['POST'])
 @login_required
-@api_security_required
+@web_security_required
 def api_run_tax_calculation():
     """Start tax calculation"""
     try:
+        # Check if there are transactions
+        conn = get_db_connection()
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+        except Exception:
+            count = 0
+        finally:
+            conn.close()
+            
+        if count == 0:
+            return jsonify({'error': 'No transactions found. Please add transactions before running calculation.'}), 400
+
         auto_runner = BASE_DIR / 'Auto_Runner.py'
         if not auto_runner.exists():
             return jsonify({'error': 'Auto_Runner.py not found'}), 404
         
+        # Check for cascade mode
+        data = request.get_json() or {}
+        cmd = [sys.executable, str(auto_runner)]
+        if data.get('cascade'):
+            cmd.append('--cascade')
+            
         # Run Auto_Runner.py in background
-        subprocess.Popen([sys.executable, str(auto_runner)])
+        subprocess.Popen(cmd)
         
         result = {
             'success': True,
             'message': 'Tax calculation started. Check reports page for results.'
         }
         
-        encrypted_response = encrypt_data(result)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(result)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/setup', methods=['POST'])
 @login_required
-@api_security_required
+@web_security_required
 def api_run_setup():
     """Run setup script"""
     try:
@@ -1150,8 +1245,9 @@ def api_run_setup():
             'errors': result.stderr
         }
         
-        encrypted_response = encrypt_data(response_data)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(response_data)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(response_data)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1329,7 +1425,7 @@ def api_wizard_complete():
 
 @app.route('/api/logs', methods=['GET'])
 @login_required
-@api_security_required
+@web_security_required
 def api_get_logs():
     """Get list of log files"""
     try:
@@ -1372,7 +1468,7 @@ def api_download_log(log_path):
 
 @app.route('/api/reset-program', methods=['POST'])
 @login_required
-@api_security_required
+@web_security_required
 def api_reset_program():
     """Reset the program - runs setup with confirmation"""
     try:
@@ -1380,7 +1476,8 @@ def api_reset_program():
         if not encrypted_payload:
             return jsonify({'error': 'Missing encrypted data'}), 400
         
-        data = decrypt_data(encrypted_payload)
+        # data = decrypt_data(encrypted_payload)
+        data = json.loads(encrypted_payload)
         confirmation = data.get('confirmation', '')
         
         if confirmation != 'RESET':
@@ -1400,8 +1497,9 @@ def api_reset_program():
             'errors': result.stderr
         }
         
-        encrypted_response = encrypt_data(response_data)
-        return jsonify({'data': encrypted_response})
+        # encrypted_response = encrypt_data(response_data)
+        # return jsonify({'data': encrypted_response})
+        return jsonify({'data': json.dumps(response_data)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1541,6 +1639,17 @@ def api_system_health():
             health_status['summary'] = 'All systems operational'
         
         return jsonify(health_status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/status', methods=['GET'])
+@login_required
+@web_security_required
+def api_get_status():
+    """Get system status (timestamps)"""
+    try:
+        status = tax_app.get_status()
+        return jsonify({'data': json.dumps(status)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

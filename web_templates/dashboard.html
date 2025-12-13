@@ -109,14 +109,16 @@
             await runHealthCheck();
             
             // Load statistics
-            const stats = await api.get('/api/stats');
+            const statsResponse = await api.get('/api/stats');
+            const stats = JSON.parse(statsResponse.data);
             
             document.getElementById('totalTransactions').textContent = stats.total_transactions ? stats.total_transactions.toLocaleString() : '0';
             document.getElementById('uniqueCoins').textContent = stats.top_coins ? Object.keys(stats.top_coins).length : '0';
             
             // Load warnings
             try {
-                const warnings = await api.get('/api/warnings');
+                const warningsResponse = await api.get('/api/warnings');
+                const warnings = JSON.parse(warningsResponse.data);
                 document.getElementById('totalWarnings').textContent = warnings.warnings ? warnings.warnings.length : '0';
             } catch (e) {
                 document.getElementById('totalWarnings').textContent = '0';
@@ -124,7 +126,8 @@
             
             // Load reports
             try {
-                const reports = await api.get('/api/reports');
+                const reportsResponse = await api.get('/api/reports');
+                const reports = JSON.parse(reportsResponse.data);
                 let totalReports = 0;
                 if (reports && Array.isArray(reports)) {
                     reports.forEach(year => totalReports += year.reports ? year.reports.length : 0);
