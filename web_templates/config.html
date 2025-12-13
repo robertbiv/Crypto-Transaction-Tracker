@@ -69,9 +69,9 @@
 
 <div class="card">
     <div class="config-tabs">
-        <button class="config-tab active" onclick="switchTab(event, 'general')">General Settings</button>
-        <button class="config-tab" onclick="switchTab(event, 'wallets')">Wallets</button>
-        <button class="config-tab" onclick="switchTab(event, 'apikeys')">API Keys</button>
+        <button class="config-tab active" id="tab-general" data-tab="general">General Settings</button>
+        <button class="config-tab" id="tab-wallets" data-tab="wallets">Wallets</button>
+        <button class="config-tab" id="tab-apikeys" data-tab="apikeys">API Keys</button>
     </div>
     
     <!-- General Settings Panel -->
@@ -180,11 +180,11 @@
             <p>Loading wallets...</p>
         </div>
         
-        <button class="btn btn-secondary" onclick="addWalletEntry()" style="margin-top: 16px;">
+        <button class="btn btn-secondary" id="btnAddWallet" style="margin-top: 16px;">
             <span class="material-icons" style="vertical-align: middle;">add</span>
             Add Wallet Address
         </button>
-        <button class="btn btn-primary" onclick="saveWallets()" style="margin-top: 16px; margin-left: 12px;">
+        <button class="btn btn-primary" id="btnSaveWallets" style="margin-top: 16px; margin-left: 12px;">
             Save All Wallets
         </button>
     </div>
@@ -203,13 +203,13 @@
             <p>Loading API keys...</p>
         </div>
         
-        <button class="btn btn-primary" onclick="saveApiKeys()" style="margin-top: 16px;">Save API Keys</button>
+        <button class="btn btn-primary" id="btnSaveApiKeys" style="margin-top: 16px;">Save API Keys</button>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     let currentTab = 'general';
     let walletsData = {};
     let apiKeysData = {};
@@ -219,7 +219,9 @@
         document.querySelectorAll('.config-tab').forEach(btn => {
             btn.classList.remove('active');
         });
-        event.target.classList.add('active');
+        // Handle both click event and direct call if needed
+        const target = event.currentTarget || event.target;
+        target.classList.add('active');
         
         // Update panels
         document.querySelectorAll('.config-panel').forEach(panel => {
@@ -392,7 +394,7 @@
                         <div class="wallet-entry">
                             <input type="text" class="form-input" placeholder="Currency (e.g., BTC, ETH)" value="${currency}" readonly>
                             <input type="text" class="form-input" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}">
-                            <button class="btn btn-secondary" onclick="removeWallet('${currency}', ${index})">
+                            <button class="btn btn-secondary remove-wallet-btn" data-currency="${currency}" data-index="${index}">
                                 <span class="material-icons" style="font-size: 16px;">delete</span>
                             </button>
                         </div>
@@ -402,6 +404,11 @@
         }
         
         container.innerHTML = html || '<p>No wallets configured.</p>';
+
+        // Attach event listeners to remove buttons
+        document.querySelectorAll('.remove-wallet-btn').forEach(btn => {
+            btn.addEventListener('click', () => removeWallet(btn.dataset.currency, parseInt(btn.dataset.index)));
+        });
     }
     
     function addWalletEntry() {
@@ -527,6 +534,20 @@
     // Load general config on page load
     document.addEventListener('DOMContentLoaded', () => {
         loadGeneralConfig();
+        
+        // Attach event listeners
+        document.querySelectorAll('.config-tab').forEach(btn => {
+            btn.addEventListener('click', (e) => switchTab(e, btn.dataset.tab));
+        });
+        
+        const btnAddWallet = document.getElementById('btnAddWallet');
+        if (btnAddWallet) btnAddWallet.addEventListener('click', addWalletEntry);
+        
+        const btnSaveWallets = document.getElementById('btnSaveWallets');
+        if (btnSaveWallets) btnSaveWallets.addEventListener('click', saveWallets);
+        
+        const btnSaveApiKeys = document.getElementById('btnSaveApiKeys');
+        if (btnSaveApiKeys) btnSaveApiKeys.addEventListener('click', saveApiKeys);
     });
 </script>
 {% endblock %}

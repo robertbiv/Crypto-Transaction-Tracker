@@ -313,14 +313,21 @@
             <span class="material-icons error-icon">cloud_off</span>
             <h2 style="margin-bottom: 8px; color: var(--md-sys-color-on-surface);">Connection Failed</h2>
             <p style="margin-bottom: 24px; color: var(--md-sys-color-on-surface-variant);">Unable to reach the server or database. Please check if the application is running.</p>
-            <button class="btn btn-primary" onclick="window.location.reload()">
+            <button class="btn btn-primary" id="retryConnectionBtn">
                 <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 8px;">refresh</span>
                 Retry Connection
             </button>
         </div>
     </div>
     
-    <script>
+    <script nonce="{{ csp_nonce }}">
+        document.addEventListener('DOMContentLoaded', () => {
+            const retryBtn = document.getElementById('retryConnectionBtn');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', () => window.location.reload());
+            }
+        });
+
         // Secure API client with encryption and CSRF protection
         class SecureAPIClient {
             constructor() {

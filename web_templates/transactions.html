@@ -293,7 +293,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     let currentPage = 1;
     let totalPages = 1;
     

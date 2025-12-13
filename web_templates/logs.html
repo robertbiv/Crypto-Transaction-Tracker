@@ -60,7 +60,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
     async function loadLogs() {
         try {
             const response = await api.get('/api/logs');

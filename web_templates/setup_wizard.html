@@ -564,17 +564,17 @@
             </div>
             
             <div class="wizard-actions">
-                <button class="btn btn-secondary" id="prevBtn" onclick="previousStep()" style="display: none;">
+                <button class="btn btn-secondary" id="prevBtn" style="display: none;">
                     Previous
                 </button>
-                <button class="btn btn-primary" id="nextBtn" onclick="nextStep()">
+                <button class="btn btn-primary" id="nextBtn">
                     Next
                 </button>
             </div>
         </div>
     </div>
     
-    <script>
+    <script nonce="{{ csp_nonce }}">
         // Start at step 2 since account is already created via first_time_setup
         let currentStep = 2;
         const totalSteps = 5;
@@ -584,6 +584,13 @@
         // Initialize wizard on load
         document.addEventListener('DOMContentLoaded', async () => {
             updateProgress();
+            
+            const prevBtn = document.getElementById('prevBtn');
+            if (prevBtn) prevBtn.addEventListener('click', previousStep);
+            
+            const nextBtn = document.getElementById('nextBtn');
+            if (nextBtn) nextBtn.addEventListener('click', nextStep);
+            
             // Auto-start setup script
             await runSetupScript();
         });
