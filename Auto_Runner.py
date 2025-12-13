@@ -2,6 +2,7 @@ import Crypto_Tax_Engine as tax_app
 import pandas as pd
 from datetime import datetime
 import sys
+import json
 from pathlib import Path
 
 # --- LOGGING CONFIGURATION ---
@@ -27,11 +28,14 @@ def log(message, level="info"):
         print(f"{ts_prefix}{message}")
 
 def run_automation():
+    # Check for cascade mode
+    CASCADE_MODE = "--cascade" in sys.argv
+    
     # SAFETY: Ensure folders exist before starting (Safe because called at runtime, not import)
     tax_app.initialize_folders()
     
     log("=========================================")
-    log("   CRYPTO TAX AUTO-PILOT: STARTED")
+    log(f"   CRYPTO TAX AUTO-PILOT: STARTED {'(CASCADE MODE)' if CASCADE_MODE else ''}")
     log("=========================================")
 
     try:
@@ -63,34 +67,77 @@ def run_automation():
         # 4. DETERMINE YEARS
         now = datetime.now()
         current_year = now.year
-        prev_year = current_year - 1
+        
+        # Try to load tax_year from config
+        try:
+            if tax_app.CONFIG_FILE.exists():
+                with open(tax_app.CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+                    if 'tax_year' in config:
+                        current_year = int(config['tax_year'])
+                        log(f">>> CONFIG: Using configured tax year: {current_year}")
+        except Exception as e:
+            log(f">>> CONFIG: Could not load config.json, using system year: {current_year} ({e})", level="warning")
+            
         # Allow tests to control snapshot naming without touching global clock
         try:
             tax_app.CURRENT_YEAR_OVERRIDE = current_year
         except Exception:
             tax_app.CURRENT_YEAR_OVERRIDE = None
-        
-        # 5. CHECK PREVIOUS YEAR (The "Final Run")
-        prev_folder = tax_app.OUTPUT_DIR / f"Year_{prev_year}"
-        snapshot_file = prev_folder / "EOY_HOLDINGS_SNAPSHOT.csv"
-        
-        log(f">>> STEP 3: CHECKING PREVIOUS TAX YEAR ({prev_year})")
-        
-        if snapshot_file.exists():
-            log(f"   [SKIP] Year {prev_year} is already finalized.")
-        else:
-            log(f"   [ACTION] Year {prev_year} not finalized. Running Report...")
-            engine_prev = tax_app.TaxEngine(db, prev_year)
-            engine_prev.run()
-            engine_prev.export()
-            log(f"   [SUCCESS] Finalized {prev_year} and created Snapshot.")
 
-        # 6. RUN CURRENT YEAR (The "Live Tracker")
-        log(f">>> STEP 4: UPDATING LIVE TRACKER FOR CURRENT YEAR ({current_year})")
-        engine_curr = tax_app.TaxEngine(db, current_year)
-        engine_curr.run()
-        engine_curr.export()
-        log(f"   [SUCCESS] Updated 'Draft' reports for {current_year}.")
+        # --- CASCADE MODE LOGIC ---
+        if CASCADE_MODE:
+            log(">>> CASCADE MODE: DETERMINING START YEAR")
+            try:
+                min_date_row = db.cursor.execute("SELECT MIN(date) FROM trades").fetchone()
+                if min_date_row and min_date_row[0]:
+                    start_year = int(min_date_row[0][:4])
+                    log(f"   Found earliest transaction in {start_year}")
+                else:
+                    start_year = current_year
+                    log(f"   No transactions found, defaulting to {current_year}")
+            except Exception as e:
+                start_year = current_year
+                log(f"   Error determining start year: {e}, defaulting to {current_year}")
+
+            log(f">>> CASCADE MODE: RUNNING FROM {start_year} TO {current_year}")
+            
+            # Run sequentially for each year
+            engine_curr = None
+            for year in range(start_year, current_year + 1):
+                log(f">>> PROCESSING YEAR {year}...")
+                engine = tax_app.TaxEngine(db, year)
+                engine.run()
+                engine.export()
+                log(f"   [SUCCESS] Completed {year}")
+                if year == current_year:
+                    engine_curr = engine
+
+        else:
+            # --- STANDARD MODE LOGIC ---
+            prev_year = current_year - 1
+            
+            # 5. CHECK PREVIOUS YEAR (The "Final Run")
+            prev_folder = tax_app.OUTPUT_DIR / f"Year_{prev_year}"
+            snapshot_file = prev_folder / "EOY_HOLDINGS_SNAPSHOT.csv"
+            
+            log(f">>> STEP 3: CHECKING PREVIOUS TAX YEAR ({prev_year})")
+            
+            if snapshot_file.exists():
+                log(f"   [SKIP] Year {prev_year} is already finalized.")
+            else:
+                log(f"   [ACTION] Year {prev_year} not finalized. Running Report...")
+                engine_prev = tax_app.TaxEngine(db, prev_year)
+                engine_prev.run()
+                engine_prev.export()
+                log(f"   [SUCCESS] Finalized {prev_year} and created Snapshot.")
+
+            # 6. RUN CURRENT YEAR (The "Live Tracker")
+            log(f">>> STEP 4: UPDATING LIVE TRACKER FOR CURRENT YEAR ({current_year})")
+            engine_curr = tax_app.TaxEngine(db, current_year)
+            engine_curr.run()
+            engine_curr.export()
+            log(f"   [SUCCESS] Updated 'Draft' reports for {current_year}.")
         
         # 7. RUN MANUAL REVIEW ASSISTANT
         log(f">>> STEP 5: RUNNING MANUAL REVIEW ASSISTANT")
@@ -101,11 +148,16 @@ def run_automation():
             log(f"   [SKIP] Review assistant not available: {e}", level="warning")
 
         db.close()
+        
+        # Mark run as complete
+        tax_app.mark_run_complete(success=True)
+        
         log("=========================================")
         log("   AUTO-PILOT: COMPLETED SUCCESSFULLY")
         log("=========================================\n") 
 
     except Exception as e:
+        tax_app.mark_run_complete(success=False)
         log(f"[CRITICAL ERROR] Automation Failed: {e}")
         raise e
 

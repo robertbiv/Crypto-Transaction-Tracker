@@ -17,14 +17,14 @@ import secrets
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Mock Flask and dependencies before importing web_server
-sys.modules['flask'] = MagicMock()
-sys.modules['flask_cors'] = MagicMock()
-sys.modules['bcrypt'] = MagicMock()
-sys.modules['jwt'] = MagicMock()
-sys.modules['cryptography.fernet'] = MagicMock()
-sys.modules['cryptography.hazmat.primitives'] = MagicMock()
-sys.modules['cryptography.hazmat.primitives.hashes'] = MagicMock()
+# Mocking removed to avoid breaking other tests
+# sys.modules['flask'] = MagicMock()
+# sys.modules['flask_cors'] = MagicMock()
+# sys.modules['bcrypt'] = MagicMock()
+# sys.modules['jwt'] = MagicMock()
+# sys.modules['cryptography.fernet'] = MagicMock()
+# sys.modules['cryptography.hazmat.primitives'] = MagicMock()
+# sys.modules['cryptography.hazmat.primitives.hashes'] = MagicMock()
 
 class TestWebUICore(unittest.TestCase):
     """Test core web UI functionality"""
@@ -804,12 +804,12 @@ class TestWebUIInjectionPrevention(unittest.TestCase):
     
     def test_path_traversal_prevention_strict(self):
         """Test strict path traversal prevention"""
-        base_dir = "/home/app/outputs/logs"
+        base_dir = Path("/home/app/outputs/logs")
         
         # Safe path
         safe = "app.log"
-        safe_full = Path(base_dir) / safe
-        self.assertTrue(str(safe_full).startswith(base_dir))
+        safe_full = base_dir / safe
+        self.assertTrue(str(safe_full).startswith(str(base_dir)))
         
         # Unsafe path
         unsafe = "../../etc/passwd"

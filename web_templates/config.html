@@ -90,6 +90,15 @@
                     <option value="HIFO">HIFO (Highest In, First Out)</option>
                 </select>
             </div>
+
+            <h4 style="margin-top: 20px;">Tax Year</h4>
+            <div class="form-group">
+                <label class="form-label">Target Tax Year</label>
+                <input type="number" id="tax_year" class="form-input" placeholder="e.g. 2025 (Leave empty for Auto-Current Year)">
+                <small style="color: var(--md-sys-color-on-surface-variant);">
+                    If set, the system will always run for this specific year. If empty, it will automatically use the current calendar year.
+                </small>
+            </div>
             
             <h4 style="margin-top: 20px;">General Settings</h4>
             <div class="form-group">
@@ -204,14 +213,11 @@
             const config = JSON.parse(response.data);
             
             // Populate form fields
-            if (config.accounting && config.accounting.method) {
-                document.getElementById('accounting_method').value = config.accounting.method;
-            }
+            document.getElementById('accounting_method').value = config.accounting_method || 'HIFO';
+            document.getElementById('tax_year').value = config.tax_year || '';
             
-            if (config.general) {
-                document.getElementById('run_audit').checked = config.general.run_audit !== false;
-                document.getElementById('create_db_backups').checked = config.general.create_db_backups !== false;
-            }
+            document.getElementById('run_audit').checked = config.run_audit !== false;
+            document.getElementById('create_db_backups').checked = config.create_db_backups !== false;
             
             if (config.performance) {
                 document.getElementById('respect_free_tier_limits').checked = config.performance.respect_free_tier_limits !== false;
@@ -231,14 +237,23 @@
         e.preventDefault();
         
         try {
+            const taxYearVal = document.getElementById('tax_year').value;
+            
             // Build config object
             const config = {
-                accounting: {
-                    method: document.getElementById('accounting_method').value
+                accounting_method: document.getElementById('accounting_method').value,
+                tax_year: taxYearVal ? parseInt(taxYearVal) : null,
+                run_audit: document.getElementById('run_audit').checked,
+                create_db_backups: document.getElementById('create_db_backups').checked,
+                performance: {
+                    respect_free_tier_limits: document.getElementById('respect_free_tier_limits').checked,
+                    api_timeout_seconds: parseInt(document.getElementById('api_timeout_seconds').value)
                 },
-                general: {
-                    run_audit: document.getElementById('run_audit').checked,
-                    create_db_backups: document.getElementById('create_db_backups').checked
+                compliance: {
+                    strict_broker_mode: document.getElementById('strict_broker_mode').checked,
+                    staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
+                }
+            };
                 },
                 performance: {
                     respect_free_tier_limits: document.getElementById('respect_free_tier_limits').checked,

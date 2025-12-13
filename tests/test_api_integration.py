@@ -5,6 +5,10 @@ import pandas as pd
 from datetime import datetime
 import requests
 from decimal import Decimal
+import tempfile
+import shutil
+import os
+from pathlib import Path
 
 # Import your application modules
 import Crypto_Tax_Engine as app
@@ -13,6 +17,24 @@ from Interactive_Review_Fixer import InteractiveReviewFixer
 class TestCCXTIntegration(unittest.TestCase):
     """Simulate CCXT Exchange Interactions based on official docs"""
     
+    def setUp(self):
+        """Set up test environment with isolated database"""
+        self.test_dir = tempfile.mkdtemp()
+        self.db_path = Path(self.test_dir) / 'test_transactions.db'
+        # Patch the global DB_FILE in the app module
+        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.db_path)
+        self.db_patcher.start()
+        # Patch RUN_CONTEXT to allow price fetching
+        self.original_context = app.RUN_CONTEXT
+        app.RUN_CONTEXT = 'script'
+
+    def tearDown(self):
+        """Clean up test environment"""
+        app.RUN_CONTEXT = self.original_context
+        self.db_patcher.stop()
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+
     @patch('ccxt.binance')
     def test_fetch_trades_pagination_and_fees(self, mock_binance_cls):
         """
@@ -64,10 +86,21 @@ class TestCCXTIntegration(unittest.TestCase):
         # Note: Your engine currently stores fee amount but doesn't strictly link 'fee_coin' column in all paths.
         # This test confirms raw ingestion works. 
         self.assertEqual(float(trade['fee']), 0.001) 
+        db.conn.close() 
 
 
 class TestYFinanceIntegration(unittest.TestCase):
     """Simulate Yahoo Finance data structures"""
+
+    def setUp(self):
+        """Set up test environment"""
+        # Patch RUN_CONTEXT to allow price fetching logic to run
+        self.original_context = app.RUN_CONTEXT
+        app.RUN_CONTEXT = 'script'
+
+    def tearDown(self):
+        """Clean up test environment"""
+        app.RUN_CONTEXT = self.original_context
 
     @patch('yfinance.download')
     def test_multi_ticker_download_structure(self, mock_download):
