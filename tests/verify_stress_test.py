@@ -22,10 +22,10 @@ def run_verification():
     # 1. Setup Environment
     logger.info("Setting up environment...")
     
-    # Disable strict broker mode in memory
-    Crypto_Tax_Engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = False
-    Crypto_Tax_Engine.STRICT_BROKER_MODE = False
-    logger.info("Disabled strict_broker_mode in memory.")
+    # Enable strict broker mode (Recommended Config)
+    Crypto_Tax_Engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+    Crypto_Tax_Engine.STRICT_BROKER_MODE = True
+    logger.info("Enabled strict_broker_mode (Recommended Config).")
 
     # Backup existing DB if it exists
     if DB_FILE.exists():
