@@ -157,13 +157,19 @@ COMPLIANCE_WARNINGS = {
 # ==========================================
 def to_decimal(value):
     """Safely convert float/int/str to Decimal to avoid IEEE 754 precision loss"""
-    if isinstance(value, Decimal): return value
-    elif isinstance(value, str):
+    if value is None: return Decimal('0')
+    if isinstance(value, Decimal): 
+        if value.is_nan(): return Decimal('0')
+        return value
+    if isinstance(value, (int, float)):
+        s = str(value)
+        if 'nan' in s.lower(): return Decimal('0')
+        return Decimal(s)
+    if isinstance(value, str):
+        if value.lower() == 'nan': return Decimal('0')
         try: return Decimal(value)
         except: return Decimal('0')
-    elif isinstance(value, (int, float)):
-        return Decimal(str(value))
-    else: return Decimal('0')
+    return Decimal('0')
 
 def is_defi_lp_token(coin_name):
     """Check if a coin matches DeFi LP token patterns"""
@@ -387,7 +393,9 @@ class Ingestor:
         for idx, r in df.iterrows():
             try:
                 # Force UTC timezone for all datetime parsing to avoid wash sale window errors
-                d = pd.to_datetime(r.get('date', r.get('timestamp', datetime.now())), utc=True)
+                # FIX: Check all supported date column names
+                raw_date = r.get('date', r.get('timestamp', r.get('time', r.get('datetime', datetime.now()))))
+                d = pd.to_datetime(raw_date, utc=True)
                 tx_type = str(r.get('type', r.get('kind', 'trade'))).lower()
                 sent_c = r.get('sent_coin', r.get('sent_asset', r.get('coin', None)))
                 sent_a = to_decimal(r.get('sent_amount', r.get('amount', 0)))
