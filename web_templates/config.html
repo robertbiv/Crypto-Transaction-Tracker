@@ -84,20 +84,35 @@
         <form id="generalConfigForm">
             <h4 style="margin-top: 20px;">Accounting Method</h4>
             <div class="form-group">
-                <label class="form-label">Method</label>
+                <label class="form-label" for="accounting_method">Method</label>
                 <select id="accounting_method" class="form-input">
                     <option value="FIFO">FIFO (First In, First Out)</option>
                     <option value="HIFO">HIFO (Highest In, First Out)</option>
                 </select>
+                <div id="warning_accounting_method" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-top: 4px;">
+                    ⚠️ HIFO is not recommended and may not align with broker 1099-DA reporting.
+                </div>
             </div>
 
             <h4 style="margin-top: 20px;">Tax Year</h4>
             <div class="form-group">
-                <label class="form-label">Target Tax Year</label>
+                <label class="form-label" for="tax_year">Target Tax Year</label>
                 <input type="number" id="tax_year" class="form-input" placeholder="e.g. 2025 (Leave empty for Auto-Current Year)">
                 <small style="color: var(--md-sys-color-on-surface-variant);">
                     If set, the system will always run for this specific year. If empty, it will automatically use the current calendar year.
                 </small>
+            </div>
+
+            <h4 style="margin-top: 20px;">Calculation Settings</h4>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="long_term_benefit"> Apply Long Term Capital Gains Benefit
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">
+                    <input type="checkbox" id="include_fees"> Include Fees in Cost Basis
+                </label>
             </div>
             
             <h4 style="margin-top: 20px;">General Settings</h4>
@@ -105,11 +120,17 @@
                 <label class="form-label">
                     <input type="checkbox" id="run_audit"> Run audit checks
                 </label>
+                <div id="warning_run_audit" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling audit checks is not recommended.
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">
                     <input type="checkbox" id="create_db_backups"> Create database backups
                 </label>
+                <div id="warning_create_db_backups" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling backups puts your data at risk.
+                </div>
             </div>
             
             <h4 style="margin-top: 20px;">Performance Settings</h4>
@@ -117,9 +138,12 @@
                 <label class="form-label">
                     <input type="checkbox" id="respect_free_tier_limits"> Respect API free tier limits
                 </label>
+                <div id="warning_respect_free_tier_limits" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling rate limits may cause API bans.
+                </div>
             </div>
             <div class="form-group">
-                <label class="form-label">API Timeout (seconds)</label>
+                <label class="form-label" for="api_timeout_seconds">API Timeout (seconds)</label>
                 <input type="number" id="api_timeout_seconds" class="form-input" min="10" max="120">
             </div>
             
@@ -128,11 +152,17 @@
                 <label class="form-label">
                     <input type="checkbox" id="strict_broker_mode"> Strict broker mode
                 </label>
+                <div id="warning_strict_broker_mode" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling strict broker mode is aggressive and may be challenged.
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">
                     <input type="checkbox" id="staking_taxable_on_receipt"> Staking taxable on receipt
                 </label>
+                <div id="warning_staking_taxable_on_receipt" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling taxable receipt for staking is aggressive and may be challenged.
+                </div>
             </div>
             
             <button type="submit" class="btn btn-primary">Save General Settings</button>
@@ -207,28 +237,92 @@
         }
     }
     
+    function checkWarnings() {
+        console.log('Checking warnings...');
+        
+        // Helper to toggle warning
+        const toggle = (id, condition) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = condition ? 'block' : 'none';
+                if (condition) console.log(`Warning shown: ${id}`);
+            }
+        };
+
+        // Accounting Method
+        const method = document.getElementById('accounting_method');
+        if (method) toggle('warning_accounting_method', method.value === 'HIFO');
+            
+        // Run Audit
+        const runAudit = document.getElementById('run_audit');
+        if (runAudit) toggle('warning_run_audit', !runAudit.checked);
+            
+        // Backups
+        const backups = document.getElementById('create_db_backups');
+        if (backups) toggle('warning_create_db_backups', !backups.checked);
+            
+        // Free Tier
+        const freeTier = document.getElementById('respect_free_tier_limits');
+        if (freeTier) toggle('warning_respect_free_tier_limits', !freeTier.checked);
+            
+        // Strict Broker
+        const strictBroker = document.getElementById('strict_broker_mode');
+        if (strictBroker) toggle('warning_strict_broker_mode', !strictBroker.checked);
+            
+        // Staking
+        const staking = document.getElementById('staking_taxable_on_receipt');
+        if (staking) toggle('warning_staking_taxable_on_receipt', !staking.checked);
+    }
+    
     async function loadGeneralConfig() {
         try {
             const response = await api.get('/api/config');
             const config = JSON.parse(response.data);
             
             // Populate form fields
-            document.getElementById('accounting_method').value = config.accounting_method || 'HIFO';
-            document.getElementById('tax_year').value = config.tax_year || '';
+            const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
+            const setCheck = (id, val) => { const el = document.getElementById(id); if(el) el.checked = val; };
+
+            setVal('accounting_method', config.accounting_method || 'HIFO');
+            setVal('tax_year', config.tax_year || '');
             
-            document.getElementById('run_audit').checked = config.run_audit !== false;
-            document.getElementById('create_db_backups').checked = config.create_db_backups !== false;
+            // New fields
+            const longTerm = document.getElementById('long_term_benefit');
+            if (longTerm) longTerm.checked = config.long_term_benefit !== false;
             
-            if (config.performance) {
-                document.getElementById('respect_free_tier_limits').checked = config.performance.respect_free_tier_limits !== false;
-                document.getElementById('api_timeout_seconds').value = config.performance.api_timeout_seconds || 30;
-            }
+            const includeFees = document.getElementById('include_fees');
+            if (includeFees) includeFees.checked = config.include_fees !== false;
             
-            if (config.compliance) {
-                document.getElementById('strict_broker_mode').checked = config.compliance.strict_broker_mode !== false;
-                document.getElementById('staking_taxable_on_receipt').checked = config.compliance.staking_taxable_on_receipt !== false;
-            }
+            setCheck('run_audit', config.run_audit !== false);
+            setCheck('create_db_backups', config.create_db_backups !== false);
+            
+            const perf = config.performance || {};
+            setCheck('respect_free_tier_limits', perf.respect_free_tier_limits !== false);
+            setVal('api_timeout_seconds', perf.api_timeout_seconds || 30);
+            
+            const comp = config.compliance || {};
+            setCheck('strict_broker_mode', comp.strict_broker_mode !== false);
+            setCheck('staking_taxable_on_receipt', comp.staking_taxable_on_receipt !== false);
+            
+            // Check warnings after loading
+            checkWarnings();
+            
+            // Attach event listeners dynamically to ensure they work
+            const inputs = [
+                'accounting_method', 'run_audit', 'create_db_backups', 
+                'respect_free_tier_limits', 'strict_broker_mode', 'staking_taxable_on_receipt'
+            ];
+            inputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('change', checkWarnings);
+                    // Also listen for input on select to be safe
+                    if (el.tagName === 'SELECT') el.addEventListener('input', checkWarnings);
+                }
+            });
+            
         } catch (error) {
+            console.error('Load config error:', error);
             showAlert('Failed to load configuration: ' + error.message, 'error');
         }
     }
@@ -243,6 +337,8 @@
             const config = {
                 accounting_method: document.getElementById('accounting_method').value,
                 tax_year: taxYearVal ? parseInt(taxYearVal) : null,
+                long_term_benefit: document.getElementById('long_term_benefit').checked,
+                include_fees: document.getElementById('include_fees').checked,
                 run_audit: document.getElementById('run_audit').checked,
                 create_db_backups: document.getElementById('create_db_backups').checked,
                 performance: {
@@ -254,20 +350,17 @@
                     staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
                 }
             };
-                },
-                performance: {
-                    respect_free_tier_limits: document.getElementById('respect_free_tier_limits').checked,
-                    api_timeout_seconds: parseInt(document.getElementById('api_timeout_seconds').value)
-                },
-                compliance: {
-                    strict_broker_mode: document.getElementById('strict_broker_mode').checked,
-                    staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
-                }
-            };
             
             await api.put('/api/config', config);
-            showAlert('Configuration saved successfully', 'success');
+            
+            // Show success banner
+            showAlert('Configuration saved successfully!', 'success');
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
         } catch (error) {
+            console.error('Save config error:', error);
             showAlert('Failed to save configuration: ' + error.message, 'error');
         }
     });

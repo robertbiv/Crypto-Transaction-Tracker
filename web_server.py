@@ -61,6 +61,33 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to response"""
+    # Content Security Policy
+    # Allow scripts from self and inline (for now, until we move to external files)
+    # Allow styles from self, inline, and Google Fonts
+    # Allow fonts from self and Google Fonts
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "  # unsafe-eval needed for some libraries/legacy code
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self';"
+    )
+    response.headers['Content-Security-Policy'] = csp
+    
+    # Other security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    return response
+
 # Initialize directories
 TEMPLATE_DIR.mkdir(exist_ok=True)
 STATIC_DIR.mkdir(exist_ok=True)
@@ -1436,7 +1463,7 @@ def api_get_logs():
             for log_file in sorted(log_dir.glob('*.log'), key=lambda x: x.stat().st_mtime, reverse=True):
                 logs.append({
                     'name': log_file.name,
-                    'path': str(log_file.relative_to(BASE_DIR)),
+                    'path': log_file.name,  # Send just filename, not full path
                     'size': log_file.stat().st_size,
                     'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
                 })
@@ -1452,10 +1479,11 @@ def api_get_logs():
 def api_download_log(log_path):
     """Download a log file"""
     try:
-        file_path = BASE_DIR / log_path
+        # log_path is now just the filename
+        log_dir = OUTPUT_DIR / 'logs'
+        file_path = log_dir / log_path
         
         # Security check - ensure file is within log directory
-        log_dir = OUTPUT_DIR / 'logs'
         if not str(file_path.resolve()).startswith(str(log_dir.resolve())):
             return jsonify({'error': 'Invalid file path'}), 403
         

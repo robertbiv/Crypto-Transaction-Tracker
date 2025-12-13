@@ -6,23 +6,42 @@ class TestConfigHandling(unittest.TestCase):
         print(f"\n[Running: {self._testMethodName}]", flush=True)
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
-        self.orig_base = app.BASE_DIR
-        app.BASE_DIR = self.test_path
-        app.INPUT_DIR = self.test_path / 'inputs'
-        app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'config_test.db'
-        app.KEYS_FILE = self.test_path / 'api_keys.json'
-        app.WALLETS_FILE = self.test_path / 'wallets.json'
-        app.CONFIG_FILE = self.test_path / 'config.json'
+        
+        # Patch globals
+        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'config_test.db')
+        self.keys_patcher = patch('Crypto_Tax_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
+        self.wallets_patcher = patch('Crypto_Tax_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
+        self.config_patcher = patch('Crypto_Tax_Engine.CONFIG_FILE', self.test_path / 'config.json')
+        
+        self.base_patcher.start()
+        self.input_patcher.start()
+        self.output_patcher.start()
+        self.db_patcher.start()
+        self.keys_patcher.start()
+        self.wallets_patcher.start()
+        self.config_patcher.start()
+        
         app.initialize_folders()
         self.db = app.DatabaseManager()
         self.held_stdout = sys.stdout
         sys.stdout = StringIO()
+
     def tearDown(self):
         sys.stdout = self.held_stdout
         self.db.close()
+        
+        self.config_patcher.stop()
+        self.wallets_patcher.stop()
+        self.keys_patcher.stop()
+        self.db_patcher.stop()
+        self.output_patcher.stop()
+        self.input_patcher.stop()
+        self.base_patcher.stop()
+        
         shutil.rmtree(self.test_dir)
-        app.BASE_DIR = self.orig_base
     def test_audit_disabled_in_config(self):
         app.GLOBAL_CONFIG['general']['run_audit'] = False
         with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"]}, f)

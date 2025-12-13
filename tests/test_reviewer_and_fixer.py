@@ -6,12 +6,12 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def setUp(self):
         """Set up test database for each test"""
-        # Delete existing DB for clean state
-        if app.DB_FILE.exists():
-            try:
-                app.DB_FILE.unlink()
-            except:
-                pass
+        self.test_dir = tempfile.mkdtemp()
+        self.db_path = Path(self.test_dir) / 'test_reviewer.db'
+        
+        # Patch the global DB_FILE in the app module
+        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.db_path)
+        self.db_patcher.start()
         
         self.db = app.DatabaseManager()
         
@@ -36,12 +36,10 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests"""
         self.pf_patcher.stop()
-        if app.DB_FILE.exists():
-            try:
-                self.db.close()
-                app.DB_FILE.unlink()
-            except:
-                pass
+        self.db.close()
+        self.db_patcher.stop()
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
     
     def test_nft_detection_with_hash_symbol(self):
         """Test NFT detection for assets with # in name"""
