@@ -115,7 +115,7 @@
             Run setup script to repair or reconfigure the application.
         </p>
         
-        <button class="btn btn-secondary" onclick="runSetup()">
+        <button class="btn btn-secondary" id="btnRunSetup">
             <span class="material-icons" style="vertical-align: middle;">build</span>
             Run Setup Script
         </button>
@@ -123,13 +123,32 @@
         <div class="danger-zone">
             <h4>⚠️ Danger Zone</h4>
             <p style="margin-bottom: 12px;">
-                Reset the program to its initial state. This will run the setup script which may 
-                regenerate configuration files. Your database and processed data will NOT be deleted.
+                <strong>Factory Reset</strong> will delete ALL data, including your account, database, configuration, and processed files.
+                The application will return to its initial "First Time Setup" state.
             </p>
-            <button class="btn btn-secondary" onclick="resetProgram()" style="background: #F44336; color: white;">
-                <span class="material-icons" style="vertical-align: middle;">refresh</span>
-                Reset Program
-            </button>
+            
+            <div id="resetStep1">
+                <p><strong>Step 1:</strong> You must download a full system backup before resetting.</p>
+                <button class="btn btn-secondary" id="btnDownloadBackup">
+                    <span class="material-icons" style="vertical-align: middle;">download</span>
+                    Download Full Backup
+                </button>
+            </div>
+            
+            <div id="resetStep2" style="display: none; margin-top: 16px; border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">
+                <p><strong>Step 2:</strong> Confirm deletion.</p>
+                <p style="color: var(--md-sys-color-error); font-weight: bold;">This action cannot be undone.</p>
+                
+                <div class="form-group">
+                    <label class="form-label">Type "DELETE EVERYTHING" to confirm:</label>
+                    <input type="text" id="deleteConfirmation" class="form-input" placeholder="DELETE EVERYTHING">
+                </div>
+                
+                <button id="btnReset" class="btn btn-secondary" disabled style="background: #F44336; color: white; opacity: 0.5;">
+                    <span class="material-icons" style="vertical-align: middle;">delete_forever</span>
+                    Reset Everything
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -148,7 +167,6 @@
     <div class="settings-section">
         <h3>About</h3>
         <p><strong>Crypto Tax Generator</strong></p>
-        <p>Version 30 - US Tax Compliance Edition</p>
         <p style="margin-top: 16px; color: var(--md-sys-color-on-surface-variant);">
             Self-hosted cryptocurrency tax automation engine with Material Design 3 web interface.
             All data stays on your local machine with encrypted database operations.
@@ -283,32 +301,55 @@
         }
     }
     
-    async function resetProgram() {
-        const confirmation = prompt(
-            'WARNING: This will reset the program configuration.\n\n' +
-            'Your database and transaction data will NOT be deleted.\n\n' +
-            'Type "RESET" (all caps) to confirm:'
-        );
+    function downloadBackup() {
+        window.location.href = '/api/backup/full';
+        // Enable step 2 after a short delay to assume download started
+        setTimeout(() => {
+            document.getElementById('resetStep2').style.display = 'block';
+        }, 2000);
+    }
+    
+    function checkDeleteConfirmation() {
+        const input = document.getElementById('deleteConfirmation');
+        const btn = document.getElementById('btnReset');
         
-        if (confirmation !== 'RESET') {
-            showAlert('Reset cancelled', 'info');
-            return;
+        if (input.value === 'DELETE EVERYTHING') {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        } else {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
         }
+    }
+    
+    async function performFactoryReset() {
+        if (!confirm('FINAL WARNING: Are you sure you want to delete everything?')) return;
         
         try {
-            showAlert('Resetting program...', 'info');
-            
-            const response = await api.put('/api/reset-program', { confirmation: 'RESET' });
+            const response = await api.post('/api/reset/factory', {});
             const result = JSON.parse(response.data);
             
             if (result.success) {
-                showAlert('Program reset completed successfully', 'success');
-            } else {
-                showAlert('Reset failed: ' + (result.errors || result.message), 'error');
+                window.location.href = result.redirect;
             }
         } catch (error) {
-            showAlert('Failed to reset program: ' + error.message, 'error');
+            showAlert('Reset failed: ' + error.message, 'error');
         }
     }
+    
+    // Attach event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnRunSetup = document.getElementById('btnRunSetup');
+        if (btnRunSetup) btnRunSetup.addEventListener('click', runSetup);
+        
+        const btnDownloadBackup = document.getElementById('btnDownloadBackup');
+        if (btnDownloadBackup) btnDownloadBackup.addEventListener('click', downloadBackup);
+        
+        const inputDelete = document.getElementById('deleteConfirmation');
+        if (inputDelete) inputDelete.addEventListener('keyup', checkDeleteConfirmation);
+        
+        const btnReset = document.getElementById('btnReset');
+        if (btnReset) btnReset.addEventListener('click', performFactoryReset);
+    });
 </script>
 {% endblock %}

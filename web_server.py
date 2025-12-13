@@ -14,6 +14,10 @@ import subprocess
 import hmac
 import hashlib
 import base64
+import shutil
+import zipfile
+import io
+import csv
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -617,6 +621,81 @@ def change_password():
         save_users(users)
         
         return jsonify({'success': True, 'message': 'Password changed successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/backup/full', methods=['GET'])
+@login_required
+def download_full_backup():
+    """Download full system backup (Database export to CSV)"""
+    try:
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Export trades table to CSV
+            conn = get_db_connection()
+            try:
+                cursor = conn.execute("SELECT * FROM trades")
+                rows = cursor.fetchall()
+                
+                # Get column names
+                if cursor.description:
+                    column_names = [description[0] for description in cursor.description]
+                    
+                    # Write CSV to string buffer
+                    csv_buffer = io.StringIO()
+                    writer = csv.writer(csv_buffer)
+                    writer.writerow(column_names)
+                    writer.writerows(rows)
+                    
+                    # Add CSV to zip
+                    zf.writestr('trades_export.csv', csv_buffer.getvalue())
+                else:
+                    # Empty table or error
+                    zf.writestr('trades_export.csv', 'No data found')
+                
+            finally:
+                conn.close()
+        
+        memory_file.seek(0)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'crypto_tax_db_export_{timestamp}.zip'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reset/factory', methods=['POST'])
+@api_security_required
+def factory_reset():
+    """Perform full factory reset"""
+    try:
+        # 1. Delete Database
+        if DB_FILE.exists():
+            os.remove(DB_FILE)
+        init_db() # Recreate empty schema
+        
+        # 2. Delete Configs
+        for f in [CONFIG_FILE, API_KEYS_FILE, WALLETS_FILE]:
+            if f.exists():
+                os.remove(f)
+                
+        # 3. Clear Data Directories
+        for folder in [UPLOAD_FOLDER, OUTPUT_DIR, BASE_DIR / 'processed_archive']:
+            if folder.exists():
+                shutil.rmtree(folder)
+                folder.mkdir(exist_ok=True)
+                
+        # 4. Delete Users (Last step)
+        if USERS_FILE.exists():
+            os.remove(USERS_FILE)
+            
+        session.clear()
+        
+        return jsonify({'success': True, 'message': 'Factory reset complete', 'redirect': url_for('first_time_setup')})
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
