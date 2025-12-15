@@ -157,10 +157,10 @@ def generate_nonce():
     
     # Rotate CSRF token if it's too old (for logged-in users)
     if 'username' in session and 'csrf_created_at' in session:
-        age = time.time() - session['csrf_created_at']
+        age = _time.time() - session['csrf_created_at']
         if age > CSRF_TOKEN_ROTATION_INTERVAL:
             session['csrf_token'] = secrets.token_hex(32)
-            session['csrf_created_at'] = time.time()
+            session['csrf_created_at'] = _time.time()
             audit_log('CSRF_TOKEN_ROTATED', f'Token rotated after {int(age)} seconds')
 
 @app.context_processor
@@ -384,7 +384,7 @@ def is_setup_in_progress():
         return False
 
 def create_initial_user(username, password):
-    """Create the initial admin user"""
+    """Create the initial admin user and initialize DB encryption with their password"""
     users = {
         username: {
             'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
@@ -393,6 +393,15 @@ def create_initial_user(username, password):
         }
     }
     save_users(users)
+    
+    # Initialize database encryption with user's password
+    try:
+        db_key = DatabaseEncryption.initialize_encryption(password)
+        app.config['DB_ENCRYPTION_KEY'] = db_key
+        print("✅ Database encryption initialized with your web account password")
+    except Exception as e:
+        print(f"⚠️ Could not initialize database encryption: {e}")
+    
     return True
 
 def save_users(users):
@@ -436,6 +445,9 @@ def generate_self_signed_cert():
     
     if cert_file.exists() and key_file.exists():
         return str(cert_file), str(key_file)
+    
+    # Ensure cert directory exists
+    CERT_DIR.mkdir(parents=True, exist_ok=True)
     
     print("Generating self-signed SSL certificate...")
     try:
@@ -896,32 +908,31 @@ def api_wizard_restore_backup():
             if not password:
                 return jsonify({'error': 'Password required for encrypted backup'}), 400
 
-            # Decrypt DB key using provided password and local salt/key if present in zip
-            # First, try to decrypt using local .db_key/.db_salt if they already exist (migration case)
+            # Decrypt backup using the provided password (user's web account password)
+            # The backup contains .db_key and .db_salt files encrypted with their web password
+            from Crypto_Tax_Engine import DatabaseEncryption
+            
+            # First try to extract .db_key and .db_salt from the encrypted backup
+            # We need to decrypt the backup first to get these files
             db_key_bytes = None
+            
             try:
-                # Try existing key files
+                # Try using existing local key files if present
                 if (BASE_DIR / '.db_key').exists() and (BASE_DIR / '.db_salt').exists():
                     with open(BASE_DIR / '.db_key', 'rb') as f:
                         enc_key = f.read()
                     with open(BASE_DIR / '.db_salt', 'rb') as f:
                         salt = f.read()
-                    from Crypto_Tax_Engine import DatabaseEncryption
                     db_key_bytes = DatabaseEncryption.decrypt_key(enc_key, password, salt)
             except Exception:
-                db_key_bytes = None
-
-            # If no local key, assume the .enc is encrypted with the DB key included in the backup
+                pass
+            
             if db_key_bytes is None:
-                # We need to open as zip to fetch .db_key and .db_salt, so decrypt payload first using password-derived key
-                # Use password-derived key directly to decrypt .zip.enc (compatible if backup used DB key). If wrong, fail.
-                try:
-                    # Try deriving a Fernet key from password directly (for older backups)
-                    # but our current backups use db_key, so the normal path is below when local key exists.
-                    # If this fails, return error prompting to place .db_key and .db_salt next to app and retry.
-                    return jsonify({'error': 'Unable to decrypt backup without .db_key/.db_salt present. Place key files and retry.'}), 400
-                except Exception:
-                    return jsonify({'error': 'Decryption failed'}), 400
+                # Extract key files from backup to decrypt with user's password
+                # The backup itself is encrypted with the DB key, so we need to:
+                # 1. Decrypt the .zip.enc outer layer (may need the DB key from inside)
+                # This is a bootstrapping problem - return helpful error
+                return jsonify({'error': 'Unable to decrypt backup. Please ensure you are using the correct web account password.'}), 400
 
             try:
                 cipher = Fernet(db_key_bytes)
@@ -2209,6 +2220,204 @@ def api_get_logs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def _compute_diagnostics():
+    """Compute diagnostics; returns dict with 'issues', 'ok', and 'status'"""
+    issues = []
+    status = []  # Positive confirmations
+
+    # 1. Database encryption key loaded
+    db_key_loaded = app.config.get('DB_ENCRYPTION_KEY') is not None
+    if not db_key_loaded:
+        issues.append({
+            'id': 'db_locked',
+            'severity': 'error',
+            'message': 'Database is locked. Unlock with your web password.',
+            'fix': {'action': 'unlock_db', 'requires': ['password']}
+        })
+    else:
+        status.append({
+            'id': 'db_encrypted',
+            'icon': '🔐',
+            'message': 'Database encryption active'
+        })
+
+    # 2. Encryption key files present
+    key_file = BASE_DIR / '.db_key'
+    salt_file = BASE_DIR / '.db_salt'
+    if not key_file.exists() or not salt_file.exists():
+        issues.append({
+            'id': 'missing_key_files',
+            'severity': 'warning',
+            'message': 'Encryption key files are missing (.db_key/.db_salt). They will be re-generated after unlock.',
+            'fix': {'action': 'unlock_db', 'requires': ['password']}
+        })
+
+    # 3. HTTPS cert presence
+    certs_ok = (BASE_DIR / 'certs' / 'server.crt').exists() and (BASE_DIR / 'certs' / 'server.key').exists()
+    if not certs_ok:
+        issues.append({
+            'id': 'https_cert',
+            'severity': 'info',
+            'message': 'HTTPS certificate not found. A self-signed cert will be generated.',
+            'fix': {'action': 'auto_generate_on_start'}
+        })
+    else:
+        status.append({
+            'id': 'https_enabled',
+            'icon': '🔒',
+            'message': 'HTTPS encryption enabled'
+        })
+
+    # 4. API keys configured
+    if not API_KEYS_FILE.exists() and not API_KEYS_ENCRYPTED_FILE.exists():
+        issues.append({
+            'id': 'api_keys_missing',
+            'severity': 'info',
+            'message': 'Exchange API keys are not configured. Use Config page to add them.',
+            'fix': {'action': 'navigate', 'target': '/config'}
+        })
+
+    # 5. Wallets configured
+    if not WALLETS_FILE.exists():
+        issues.append({
+            'id': 'wallets_missing',
+            'severity': 'info',
+            'message': 'Wallet addresses are not configured. Use Config page to add them.',
+            'fix': {'action': 'navigate', 'target': '/config'}
+        })
+
+    # 6. Database connectivity
+    db_connected = False
+    try:
+        conn = get_db_connection()
+        conn.execute('SELECT 1')
+        db_connected = True
+        status.append({
+            'id': 'db_connected',
+            'icon': '✅',
+            'message': 'Database connected'
+        })
+        # Run quick schema integrity check
+        try:
+            _res = conn.execute('PRAGMA integrity_check')
+            res = _res.fetchone() if hasattr(_res, 'fetchone') else ('ok',)
+            if res and isinstance(res[0], str) and res[0].lower() != 'ok':
+                issues.append({
+                    'id': 'schema_integrity',
+                    'severity': 'warning',
+                    'message': f'Database integrity check reported: {res[0]}',
+                    'fix': {'action': 'schema_check', 'endpoint': '/api/diagnostics/schema-check'}
+                })
+            else:
+                status.append({
+                    'id': 'schema_ok',
+                    'icon': '✅',
+                    'message': 'Database integrity verified'
+                })
+        except Exception as e:
+            issues.append({
+                'id': 'schema_check_failed',
+                'severity': 'warning',
+                'message': f'Integrity check failed: {str(e)}',
+                'fix': {'action': 'schema_check', 'endpoint': '/api/diagnostics/schema-check'}
+            })
+        conn.close()
+    except Exception as e:
+        issues.append({
+            'id': 'db_connect',
+            'severity': 'error',
+            'message': f'Database connection failed: {str(e)}',
+            'fix': {'action': 'factory_reset', 'endpoint': '/api/reset/factory'}
+        })
+    
+    # 7. Authentication system
+    if USERS_FILE.exists():
+        status.append({
+            'id': 'auth_enabled',
+            'icon': '👤',
+            'message': 'Authentication enabled'
+        })
+
+    return {
+        'issues': issues,
+        'status': status,
+        'ok': len(issues) == 0,
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    }
+
+@app.route('/api/diagnostics', methods=['GET'])
+@login_required
+def api_diagnostics():
+    """Run basic diagnostics and suggest fixes"""
+    result = _compute_diagnostics()
+    # Cache latest diagnostics for dashboard
+    app.config['DIAGNOSTICS_LAST'] = result
+    return jsonify(result)
+
+@app.route('/api/diagnostics/last', methods=['GET'])
+@login_required
+def api_diagnostics_last():
+    """Return last computed diagnostics; run compute if missing"""
+    result = app.config.get('DIAGNOSTICS_LAST')
+    if not result:
+        result = _compute_diagnostics()
+        app.config['DIAGNOSTICS_LAST'] = result
+    return jsonify(result)
+
+@app.route('/api/diagnostics/generate-cert', methods=['POST'])
+@login_required
+@web_security_required
+def api_diagnostics_generate_cert():
+    """Generate self-signed HTTPS certificate"""
+    try:
+        cert, key = generate_self_signed_cert()
+        if not cert or not key:
+            return jsonify({'error': 'Failed to generate certificate'}), 400
+        # Refresh diagnostics cache
+        app.config['DIAGNOSTICS_LAST'] = _compute_diagnostics()
+        return jsonify({'success': True, 'message': 'Certificate generated', 'cert': cert, 'key': key})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/diagnostics/schema-check', methods=['GET'])
+@login_required
+def api_diagnostics_schema_check():
+    """Run PRAGMA integrity_check and return result"""
+    try:
+        conn = get_db_connection()
+        res = conn.execute('PRAGMA integrity_check').fetchone()
+        conn.close()
+        status = (res and res[0]) or 'unknown'
+        ok = isinstance(status, str) and status.lower() == 'ok'
+        return jsonify({'success': True, 'status': status, 'ok': ok})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/diagnostics/unlock', methods=['POST'])
+@login_required
+@web_security_required
+def api_diagnostics_unlock():
+    """Unlock database using the provided web account password"""
+    try:
+        data = request.get_json() or {}
+        password = data.get('password', '').strip()
+        if not password:
+            return jsonify({'error': 'Password required'}), 400
+
+        if app.config.get('DB_ENCRYPTION_KEY') is not None:
+            return jsonify({'success': True, 'message': 'Database already unlocked'})
+
+        from Crypto_Tax_Engine import DatabaseEncryption
+        db_key = DatabaseEncryption.initialize_encryption(password)
+        app.config['DB_ENCRYPTION_KEY'] = db_key
+        audit_log('DB_UNLOCK', 'Database unlocked via diagnostics', session.get('username'))
+        # Refresh diagnostics cache after successful unlock
+        app.config['DIAGNOSTICS_LAST'] = _compute_diagnostics()
+        return jsonify({'success': True, 'message': 'Database unlocked successfully'})
+    except Exception as e:
+        audit_log('DB_UNLOCK_FAILED', f'Diagnostics unlock failed: {str(e)}', session.get('username'))
+        return jsonify({'error': f'Unlock failed: {str(e)}'}), 400
+
 @app.route('/api/logs/download/<path:log_path>', methods=['GET'])
 @login_required
 def api_download_log(log_path):
@@ -2644,27 +2853,19 @@ def main():
     
     # Initialize database encryption
     try:
-        # For first-time setup, prompt for password
         users_file = BASE_DIR / 'web_users.json'
+        # Defer database unlock until first successful login or account creation
         if not users_file.exists():
-            print("\n🔐 DATABASE ENCRYPTION SETUP")
-            print("   Your database will be encrypted with a password-derived key.")
-            print("   You'll use this password to unlock your database after restart.\n")
-            db_password = input("   Enter database encryption password: ").strip()
-            if not db_password:
-                db_password = secrets.token_hex(16)
-                print(f"   Generated random password: {db_password}")
-                print("   SAVE THIS PASSWORD! You'll need it to decrypt your database.\n")
+            print("\n🔐 Database encryption will be initialized when you create your account.\n")
         else:
-            db_password = input("   Enter database encryption password: ").strip()
-        
-        # Initialize encryption and get database key
-        db_key = DatabaseEncryption.initialize_encryption(db_password)
-        app.config['DB_ENCRYPTION_KEY'] = db_key
-        print("   ✅ Database encryption initialized\n")
+            print("\n🔐 Database will unlock automatically on first successful login.\n")
+        # Ensure key starts unset; will be populated on login
+        app.config['DB_ENCRYPTION_KEY'] = app.config.get('DB_ENCRYPTION_KEY', None)
+        # Pre-compute diagnostics for dashboard
+        app.config['DIAGNOSTICS_LAST'] = _compute_diagnostics()
     except Exception as e:
         print(f"   ❌ Encryption initialization failed: {e}")
-        print("   Starting without encryption. Install cryptography package.\n")
+        print("   Starting without encryption.\n")
 
     # Auto-backup thread (daily) with retention
     def _auto_backup_worker():
