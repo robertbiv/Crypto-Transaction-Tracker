@@ -101,6 +101,23 @@
 <h1 style="margin-bottom: 24px;">Transactions</h1>
 
 <div class="card">
+    <!-- CSV Upload -->
+    <div class="form-group" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 8px;">
+        <label class="form-label" style="margin:0;">Upload CSV:</label>
+        <input type="file" id="csvFileInput" accept=".csv" class="form-input" style="max-width: 360px;">
+        <button id="uploadCsvBtn" class="btn btn-secondary">
+            <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">upload</span>
+            Upload CSV
+        </button>
+        <a href="/api/transactions/template" class="btn btn-secondary" style="text-decoration:none;">
+            <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">download</span>
+            Download CSV Template
+        </a>
+        <span style="color: var(--md-sys-color-on-surface-variant); font-size: 12px;">
+            Accepted columns: date, action, coin, amount, price_usd, fee, fee_coin, source, destination
+        </span>
+    </div>
+
     <div class="filters-bar">
         <input type="text" id="searchInput" class="form-input search-box" placeholder="Search transactions...">
         
@@ -123,8 +140,8 @@
             <option value="">All Sources</option>
         </select>
         
-        <button class="btn btn-primary" onclick="loadTransactions()">Apply Filters</button>
-        <button class="btn btn-success" onclick="openAddModal()">
+        <button id="applyFiltersBtn" class="btn btn-primary">Apply Filters</button>
+        <button id="addTransactionBtn" class="btn btn-success">
             <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">add</span>
             Add Transaction
         </button>
@@ -153,9 +170,9 @@
     </div>
     
     <div class="pagination">
-        <button id="prevPage" onclick="previousPage()">Previous</button>
+        <button id="prevPage">Previous</button>
         <span id="pageInfo">Page 1 of 1</span>
-        <button id="nextPage" onclick="nextPage()">Next</button>
+        <button id="nextPage">Next</button>
     </div>
 </div>
 
@@ -164,7 +181,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Edit Transaction</h2>
-            <span class="modal-close material-icons" onclick="closeEditModal()">close</span>
+            <span id="editModalClose" class="modal-close material-icons">close</span>
         </div>
         
         <form id="editForm">
@@ -219,7 +236,7 @@
             </div>
             
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                <button type="button" id="editCancelBtn" class="btn btn-secondary">Cancel</button>
                 <button type="submit" class="btn btn-primary">Save Changes</button>
             </div>
         </form>
@@ -231,7 +248,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>Add Transaction</h2>
-            <span class="modal-close material-icons" onclick="closeAddModal()">close</span>
+            <span id="addModalClose" class="modal-close material-icons">close</span>
         </div>
         
         <form id="addForm">
@@ -284,7 +301,7 @@
             </div>
             
             <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button type="button" id="addCancelBtn" class="btn btn-secondary">Cancel</button>
                 <button type="submit" class="btn btn-primary">Add Transaction</button>
             </div>
         </form>
@@ -457,12 +474,78 @@
         }
     });
     
-    // Load transactions on page load
-    document.addEventListener('DOMContentLoaded', loadTransactions);
+    // Bind UI events and load transactions on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const applyBtn = document.getElementById('applyFiltersBtn');
+        if (applyBtn) applyBtn.addEventListener('click', loadTransactions);
+
+        const addBtn = document.getElementById('addTransactionBtn');
+        if (addBtn) addBtn.addEventListener('click', openAddModal);
+
+        const uploadBtn = document.getElementById('uploadCsvBtn');
+        if (uploadBtn) uploadBtn.addEventListener('click', uploadCsv);
+
+        const editClose = document.getElementById('editModalClose');
+        if (editClose) editClose.addEventListener('click', closeEditModal);
+
+        const editCancel = document.getElementById('editCancelBtn');
+        if (editCancel) editCancel.addEventListener('click', closeEditModal);
+
+        const addClose = document.getElementById('addModalClose');
+        if (addClose) addClose.addEventListener('click', closeAddModal);
+
+        const addCancel = document.getElementById('addCancelBtn');
+        if (addCancel) addCancel.addEventListener('click', closeAddModal);
+
+        const prevBtn = document.getElementById('prevPage');
+        if (prevBtn) prevBtn.addEventListener('click', previousPage);
+
+        const nextBtn = document.getElementById('nextPage');
+        if (nextBtn) nextBtn.addEventListener('click', nextPage);
+
+        loadTransactions();
+    });
+
+    async function uploadCsv() {
+        const input = document.getElementById('csvFileInput');
+        if (!input || !input.files || !input.files[0]) {
+            showAlert('Please select a CSV file first', 'warning');
+            return;
+        }
+
+        const file = input.files[0];
+        try {
+            await api.initCSRF();
+            const formData = new FormData();
+            formData.append('file', file);
+
+            if (typeof api.showLoading === 'function') api.showLoading();
+            const response = await fetch('/api/transactions/upload', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': api.csrfToken },
+                body: formData,
+                credentials: 'same-origin'
+            });
+            if (typeof api.hideLoading === 'function') api.hideLoading();
+
+            const result = await response.json();
+            if (!response.ok || result.error) throw new Error(result.error || 'Upload failed');
+
+            const msg = `Imported ${result.inserted}/${result.total} rows` + (result.skipped ? `, skipped ${result.skipped}` : '');
+            showAlert(msg, 'success');
+            input.value = '';
+            loadTransactions();
+        } catch (error) {
+            if (typeof api.hideLoading === 'function') api.hideLoading();
+            console.error('Upload error:', error);
+            showAlert('CSV upload failed: ' + error.message, 'error');
+        }
+    }
 
     // Add Modal Functions
     function openAddModal() {
-        document.getElementById('addModal').style.display = 'flex';
+        const addModal = document.getElementById('addModal');
+        if (addModal) addModal.classList.add('active');
         // Set default date to now
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 19).replace('T', ' ');
@@ -470,7 +553,8 @@
     }
 
     function closeAddModal() {
-        document.getElementById('addModal').style.display = 'none';
+        const addModal = document.getElementById('addModal');
+        if (addModal) addModal.classList.remove('active');
         document.getElementById('addForm').reset();
     }
 

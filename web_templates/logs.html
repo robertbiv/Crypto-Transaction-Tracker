@@ -75,7 +75,7 @@
             
             container.innerHTML = `
                 <div class="logs-grid">
-                    ${logs.map(log => `
+                    ${logs.map((log, idx) => `
                         <div class="log-card">
                             <div class="log-name">${log.name}</div>
                             <div class="log-meta">
@@ -83,7 +83,7 @@
                                 <span>${formatDate(log.modified)}</span>
                             </div>
                             <div class="log-actions">
-                                <button class="btn btn-primary" onclick="downloadLog('${log.path}', '${log.name}')">
+                                <button class="btn btn-primary log-download-btn" data-path="${log.path}" data-name="${log.name}">
                                     <span class="material-icons" style="vertical-align: middle; font-size: 18px;">download</span>
                                     Download
                                 </button>
@@ -92,6 +92,12 @@
                     `).join('')}
                 </div>
             `;
+            // Bind download buttons
+            container.querySelectorAll('.log-download-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    downloadLog(btn.dataset.path, btn.dataset.name);
+                });
+            });
         } catch (error) {
             console.error('Error loading logs:', error);
             document.getElementById('logsContainer').innerHTML = 

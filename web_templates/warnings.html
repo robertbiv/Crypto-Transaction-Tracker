@@ -129,7 +129,7 @@
 <div class="card">
     <h2 class="card-title">Actions</h2>
     <p style="margin-bottom: 16px;">Use the Interactive Review Fixer to address warnings automatically.</p>
-    <button class="btn btn-primary" onclick="runFixer()">
+    <button id="runFixerBtn" class="btn btn-primary">
         <span class="material-icons" style="vertical-align: middle;">build</span>
         Run Interactive Fixer
     </button>
@@ -210,7 +210,11 @@
         showAlert('Interactive fixer must be run from the command line. Run: python Interactive_Review_Fixer.py [year]', 'info');
     }
     
-    // Load warnings on page load
-    document.addEventListener('DOMContentLoaded', loadWarnings);
+    // Bind events and load warnings on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const fixerBtn = document.getElementById('runFixerBtn');
+        if (fixerBtn) fixerBtn.addEventListener('click', runFixer);
+        loadWarnings();
+    });
 </script>
 {% endblock %}
