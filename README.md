@@ -113,7 +113,6 @@ The script automatically builds and maintains this structure:
 ├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
 ├── Tax_Reviewer.py                # [CORE] Manual review assistant (heuristic audit scanner)
 ├── Interactive_Review_Fixer.py    # [USER] Guided tool to fix detected audit risks
-├── Migration_2025.py              # [TOOL] Safe-harbor allocator for per-wallet basis
 │
 ├── api_keys.json                  # [USER] Your Exchange & Audit Keys
 ├── wallets.json                   # [USER] Your Public Addresses (For Audit)

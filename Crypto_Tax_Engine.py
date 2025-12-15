@@ -14,6 +14,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 import logging
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import base64
 
 # ==========================================
 # CONSTANTS
@@ -28,6 +32,8 @@ LONG_TERM_HOLDING_DAYS = 365  # Days for long-term capital gains
 MAX_DB_BACKUP_SIZE_MB = 100  # Maximum database backup size
 DB_RETRY_ATTEMPTS = 3  # Number of retries for database operations
 DB_RETRY_DELAY_MS = 100  # Delay between retry attempts
+DB_ENCRYPTION_SALT_LENGTH = 16  # Salt length for key derivation (bytes)
+DB_ENCRYPTION_ITERATIONS = 480000  # PBKDF2 iterations (matches OWASP 2023)
 
 # API Constants
 API_RETRY_MAX_ATTEMPTS = 3  # Max retries for API calls
@@ -44,6 +50,8 @@ OUTPUT_DIR = BASE_DIR / 'outputs'
 LOG_DIR = OUTPUT_DIR / 'logs'
 DB_FILE = BASE_DIR / 'crypto_master.db'
 DB_BACKUP = BASE_DIR / 'crypto_master.db.bak'
+DB_KEY_FILE = BASE_DIR / '.db_key'  # Encrypted database key (hidden file)
+DB_SALT_FILE = BASE_DIR / '.db_salt'  # Salt for key derivation (hidden file)
 CURRENT_YEAR_OVERRIDE = None
 KEYS_FILE = BASE_DIR / 'api_keys.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
@@ -233,6 +241,199 @@ class NetworkRetry:
                 time.sleep(delay * (backoff ** i))
 
 # ==========================================
+# DATABASE ENCRYPTION MANAGER
+# ==========================================
+class DatabaseEncryption:
+    """Two-layer encryption for database protection using password-derived key.
+    
+    Layer 1: Random 256-bit key encrypts the database
+    Layer 2: Password-derived key encrypts Layer 1 key
+    
+    Provides protection for:
+    - Database at rest (encrypted with random key)
+    - Backups (encrypted key + encrypted DB together)
+    - Password-based access control
+    """
+    
+    @staticmethod
+    def derive_key_from_password(password: str, salt: bytes = None):
+        """Derive encryption key from password using PBKDF2.
+        
+        Args:
+            password: User password
+            salt: Optional salt. If None, generates random salt.
+            
+        Returns:
+            (key, salt) tuple where key is base64-encoded Fernet key
+        """
+        if salt is None:
+            salt = os.urandom(DB_ENCRYPTION_SALT_LENGTH)
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=DB_ENCRYPTION_ITERATIONS,
+        )
+        
+        derived = kdf.derive(password.encode())
+        fernet_key = base64.urlsafe_b64encode(derived)
+        return fernet_key, salt
+    
+    @staticmethod
+    def generate_random_key():
+        """Generate random 256-bit encryption key for database."""
+        return Fernet.generate_key()
+    
+    @staticmethod
+    def encrypt_key(db_key: bytes, password: str, salt: bytes = None):
+        """Encrypt database key with password-derived key."""
+        password_key, used_salt = DatabaseEncryption.derive_key_from_password(password, salt)
+        cipher = Fernet(password_key)
+        encrypted_key = cipher.encrypt(db_key)
+        return encrypted_key, used_salt
+    
+    @staticmethod
+    def decrypt_key(encrypted_key: bytes, password: str, salt: bytes):
+        """Decrypt database key using password."""
+        password_key, _ = DatabaseEncryption.derive_key_from_password(password, salt)
+        cipher = Fernet(password_key)
+        return cipher.decrypt(encrypted_key)
+    
+    @staticmethod
+    def initialize_encryption(password: str):
+        """Initialize or retrieve encryption keys."""
+        if DB_KEY_FILE.exists() and DB_SALT_FILE.exists():
+            try:
+                with open(DB_KEY_FILE, 'rb') as f:
+                    encrypted_key = f.read()
+                with open(DB_SALT_FILE, 'rb') as f:
+                    salt = f.read()
+                
+                db_key = DatabaseEncryption.decrypt_key(encrypted_key, password, salt)
+                return db_key
+            except Exception as e:
+                logger.error(f"[ENCRYPTION] Failed to decrypt existing key: {e}")
+                raise
+        
+        db_key = DatabaseEncryption.generate_random_key()
+        encrypted_key, salt = DatabaseEncryption.encrypt_key(db_key, password)
+        
+        try:
+            with open(DB_KEY_FILE, 'wb') as f:
+                f.write(encrypted_key)
+            os.chmod(DB_KEY_FILE, 0o600)
+            
+            with open(DB_SALT_FILE, 'wb') as f:
+                f.write(salt)
+            os.chmod(DB_SALT_FILE, 0o600)
+            
+            logger.info("[ENCRYPTION] Database encryption initialized with new keys")
+        except Exception as e:
+            logger.error(f"[ENCRYPTION] Failed to store encryption keys: {e}")
+            raise
+        
+        return db_key
+    
+    @staticmethod
+    def create_encrypted_backup(password: str, backup_path: Path = None):
+        """Create encrypted database backup.
+        
+        Args:
+            password: Encryption password
+            backup_path: Custom backup path. If None, uses default.
+            
+        Returns:
+            Path to encrypted backup file
+        """
+        if backup_path is None:
+            backup_path = BASE_DIR / f'backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.tar.gz.enc'
+        
+        try:
+            # Get current encryption key
+            if not DB_KEY_FILE.exists() or not DB_SALT_FILE.exists():
+                raise FileNotFoundError("Database encryption keys not found. Initialize encryption first.")
+            
+            with open(DB_KEY_FILE, 'rb') as f:
+                encrypted_key = f.read()
+            with open(DB_SALT_FILE, 'rb') as f:
+                salt = f.read()
+            
+            # Decrypt to verify password
+            db_key = DatabaseEncryption.decrypt_key(encrypted_key, password, salt)
+            cipher = Fernet(db_key)
+            
+            # Read database file
+            with open(DB_FILE, 'rb') as f:
+                db_content = f.read()
+            
+            # Encrypt database
+            encrypted_db = cipher.encrypt(db_content)
+            
+            # Write encrypted backup
+            with open(backup_path, 'wb') as f:
+                f.write(encrypted_db)
+            
+            logger.info(f"[BACKUP] Created encrypted backup at {backup_path}")
+            return backup_path
+            
+        except Exception as e:
+            logger.error(f"[BACKUP] Encryption failed: {e}")
+            raise
+    
+    @staticmethod
+    def restore_encrypted_backup(encrypted_backup_path: Path, password: str, target_db_path: Path = None):
+        """Restore database from encrypted backup.
+        
+        Args:
+            encrypted_backup_path: Path to encrypted backup file
+            password: Decryption password
+            target_db_path: Where to restore. If None, uses default.
+            
+        Returns:
+            Path to restored database
+        """
+        if target_db_path is None:
+            target_db_path = DB_FILE
+        
+        try:
+            # Get encryption key using password
+            if not DB_KEY_FILE.exists() or not DB_SALT_FILE.exists():
+                raise FileNotFoundError("Database encryption keys not found.")
+            
+            with open(DB_KEY_FILE, 'rb') as f:
+                encrypted_key = f.read()
+            with open(DB_SALT_FILE, 'rb') as f:
+                salt = f.read()
+            
+            # Decrypt database key
+            db_key = DatabaseEncryption.decrypt_key(encrypted_key, password, salt)
+            cipher = Fernet(db_key)
+            
+            # Read and decrypt backup
+            with open(encrypted_backup_path, 'rb') as f:
+                encrypted_db = f.read()
+            
+            decrypted_db = cipher.decrypt(encrypted_db)
+            
+            # Create backup of current database
+            if target_db_path.exists():
+                backup_name = target_db_path.with_suffix(f'.bak.{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+                shutil.copy(target_db_path, backup_name)
+                logger.info(f"[BACKUP] Saved current DB to {backup_name}")
+            
+            # Restore encrypted backup
+            with open(target_db_path, 'wb') as f:
+                f.write(decrypted_db)
+            
+            logger.info(f"[BACKUP] Restored database from encrypted backup")
+            return target_db_path
+            
+        except Exception as e:
+            logger.error(f"[BACKUP] Restore failed: {e}")
+            raise
+
+
 # 1. DATABASE MANAGER
 # ==========================================
 class DatabaseManager:

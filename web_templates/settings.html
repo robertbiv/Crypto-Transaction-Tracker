@@ -302,7 +302,8 @@
     }
     
     function downloadBackup() {
-        window.location.href = '/api/backup/full';
+        // Prefer full zip backup (encrypted if configured)
+        window.location.href = '/api/backup/zip';
         // Enable step 2 after a short delay to assume download started
         setTimeout(() => {
             document.getElementById('resetStep2').style.display = 'block';
