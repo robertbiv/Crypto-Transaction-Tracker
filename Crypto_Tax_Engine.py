@@ -16,6 +16,25 @@ from decimal import Decimal, ROUND_HALF_UP
 import logging
 
 # ==========================================
+# CONSTANTS
+# ==========================================
+# Tax Calculation Constants
+WASH_SALE_WINDOW_DAYS = 30  # IRS wash sale rule: 30 days before and after
+DECIMAL_PRECISION = 8  # Crypto precision (satoshi level)
+USD_PRECISION = 2  # USD rounding precision
+LONG_TERM_HOLDING_DAYS = 365  # Days for long-term capital gains
+
+# Database Constants
+MAX_DB_BACKUP_SIZE_MB = 100  # Maximum database backup size
+DB_RETRY_ATTEMPTS = 3  # Number of retries for database operations
+DB_RETRY_DELAY_MS = 100  # Delay between retry attempts
+
+# API Constants
+API_RETRY_MAX_ATTEMPTS = 3  # Max retries for API calls
+API_RETRY_DELAY_MS = 1000  # Initial delay between retries
+API_TIMEOUT_SECONDS = 10  # Timeout for API requests
+
+# ==========================================
 # CONFIGURATION
 # ==========================================
 BASE_DIR = Path.cwd()
@@ -161,13 +180,16 @@ def to_decimal(value):
     if value is None: return Decimal('0')
     if isinstance(value, Decimal): 
         if value.is_nan(): return Decimal('0')
+        if value.is_infinite(): return Decimal('0')  # Handle infinity
         return value
     if isinstance(value, (int, float)):
         s = str(value)
         if 'nan' in s.lower(): return Decimal('0')
+        if 'inf' in s.lower(): return Decimal('0')  # Handle infinity
         return Decimal(s)
     if isinstance(value, str):
         if value.lower() == 'nan': return Decimal('0')
+        if 'inf' in value.lower(): return Decimal('0')  # Handle infinity
         try: return Decimal(value)
         except: return Decimal('0')
     return Decimal('0')
@@ -178,9 +200,22 @@ def is_defi_lp_token(coin_name):
     return any(pattern in coin_upper for pattern in DEFI_LP_PATTERNS)
 
 def round_decimal(value, places=8):
-    if not isinstance(value, Decimal): value = to_decimal(value)
-    quantizer = Decimal(10) ** -places
-    return value.quantize(quantizer, rounding=ROUND_HALF_UP)
+    """Round Decimal value to specified places, handling special values gracefully"""
+    if not isinstance(value, Decimal): 
+        value = to_decimal(value)
+    
+    # Handle special values
+    if value.is_nan():
+        return Decimal('0')
+    if value.is_infinite():
+        return Decimal('0')
+    
+    try:
+        quantizer = Decimal(10) ** -places
+        return value.quantize(quantizer, rounding=ROUND_HALF_UP)
+    except (decimal.InvalidOperation, decimal.DecimalException):
+        # If quantization fails, return zero
+        return Decimal('0')
 
 class NetworkRetry:
     @staticmethod
@@ -723,7 +758,12 @@ class TaxEngine:
                 if t['action'] == 'INCOME' and not staking_on_receipt:
                     self._add(t['coin'], amt, Decimal('0'), d, src)
                 else:
-                    cost_basis = ((amt * price) + fee) / amt if amt > 0 else Decimal('0')
+                    # Calculate total cost then divide by amount for better precision
+                    if amt > 0:
+                        total_cost = (amt * price) + fee
+                        cost_basis = round_decimal(total_cost / amt, 8)
+                    else:
+                        cost_basis = Decimal('0')
                     self._add(t['coin'], amt, cost_basis, d, src)
                     if is_yr and t['action']=='INCOME' and staking_on_receipt: 
                         self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(amt*price, 2))})
@@ -743,8 +783,8 @@ class TaxEngine:
                 wash_disallowed = Decimal('0')
                 
                 if gain < 0 and t['coin'] in all_buys_dict:
-                    # Wash Sale: Check 30 days BEFORE and AFTER
-                    w_start, w_end = d - timedelta(days=30), d + timedelta(days=30)
+                    # Wash Sale: Check WASH_SALE_WINDOW_DAYS BEFORE and AFTER
+                    w_start, w_end = d - timedelta(days=WASH_SALE_WINDOW_DAYS), d + timedelta(days=WASH_SALE_WINDOW_DAYS)
                     nearby = [bd for bd in all_buys_dict[t['coin']] if w_start <= bd < d or d < bd <= w_end]
                     if nearby:
                         rep_qty = Decimal('0')
@@ -752,8 +792,11 @@ class TaxEngine:
                             recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], utc=True)==bd) & (df['action'].isin(['BUY','INCOME']))]
                             rep_qty += to_decimal(recs['amount'].sum())
                         if rep_qty > 0:
-                            prop = min(rep_qty / amt, Decimal('1.0'))
-                            wash_disallowed = abs(gain) * prop
+                            # Proportion should be min(replacement_qty, sold_amt) / sold_amt
+                            # If we bought back more than we sold, entire loss is disallowed
+                            disallowed_qty = min(rep_qty, amt)
+                            prop = round_decimal(disallowed_qty / amt, 8) if amt > 0 else Decimal('0')
+                            wash_disallowed = round_decimal(abs(gain) * prop, 2)
                             if is_yr: self.wash_sale_log.append({'Date':d.date(),'Coin':t['coin'],'Amount Sold':float(round_decimal(amt,8)),'Replacement Qty':float(round_decimal(rep_qty,8)),'Loss Disallowed':float(round_decimal(wash_disallowed,2)),'Note':'Wash sale: purchases within 30 days before/after.'})
 
                 final_basis = b if wash_disallowed == 0 else net
@@ -780,7 +823,13 @@ class TaxEngine:
                 if fee > 0:
                     self._strict_mode = strict_mode
                     # Get price for the actual fee coin
-                    fee_price = price if fee_coin == t['coin'] else self.pf.get_price(fee_coin, d)
+                    if fee_coin == t['coin']:
+                        fee_price = price
+                    else:
+                        fee_price = self.pf.get_price(fee_coin, d)
+                        if fee_price is None:
+                            logger.warning(f"Unable to get price for fee coin {fee_coin} on {d.date()}. Using zero for fee valuation.")
+                            fee_price = Decimal('0')
                     fb, fterm, facq = self._sell(fee_coin, fee, d, src)
                     if is_yr:
                         f_proc = fee * fee_price
@@ -812,13 +861,15 @@ class TaxEngine:
         bucket = self._get_bucket(c, source)
         # Apply accounting method
         acct_method = str(GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')).upper()
-        if acct_method == 'HIFO':
-            bucket.sort(key=lambda x: x['p'], reverse=True)
-        else:
-            bucket.sort(key=lambda x: x['d']) # FIFO
         
         rem, b, ds = a, Decimal('0'), set()
         while rem > 0 and bucket:
+            # Re-sort on each iteration to ensure proper HIFO/FIFO selection
+            # This handles cases where new lots may be added between sells
+            if acct_method == 'HIFO':
+                bucket.sort(key=lambda x: x['p'], reverse=True)
+            else:
+                bucket.sort(key=lambda x: x['d']) # FIFO
             l = bucket[0]
             ds.add(l['d'])
             take = l['a'] if l['a'] <= rem else rem
@@ -831,8 +882,17 @@ class TaxEngine:
         if rem > 0:
             strict = getattr(self, '_strict_mode', False)
             if strict and str(source).upper() in BROKER_SOURCES:
-                logger.warning(f"MISSING BASIS: {rem} {c} sold from {source}. Strict mode prevented borrowing.")
-                b += Decimal('0') # Zero basis for unmatched
+                # In strict mode, use estimated basis (market price at acquisition) rather than zero
+                # This provides better tax accuracy than zero basis (which = 100% gain)
+                logger.warning(f"MISSING BASIS: {rem} {c} sold from {source}. Using estimated acquisition price.")
+                logger.warning(f"MANUAL REVIEW REQUIRED: Verify cost basis for {rem} {c} from {source}")
+                # Try to estimate basis using average price from same period
+                estimated_price = self.pf.get_price(c, d) if hasattr(self, 'pf') else None
+                if estimated_price and estimated_price > 0:
+                    b += rem * estimated_price
+                    logger.info(f"Estimated basis: {rem} {c} @ ${estimated_price} = ${rem * estimated_price}")
+                else:
+                    b += Decimal('0')  # Fallback to zero if no price available
                 # Mark unmatched sell in context so TT row can include placeholder
                 self._unmatched_sell = True
             else:

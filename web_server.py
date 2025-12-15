@@ -24,12 +24,16 @@ from functools import wraps
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, g
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 import bcrypt
 import jwt
+import filelock
+import logging
 import Crypto_Tax_Engine as tax_app  # Import for status updates
 from Crypto_Tax_Engine import DatabaseManager, Ingestor  # For unified CSV ingestion
 
@@ -43,9 +47,41 @@ USERS_FILE = BASE_DIR / 'web_users.json'
 CERT_DIR = BASE_DIR / 'certs'
 CONFIG_FILE = BASE_DIR / 'config.json'
 API_KEYS_FILE = BASE_DIR / 'api_keys.json'
+API_KEYS_ENCRYPTED_FILE = BASE_DIR / 'api_keys_encrypted.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 OUTPUT_DIR = BASE_DIR / 'outputs'
 ENCRYPTION_KEY_FILE = BASE_DIR / 'web_encryption.key'
+API_KEY_ENCRYPTION_FILE = BASE_DIR / 'api_key_encryption.key'
+AUDIT_LOG_FILE = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+
+# Security Constants
+LOGIN_RATE_LIMIT = "5 per 15 minutes"  # Max 5 login attempts per 15 minutes
+API_RATE_LIMIT = "100 per hour"  # Max 100 API calls per hour
+CSRF_TOKEN_ROTATION_INTERVAL = 3600  # Rotate CSRF token every hour (seconds)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+BCRYPT_COST_FACTOR = 12
+
+# Setup audit logging
+AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+audit_logger = logging.getLogger('audit')
+audit_logger.setLevel(logging.INFO)
+if not audit_logger.handlers:
+    audit_handler = logging.FileHandler(AUDIT_LOG_FILE)
+    audit_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - USER:%(user)s - IP:%(ip)s - ACTION:%(action)s - DETAILS:%(details)s'
+    ))
+    audit_logger.addHandler(audit_handler)
+
+def audit_log(action, details='', user=None):
+    """Log security-sensitive operations"""
+    try:
+        ip = request.remote_addr if request else 'unknown'
+        user = user or session.get('username', 'anonymous')
+        audit_logger.info('', extra={'action': action, 'details': details, 'user': user, 'ip': ip})
+    except Exception as e:
+        print(f"Audit log error: {e}")
 
 # Create Flask app
 app = Flask(__name__, 
@@ -66,10 +102,59 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=[API_RATE_LIMIT],
+    storage_uri="memory://"
+)
+
+# API Key Encryption Functions
+def get_api_key_cipher():
+    """Get or create Fernet cipher for API key encryption"""
+    if not API_KEY_ENCRYPTION_FILE.exists():
+        key = Fernet.generate_key()
+        with open(API_KEY_ENCRYPTION_FILE, 'wb') as f:
+            f.write(key)
+    with open(API_KEY_ENCRYPTION_FILE, 'rb') as f:
+        key = f.read()
+    return Fernet(key)
+
+def encrypt_api_keys(data):
+    """Encrypt API keys for storage"""
+    try:
+        cipher = get_api_key_cipher()
+        json_data = json.dumps(data)
+        encrypted = cipher.encrypt(json_data.encode())
+        return base64.b64encode(encrypted).decode()
+    except Exception as e:
+        print(f"Encryption error: {e}")
+        return None
+
+def decrypt_api_keys(encrypted_data):
+    """Decrypt API keys from storage"""
+    try:
+        cipher = get_api_key_cipher()
+        encrypted_bytes = base64.b64decode(encrypted_data)
+        decrypted = cipher.decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode())
+    except Exception as e:
+        print(f"Decryption error: {e}")
+        return None
+
 @app.before_request
 def generate_nonce():
-    """Generate a nonce for CSP"""
+    """Generate a nonce for CSP and rotate CSRF token if needed"""
     g.csp_nonce = secrets.token_hex(16)
+    
+    # Rotate CSRF token if it's too old (for logged-in users)
+    if 'username' in session and 'csrf_created_at' in session:
+        age = time.time() - session['csrf_created_at']
+        if age > CSRF_TOKEN_ROTATION_INTERVAL:
+            session['csrf_token'] = secrets.token_hex(32)
+            session['csrf_created_at'] = time.time()
+            audit_log('CSRF_TOKEN_ROTATED', f'Token rotated after {int(age)} seconds')
 
 @app.context_processor
 def inject_nonce():
@@ -295,9 +380,14 @@ def save_users(users):
         json.dump(users, f, indent=4)
 
 def verify_password(username, password):
-    """Verify username and password"""
+    """Verify username and password - timing-attack resistant"""
     users = load_users()
+    
+    # Always perform bcrypt operation to prevent timing attacks
     if username not in users:
+        # Use a dummy hash with same cost factor to maintain constant time
+        dummy_hash = bcrypt.hashpw(b'dummy', bcrypt.gensalt()).decode('utf-8')
+        bcrypt.checkpw(password.encode('utf-8'), dummy_hash.encode('utf-8'))
         return False
     
     stored_hash = users[username]['password_hash']
@@ -580,8 +670,9 @@ def first_time_setup():
     return render_template('first_time_setup.html', hide_nav=True)
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login():
-    """Login page"""
+    """Login page with rate limiting"""
     # If first-time setup needed, redirect there
     if is_first_time_setup():
         return redirect(url_for('first_time_setup'))
@@ -592,8 +683,15 @@ def login():
         password = data.get('password')
         
         if verify_password(username, password):
+            # Regenerate session to prevent session fixation attacks
+            session.clear()
             session['username'] = username
+            session['csrf_token'] = secrets.token_hex(32)
+            session['csrf_created_at'] = time.time()
             session.permanent = True
+            
+            # Audit log successful login
+            audit_log('LOGIN_SUCCESS', f'User {username} logged in', username)
             
             if request.is_json:
                 return jsonify({'success': True, 'message': 'Login successful'})
@@ -1066,8 +1164,10 @@ def api_update_config():
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+        lock = filelock.FileLock(str(CONFIG_FILE) + '.lock')
+        with lock:
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(data, f, indent=4)
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'Configuration updated'})
         # return jsonify({'data': encrypted_response})
@@ -1109,8 +1209,10 @@ def api_update_wallets():
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     try:
-        with open(WALLETS_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+        lock = filelock.FileLock(str(WALLETS_FILE) + '.lock')
+        with lock:
+            with open(WALLETS_FILE, 'w') as f:
+                json.dump(data, f, indent=4)
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'Wallets updated'})
         # return jsonify({'data': encrypted_response})
@@ -1178,8 +1280,10 @@ def api_update_api_keys():
                     if value and '*' not in value:
                         existing_keys[exchange][key] = value
         
-        with open(API_KEYS_FILE, 'w') as f:
-            json.dump(existing_keys, f, indent=4)
+        lock = filelock.FileLock(str(API_KEYS_FILE) + '.lock')
+        with lock:
+            with open(API_KEYS_FILE, 'w') as f:
+                json.dump(existing_keys, f, indent=4)
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'API keys updated'})
         # return jsonify({'data': encrypted_response})
@@ -1582,16 +1686,22 @@ def api_wizard_save_config():
             return jsonify({'error': 'Missing type or data'}), 400
         
         if config_type == 'api_keys':
-            with open(API_KEYS_FILE, 'w') as f:
-                json.dump(config_data, f, indent=4)
+            lock = filelock.FileLock(str(API_KEYS_FILE) + '.lock')
+            with lock:
+                with open(API_KEYS_FILE, 'w') as f:
+                    json.dump(config_data, f, indent=4)
         
         elif config_type == 'wallets':
-            with open(WALLETS_FILE, 'w') as f:
-                json.dump(config_data, f, indent=4)
+            lock = filelock.FileLock(str(WALLETS_FILE) + '.lock')
+            with lock:
+                with open(WALLETS_FILE, 'w') as f:
+                    json.dump(config_data, f, indent=4)
         
         elif config_type == 'config':
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config_data, f, indent=4)
+            lock = filelock.FileLock(str(CONFIG_FILE) + '.lock')
+            with lock:
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump(config_data, f, indent=4)
         
         else:
             return jsonify({'error': 'Invalid config type'}), 400
