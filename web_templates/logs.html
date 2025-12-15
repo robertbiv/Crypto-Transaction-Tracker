@@ -47,10 +47,37 @@
 {% block content %}
 <h1 style="margin-bottom: 24px;">Application Logs</h1>
 
-<div class="card">
-    <h2 class="card-title">Log Files</h2>
+<div class="card" style="margin-bottom: 24px;">
+    <h2 class="card-title">Bulk Download</h2>
     <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
-        View and download application log files for troubleshooting and monitoring.
+        Download all log files at once or get redacted versions for support.
+    </p>
+    
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <button class="btn btn-primary" id="btnDownloadAllLogs">
+            <span class="material-icons" style="vertical-align: middle;">download</span>
+            Download All Logs
+        </button>
+        <button class="btn btn-secondary" id="btnDownloadRedactedLogs">
+            <span class="material-icons" style="vertical-align: middle;">security</span>
+            Download Redacted Logs (Safe for Support)
+        </button>
+    </div>
+    
+    <div class="alert alert-info" style="margin-top: 16px;">
+        <strong>ℹ️ About Redacted Logs:</strong>
+        <ul style="margin-left: 20px; margin-top: 8px; line-height: 1.6;">
+            <li><strong>What's removed:</strong> Wallet addresses, API keys, secrets, email addresses, IP addresses, usernames, private keys</li>
+            <li><strong>What's kept:</strong> Error messages, timestamps, transaction types, operation flows, system information</li>
+            <li><strong>Use case:</strong> Safe to share with support teams or when requesting help on forums without exposing your personal data</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Individual Log Files</h2>
+    <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
+        View and download individual log files.
     </p>
     
     <div id="logsContainer">
@@ -120,7 +147,20 @@
         return date.toLocaleString();
     }
     
+    function downloadAllLogs() {
+        window.location.href = '/api/logs/download-all';
+    }
+    
+    function downloadRedactedLogs() {
+        window.location.href = '/api/logs/download-redacted';
+    }
+    
     // Load logs on page load
-    document.addEventListener('DOMContentLoaded', loadLogs);
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLogs();
+        
+        document.getElementById('btnDownloadAllLogs').addEventListener('click', downloadAllLogs);
+        document.getElementById('btnDownloadRedactedLogs').addEventListener('click', downloadRedactedLogs);
+    });
 </script>
 {% endblock %}

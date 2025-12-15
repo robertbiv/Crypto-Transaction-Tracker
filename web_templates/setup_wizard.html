@@ -478,6 +478,15 @@
                 <div class="card" style="margin-bottom: 16px;">
                     <h3 style="margin-bottom:8px;">Restore From Backup (Optional)</h3>
                     <p class="step-description">If you have a backup .zip or .zip.enc, you can restore it now instead of reconfiguring.</p>
+                    
+                    <div style="padding: 12px; background: var(--md-sys-color-surface-variant); border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px;">
+                        <strong>ℹ️ About Restoring:</strong><br>
+                        • Backups are downloaded from Settings → Download Full Backup<br>
+                        • <code>.zip.enc</code> files require your database password<br>
+                        • <strong>Merge mode</strong> adds backup data to current data (safe)<br>
+                        • <strong>Replace mode</strong> overwrites everything with backup (use with caution)
+                    </div>
+                    
                     <div class="form-group">
                         <label class="form-label" for="wizBackupFile">Backup File</label>
                         <input type="file" id="wizBackupFile" class="form-input" accept=".zip,.enc" />

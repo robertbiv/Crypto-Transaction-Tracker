@@ -197,7 +197,17 @@
 
         <div class="card" style="border: 1px dashed var(--md-sys-color-surface-variant); padding: 16px; border-radius: 12px;">
             <h3 style="margin-bottom: 8px;">Restore From Backup</h3>
-            <p style="margin-bottom: 12px; color: var(--md-sys-color-on-surface-variant);">Upload a backup zip created from this app to restore your previous setup.</p>
+            <p style="margin-bottom: 12px; color: var(--md-sys-color-on-surface-variant);">
+                Have a previous backup? Upload it here to restore your database, configuration, API keys, and wallet addresses.
+            </p>
+            
+            <div style="padding: 12px; background: var(--md-sys-color-surface-variant); border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px;">
+                <strong>📦 What's restored:</strong> Database, config files, API keys, wallets, user accounts<br>
+                <strong>🔐 File types:</strong> <code>.zip.enc</code> (encrypted) or <code>.zip</code> (plain)<br>
+                <strong>🔑 Password:</strong> Required only for <code>.zip.enc</code> files (your database encryption password)<br>
+                <strong>⚙️ Modes:</strong> <strong>Merge</strong> keeps existing data + adds backup data. <strong>Replace</strong> overwrites everything.
+            </div>
+            
             <div class="form-group">
                 <label class="form-label" for="backupFile">Backup File (.zip or .zip.enc)</label>
                 <input type="file" id="backupFile" class="form-input" accept=".zip,.enc" />

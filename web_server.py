@@ -2123,6 +2123,101 @@ def api_download_log(log_path):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/logs/download-all', methods=['GET'])
+@login_required
+def api_download_all_logs():
+    """Download all logs as a zip file"""
+    try:
+        log_dir = OUTPUT_DIR / 'logs'
+        
+        if not log_dir.exists():
+            return jsonify({'error': 'No logs directory found'}), 404
+        
+        # Create zip in memory
+        mem_zip = io.BytesIO()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        with zipfile.ZipFile(mem_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for log_file in log_dir.glob('*.log'):
+                zf.write(log_file, arcname=log_file.name)
+        
+        mem_zip.seek(0)
+        return send_file(
+            mem_zip,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'all_logs_{timestamp}.zip'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/download-redacted', methods=['GET'])
+@login_required
+def api_download_redacted_logs():
+    """Download redacted logs (with sensitive info removed) for support"""
+    try:
+        log_dir = OUTPUT_DIR / 'logs'
+        
+        if not log_dir.exists():
+            return jsonify({'error': 'No logs directory found'}), 404
+        
+        # Patterns to redact (order matters - more specific patterns first)
+        import re
+        redaction_patterns = [
+            # Potential private keys (long hex strings) - must come before wallet addresses
+            (r'\b[a-fA-F0-9]{64,}\b', '[PRIVATE_KEY_REDACTED]'),
+            # API Keys and secrets - specific patterns first
+            (r'\b(sk_live_[a-zA-Z0-9]{10,})\b', '[REDACTED_SECRET_KEY]'),  # Stripe-style live secret keys
+            (r'\b(sk_test_[a-zA-Z0-9]{10,})\b', '[REDACTED_TEST_KEY]'),  # Stripe-style test keys
+            (r'\b(sk_[a-zA-Z0-9]{10,})\b', '[REDACTED_SECRET_KEY]'),  # Generic sk_ prefix keys
+            # Wallet addresses (common patterns)
+            (r'\b(0x[a-fA-F0-9]{40})\b', '[WALLET_ADDRESS]'),  # ETH/EVM
+            (r'\b(bc1[a-z0-9]{39,59})\b', '[WALLET_ADDRESS]'),  # BTC Bech32
+            (r'\b([13][a-km-zA-HJ-NP-Z1-9]{25,34})\b', '[WALLET_ADDRESS]'),  # BTC Legacy
+            # Long alphanumeric strings that look like API keys (32+ chars)
+            (r'\b([a-zA-Z0-9_\-]{32,})\b', '[REDACTED_API_KEY]'),
+            # API keys with labels
+            (r'(["\']?api[_-]?key["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{16,})', r'\1[REDACTED_API_KEY]'),
+            (r'(["\']?secret["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-/+=]{16,})', r'\1[REDACTED_SECRET]'),
+            # Email addresses
+            (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL_REDACTED]'),
+            # IP addresses
+            (r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', '[IP_REDACTED]'),
+            # Usernames in common formats
+            (r'(user[_-]?name["\']?\s*[:=]\s*["\']?)([a-zA-Z0-9_\-]{3,})', r'\1[USERNAME]'),
+        ]
+        
+        # Create zip in memory
+        mem_zip = io.BytesIO()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        with zipfile.ZipFile(mem_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for log_file in log_dir.glob('*.log'):
+                try:
+                    # Read log content
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    # Apply redaction patterns
+                    for pattern, replacement in redaction_patterns:
+                        content = re.sub(pattern, replacement, content)
+                    
+                    # Write redacted content to zip
+                    zf.writestr(f'redacted_{log_file.name}', content)
+                except Exception as e:
+                    # If redaction fails for a file, add error note
+                    zf.writestr(f'ERROR_{log_file.name}.txt', f'Failed to redact: {str(e)}')
+        
+        mem_zip.seek(0)
+        return send_file(
+            mem_zip,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'redacted_logs_{timestamp}.zip'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/reset-program', methods=['POST'])
 @login_required
 @web_security_required
