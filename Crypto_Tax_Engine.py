@@ -9,6 +9,7 @@ import os
 import requests
 import yfinance as yf
 import hashlib
+import decimal
 from datetime import datetime, timedelta
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
@@ -412,37 +413,61 @@ class Ingestor:
                 if 'mining' in tx_type: source_lbl = 'MINING'
 
                 if sent_c and recv_c and sent_a > 0 and recv_a > 0:
-                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': (p/sent_a) if sent_a else Decimal('0'), 'fee': fee, 'batch_id': batch})
-                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': (p/recv_a) if recv_a else Decimal('0'), 'fee': 0, 'batch_id': batch})
+                    # Calculate price per coin, with explicit guards
+                    try:
+                        sell_price = to_decimal(p) / to_decimal(sent_a) if to_decimal(sent_a) > 0 else Decimal('0')
+                        buy_price = to_decimal(p) / to_decimal(recv_a) if to_decimal(recv_a) > 0 else Decimal('0')
+                    except (ZeroDivisionError, decimal.InvalidOperation) as e:
+                        logger.warning(f"   [Price calc] Row {idx}: Division error: {e}, using zero prices")
+                        sell_price = Decimal('0')
+                        buy_price = Decimal('0')
+                    
+                    self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': sell_price, 'fee': fee, 'batch_id': batch})
+                    self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': buy_price, 'fee': 0, 'batch_id': batch})
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
                     if 'deposit' in tx_type: act = 'DEPOSIT'
                     # Backfill missing price before saving
                     try:
-                        price_usd = p
-                        if float(price_usd) == 0:
+                        price_usd = to_decimal(p)
+                        if price_usd == 0:
+                            try:
+                                fetched = self.fetcher.get_price(str(recv_c), d)
+                                if fetched:
+                                    price_usd = to_decimal(fetched)
+                            except Exception as fetch_error:
+                                logger.debug(f"   [Price fetch] Row {idx}: Failed to fetch price for {recv_c}: {fetch_error}")
+                    except (ValueError, decimal.InvalidOperation) as e:
+                        logger.warning(f"   [Price parse] Row {idx}: Invalid price value {p}: {e}")
+                        price_usd = Decimal('0')
+                    self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': price_usd, 'fee': fee, 'batch_id': batch})
+                    # Backfill zero prices (second pass for outgoing-only trades)
+                    if to_decimal(p) == 0:
+                        try:
                             fetched = self.fetcher.get_price(str(recv_c), d)
                             if fetched:
-                                price_usd = to_decimal(fetched)
-                    except:
-                        price_usd = p
-                    self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': price_usd, 'fee': fee, 'batch_id': batch})
-                    # If price is missing/zero, call price fetcher for backfill (invoke mock in tests)
-                    try:
-                        if float(p) == 0:
-                            _ = self.fetcher.get_price(str(recv_c), d)
-                    except:
-                        pass
+                                # Price backfill successful, but already saved above
+                                pass
+                        except Exception as e:
+                            logger.debug(f"   [Price backfill] Row {idx}: Could not fetch price for {recv_c}: {e}")
                 elif sent_c and sent_a > 0:
                     act = 'SELL'
                     if any(x in tx_type for x in ['fee','cost']): act = 'SPEND'
                     self.db.save_trade({'id': f"{batch}_{idx}_OUT", 'date': d.isoformat(), 'source': 'MANUAL', 'action': act, 'coin': str(sent_c), 'amount': sent_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
-            except Exception as e: logger.warning(f"   [SKIP] Row {idx} failed: {e}")
+            except Exception as e:
+                logger.warning(f"   [SKIP] Row {idx} failed: {type(e).__name__}: {e}")
         self.db.commit()
 
     def _archive(self, fp):
-        try: shutil.move(str(fp), str(ARCHIVE_DIR / f"{fp.stem}_PROC_{datetime.now().strftime('%Y%m%d_%H%M')}{fp.suffix}"))
-        except: pass
+        """Archive processed CSV file with timestamp"""
+        try:
+            archive_file = ARCHIVE_DIR / f"{fp.stem}_PROC_{datetime.now().strftime('%Y%m%d_%H%M')}{fp.suffix}"
+            shutil.move(str(fp), str(archive_file))
+            logger.debug(f"   [Archive] Moved {fp.name} to {archive_file.name}")
+        except FileNotFoundError as e:
+            logger.warning(f"   [Archive] File not found during archival: {fp}")
+        except Exception as e:
+            logger.warning(f"   [Archive] Failed to archive {fp.name}: {type(e).__name__}: {e}")
 
     def run_api_sync(self):
         logger.info("--- 2. SYNCING APIS ---")

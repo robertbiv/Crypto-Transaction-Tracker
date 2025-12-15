@@ -128,8 +128,8 @@ def get_or_create_encryption_key():
     # Set restrictive permissions (Unix-like systems)
     try:
         os.chmod(ENCRYPTION_KEY_FILE, 0o600)
-    except:
-        pass
+    except OSError:
+        pass  # Windows doesn't support chmod, this is expected
     
     return key
 
@@ -152,7 +152,7 @@ def decrypt_data(encrypted_data):
     decrypted = cipher_suite.decrypt(encrypted_data)
     try:
         return json.loads(decrypted.decode('utf-8'))
-    except:
+    except json.JSONDecodeError:
         return decrypted.decode('utf-8')
 
 def generate_csrf_token():
@@ -187,7 +187,7 @@ def validate_api_signature(data, timestamp, signature):
         now = datetime.now(timezone.utc)
         if now - request_time > timedelta(minutes=5):
             return False
-    except:
+    except (ValueError, TypeError):
         return False
     
     expected_signature = generate_api_signature(data, timestamp)
@@ -881,7 +881,7 @@ def api_create_transaction():
     try:
         # data = decrypt_data(encrypted_payload)
         data = json.loads(encrypted_payload)
-    except:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return jsonify({'error': 'Invalid data format'}), 400
     
     required_fields = ['date', 'action', 'coin', 'amount']
@@ -973,7 +973,7 @@ def api_update_transaction(transaction_id):
     try:
         # data = decrypt_data(encrypted_payload)
         data = json.loads(encrypted_payload)
-    except:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     conn = get_db_connection()
@@ -1062,7 +1062,7 @@ def api_update_config():
     try:
         # data = decrypt_data(encrypted_payload)
         data = json.loads(encrypted_payload)
-    except:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     try:
