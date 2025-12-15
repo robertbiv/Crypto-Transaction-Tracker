@@ -71,6 +71,10 @@
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
             Run Tax Calculation
         </button>
+        <button class="btn btn-secondary" id="diagnosticsBtn" onclick="openDiagnostics()">
+            <span class="material-icons" style="vertical-align: middle;">build</span>
+            Diagnose & Fix
+        </button>
         <button class="btn btn-secondary" id="btnViewTransactions">
             <span class="material-icons" style="vertical-align: middle;">list</span>
             View Transactions
@@ -241,9 +245,143 @@
             showAlert('Failed to start calculation: ' + error.message, 'error');
         }
     }
-    
-    // Load data on page load
-    document.addEventListener('DOMContentLoaded', () => {
+
+        async function openDiagnostics() {
+            try {
+                const diag = await apiClient.get('/api/diagnostics');
+                const issues = diag.issues || [];
+                const modal = document.getElementById('diagnosticsModal');
+                const list = document.getElementById('diagnosticsList');
+                list.innerHTML = '';
+                if (issues.length === 0) {
+                    list.innerHTML = '<li>✅ No issues detected</li>';
+                } else {
+                    for (const it of issues) {
+                        const li = document.createElement('li');
+                        li.textContent = `${it.severity.toUpperCase()}: ${it.message}`;
+                        if (it.fix && it.fix.action === 'unlock_db') {
+                            const input = document.createElement('input');
+                            input.type = 'password';
+                            input.placeholder = 'Enter web password to unlock';
+                            input.style.marginLeft = '8px';
+                            const btn = document.createElement('button');
+                            btn.textContent = 'Unlock';
+                            btn.style.marginLeft = '8px';
+                            btn.onclick = async () => {
+                                const res = await apiClient.post('/api/diagnostics/unlock', { password: input.value });
+                                alert(res.message || 'Unlock attempt complete');
+                                modal.classList.remove('open');
+                            };
+                            li.appendChild(input);
+                            li.appendChild(btn);
+                        } else if (it.fix && it.fix.action === 'schema_check') {
+                            const btn = document.createElement('button');
+                            btn.textContent = 'Run Integrity Check';
+                            btn.style.marginLeft = '8px';
+                            btn.onclick = async () => {
+                                const res = await apiClient.get(it.fix.endpoint || '/api/diagnostics/schema-check');
+                                alert(`Schema status: ${res.status} (ok=${res.ok})`);
+                            };
+                            li.appendChild(btn);
+                        } else if (it.fix && it.fix.action === 'auto_generate_on_start') {
+                            const btn = document.createElement('button');
+                            btn.textContent = 'Generate Cert';
+                            btn.style.marginLeft = '8px';
+                            btn.onclick = async () => {
+                                const res = await apiClient.post('/api/diagnostics/generate-cert', {});
+                                alert(res.message || 'Certificate generated');
+                                modal.classList.remove('open');
+                            };
+                            li.appendChild(btn);
+                        }
+                        list.appendChild(li);
+                    }
+                }
+                modal.classList.add('open');
+            } catch (e) {
+                alert('Diagnostics failed: ' + e.message);
+            }
+        }
+
+        function closeDiagnostics() {
+            const modal = document.getElementById('diagnosticsModal');
+            modal.classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Populate system status with last diagnostics
+            (async () => {
+                try {
+                    const diag = await apiClient.get('/api/diagnostics/last');
+                    const box = document.getElementById('systemStatus');
+                    const issues = diag.issues || [];
+                const statusItems = diag.status || [];
+                box.innerHTML = '';
+                
+                // Show positive status items first
+                if (statusItems.length > 0) {
+                    const statusDiv = document.createElement('div');
+                    statusDiv.style.marginBottom = '12px';
+                    const statusList = document.createElement('ul');
+                    statusList.className = 'plain-list status-ok-list';
+                    for (const st of statusItems) {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span class="status-icon">${st.icon}</span> ${st.message}`;
+                        statusList.appendChild(li);
+                    }
+                    statusDiv.appendChild(statusList);
+                    box.appendChild(statusDiv);
+                }
+                
+                // Show issues if any
+                if (issues.length > 0) {
+                    const summary = document.createElement('div');
+                    summary.style.marginBottom = '8px';
+                    summary.style.marginTop = '12px';
+                    summary.style.fontWeight = 'bold';
+                    const counts = {error:0, warning:0, info:0};
+                    for (const it of issues) { if (counts[it.severity] !== undefined) counts[it.severity]++; }
+                    summary.textContent = `Issues: Errors: ${counts.error} • Warnings: ${counts.warning} • Info: ${counts.info}`;
+                    box.appendChild(summary);
+                    const ul = document.createElement('ul');
+                    ul.className = 'plain-list';
+                    for (const it of issues) {
+                        const li = document.createElement('li');
+                        li.textContent = `${it.severity.toUpperCase()}: ${it.message}`;
+                        ul.appendChild(li);
+                    }
+                    box.appendChild(ul);
+                } else if (statusItems.length > 0) {
+                    const allGood = document.createElement('div');
+                    allGood.style.marginTop = '12px';
+                    allGood.style.color = 'var(--md-sys-color-tertiary)';
+                    allGood.style.fontWeight = 'bold';
+                    allGood.textContent = '✅ No issues detected';
+                    box.appendChild(allGood);
+                }
+            const diagnosticsModal = document.createElement('div');
+            diagnosticsModal.id = 'diagnosticsModal';
+            diagnosticsModal.className = 'simple-modal';
+            diagnosticsModal.innerHTML = `
+                <div class="simple-modal-content">
+                    <h3>Diagnostics & Fixes</h3>
+                    <ul id="diagnosticsList" class="plain-list"></ul>
+                    <div style="text-align:right;margin-top:12px;">
+                        <button class="md-button" onclick="closeDiagnostics()">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(diagnosticsModal);
+        });
+
+        <style>
+            .simple-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; }
+            .simple-modal.open { display: flex; align-items: center; justify-content: center; }
+            .simple-modal-content { background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); border-radius: 12px; padding: 16px; width: 520px; max-width: 92vw; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+            .plain-list { list-style: none; padding: 0; margin: 0; }
+            .plain-list li { padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
+        .status-ok-list li { border-bottom: none; padding: 6px 0; color: var(--md-sys-color-on-surface); }
+        .status-icon { font-size: 1.2em; margin-right: 8px; vertical-align: middle; }
         loadDashboardData();
         
         const btnRunTax = document.getElementById('btnRunTax');
