@@ -34,8 +34,11 @@ import bcrypt
 import jwt
 import filelock
 import logging
+import threading
+import time as _time
+import tempfile
 import Crypto_Tax_Engine as tax_app  # Import for status updates
-from Crypto_Tax_Engine import DatabaseManager, Ingestor  # For unified CSV ingestion
+from Crypto_Tax_Engine import DatabaseManager, Ingestor, DatabaseEncryption  # For unified CSV ingestion
 
 # Configuration paths - avoid importing full engine to reduce dependencies
 BASE_DIR = Path(__file__).parent
@@ -53,6 +56,7 @@ OUTPUT_DIR = BASE_DIR / 'outputs'
 ENCRYPTION_KEY_FILE = BASE_DIR / 'web_encryption.key'
 API_KEY_ENCRYPTION_FILE = BASE_DIR / 'api_key_encryption.key'
 AUDIT_LOG_FILE = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+BACKUPS_DIR = OUTPUT_DIR / 'backups'
 
 # Security Constants
 LOGIN_RATE_LIMIT = "5 per 15 minutes"  # Max 5 login attempts per 15 minutes
@@ -361,6 +365,20 @@ def load_users():
 def is_first_time_setup():
     """Check if this is first-time setup (no users exist)"""
     return not USERS_FILE.exists() or len(load_users()) == 0
+
+def is_setup_in_progress():
+    """True if users exist but setup not completed (wizard phase)."""
+    if not USERS_FILE.exists():
+        return False
+    try:
+        users = load_users()
+        if len(users) != 1:
+            return False
+        # single user and missing or False 'setup_completed'
+        u = users[list(users.keys())[0]]
+        return not u.get('setup_completed', False)
+    except Exception:
+        return False
 
 def create_initial_user(username, password):
     """Create the initial admin user"""
@@ -795,6 +813,223 @@ def download_full_backup():
             as_attachment=True,
             download_name=f'crypto_tax_db_export_{timestamp}.zip'
         )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/backup/zip', methods=['GET'])
+@login_required
+def api_backup_zip():
+    """Create a zip backup with necessary files. If DB key is available, encrypt zip with it."""
+    try:
+        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Build zip in-memory
+        raw_zip = io.BytesIO()
+        with zipfile.ZipFile(raw_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            manifest = {
+                'created': datetime.now(timezone.utc).isoformat(),
+                'version': '1.0',
+                'includes': []
+            }
+
+            def add_file(path: Path, arcname: str):
+                if path.exists():
+                    zf.write(str(path), arcname)
+                    manifest['includes'].append(arcname)
+
+            add_file(DB_FILE, 'crypto_master.db')
+            add_file(BASE_DIR / '.db_key', '.db_key')
+            add_file(BASE_DIR / '.db_salt', '.db_salt')
+            add_file(CONFIG_FILE, 'config.json')
+            # Prefer encrypted API keys if present
+            add_file(API_KEYS_ENCRYPTED_FILE, 'api_keys_encrypted.json')
+            if 'api_keys_encrypted.json' not in manifest['includes']:
+                add_file(API_KEYS_FILE, 'api_keys.json')
+            add_file(WALLETS_FILE, 'wallets.json')
+            add_file(USERS_FILE, 'web_users.json')
+
+            # Add manifest
+            zf.writestr('manifest.json', json.dumps(manifest, indent=2))
+
+        raw_zip.seek(0)
+
+        # Encrypt zip with DB key if available
+        db_key = app.config.get('DB_ENCRYPTION_KEY')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        if db_key:
+            cipher = Fernet(db_key)
+            encrypted_bytes = cipher.encrypt(raw_zip.getvalue())
+            mem = io.BytesIO(encrypted_bytes)
+            mem.seek(0)
+            filename = f'backup_{timestamp}.zip.enc'
+            mimetype = 'application/octet-stream'
+            return send_file(mem, mimetype=mimetype, as_attachment=True, download_name=filename)
+        else:
+            # Fallback: return plain zip
+            filename = f'backup_{timestamp}.zip'
+            return send_file(raw_zip, mimetype='application/zip', as_attachment=True, download_name=filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wizard/restore-backup', methods=['POST'])
+def api_wizard_restore_backup():
+    """First-time or wizard: upload a backup .zip or .zip.enc to restore."""
+    if not (is_first_time_setup() or is_setup_in_progress()):
+        return jsonify({'error': 'Restore only allowed during initial setup or wizard'}), 403
+
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'Missing file'}), 400
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'error': 'Empty filename'}), 400
+
+        data = file.read()
+        filename = file.filename.lower()
+
+        # If encrypted, require password to decrypt with password-derived key
+        if filename.endswith('.enc'):
+            password = request.form.get('password', '')
+            if not password:
+                return jsonify({'error': 'Password required for encrypted backup'}), 400
+
+            # Decrypt DB key using provided password and local salt/key if present in zip
+            # First, try to decrypt using local .db_key/.db_salt if they already exist (migration case)
+            db_key_bytes = None
+            try:
+                # Try existing key files
+                if (BASE_DIR / '.db_key').exists() and (BASE_DIR / '.db_salt').exists():
+                    with open(BASE_DIR / '.db_key', 'rb') as f:
+                        enc_key = f.read()
+                    with open(BASE_DIR / '.db_salt', 'rb') as f:
+                        salt = f.read()
+                    from Crypto_Tax_Engine import DatabaseEncryption
+                    db_key_bytes = DatabaseEncryption.decrypt_key(enc_key, password, salt)
+            except Exception:
+                db_key_bytes = None
+
+            # If no local key, assume the .enc is encrypted with the DB key included in the backup
+            if db_key_bytes is None:
+                # We need to open as zip to fetch .db_key and .db_salt, so decrypt payload first using password-derived key
+                # Use password-derived key directly to decrypt .zip.enc (compatible if backup used DB key). If wrong, fail.
+                try:
+                    # Try deriving a Fernet key from password directly (for older backups)
+                    # but our current backups use db_key, so the normal path is below when local key exists.
+                    # If this fails, return error prompting to place .db_key and .db_salt next to app and retry.
+                    return jsonify({'error': 'Unable to decrypt backup without .db_key/.db_salt present. Place key files and retry.'}), 400
+                except Exception:
+                    return jsonify({'error': 'Decryption failed'}), 400
+
+            try:
+                cipher = Fernet(db_key_bytes)
+                zip_bytes = cipher.decrypt(data)
+            except Exception:
+                return jsonify({'error': 'Invalid password or corrupted backup'}), 400
+        else:
+            zip_bytes = data
+
+        # Extract zip bytes
+        tmp_mem = io.BytesIO(zip_bytes)
+        with zipfile.ZipFile(tmp_mem, 'r') as zf:
+            members = zf.namelist()
+            def restore_member(name, target_path: Path):
+                if name in members:
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(name) as src, open(target_path, 'wb') as dst:
+                        shutil.copyfileobj(src, dst)
+
+            # Determine restore mode (merge or replace). Default: merge
+            mode = request.form.get('mode', 'merge').lower()
+
+            # Handle database: merge or replace
+            if 'crypto_master.db' in members:
+                if mode == 'merge':
+                    fallback_to_replace = False
+                    tmpdb_path = None
+                    # Ensure target DB exists and has required schema
+                    try:
+                        conn_init = sqlite3.connect(str(DB_FILE))
+                        cur_init = conn_init.cursor()
+                        cur_init.execute("""
+                            CREATE TABLE IF NOT EXISTS trades (
+                                id TEXT PRIMARY KEY,
+                                date TEXT,
+                                source TEXT,
+                                destination TEXT,
+                                action TEXT,
+                                coin TEXT,
+                                amount TEXT,
+                                price_usd TEXT,
+                                fee TEXT,
+                                fee_coin TEXT,
+                                batch_id TEXT
+                            )
+                        """)
+                        conn_init.commit()
+                    except Exception:
+                        # If schema init fails for any reason, fallback to replace
+                        fallback_to_replace = True
+                    finally:
+                        try:
+                            conn_init.close()
+                        except Exception:
+                            pass
+                    # Extract backup DB to a temporary file
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as tmpdb:
+                            with zf.open('crypto_master.db') as src:
+                                shutil.copyfileobj(src, tmpdb)
+                            tmpdb_path = Path(tmpdb.name)
+                        # Merge rows using ATTACH and INSERT OR IGNORE by primary key id
+                        conn = None
+                        try:
+                            conn = sqlite3.connect(str(DB_FILE))
+                            cur = conn.cursor()
+                            cur.execute("ATTACH DATABASE ? AS olddb", (str(tmpdb_path),))
+                            has_trades = cur.execute("SELECT name FROM olddb.sqlite_master WHERE type='table' AND name='trades'").fetchone()
+                            if has_trades:
+                                old_cols = [r[1] for r in cur.execute("PRAGMA olddb.table_info(trades)").fetchall()]
+                                target_cols = ['id','date','source','destination','action','coin','amount','price_usd','fee','fee_coin','batch_id']
+                                select_exprs = [f"olddb.trades.{c}" if c in old_cols else f"NULL AS {c}" for c in target_cols]
+                                insert_cols = ",".join(target_cols)
+                                select_sql = ", ".join(select_exprs)
+                                cur.execute(f"INSERT OR IGNORE INTO trades ({insert_cols}) SELECT {select_sql} FROM olddb.trades")
+                                conn.commit()
+                        except Exception:
+                            # If ATTACH or SELECT fails (e.g., not a real SQLite file), fallback to replace
+                            fallback_to_replace = True
+                        finally:
+                            try:
+                                if conn:
+                                    conn.execute("DETACH DATABASE olddb")
+                            except Exception:
+                                pass
+                            if conn:
+                                conn.close()
+                    finally:
+                        try:
+                            if tmpdb_path:
+                                tmpdb_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    if fallback_to_replace:
+                        # Replace DB file if merge not possible
+                        restore_member('crypto_master.db', DB_FILE)
+                else:
+                    # Replace DB file
+                    restore_member('crypto_master.db', DB_FILE)
+
+            restore_member('.db_key', BASE_DIR / '.db_key')
+            restore_member('.db_salt', BASE_DIR / '.db_salt')
+            restore_member('config.json', CONFIG_FILE)
+            if 'api_keys_encrypted.json' in members:
+                restore_member('api_keys_encrypted.json', API_KEYS_ENCRYPTED_FILE)
+            else:
+                restore_member('api_keys.json', API_KEYS_FILE)
+            restore_member('wallets.json', WALLETS_FILE)
+            restore_member('web_users.json', USERS_FILE)
+
+        return jsonify({'success': True, 'message': 'Backup restored. Please restart the server.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2098,6 +2333,83 @@ def main():
     print("=" * 60)
     print("Crypto Tax Generator - Web UI Server")
     print("=" * 60)
+    
+    # Initialize database encryption
+    try:
+        # For first-time setup, prompt for password
+        users_file = BASE_DIR / 'web_users.json'
+        if not users_file.exists():
+            print("\n🔐 DATABASE ENCRYPTION SETUP")
+            print("   Your database will be encrypted with a password-derived key.")
+            print("   You'll use this password to unlock your database after restart.\n")
+            db_password = input("   Enter database encryption password: ").strip()
+            if not db_password:
+                db_password = secrets.token_hex(16)
+                print(f"   Generated random password: {db_password}")
+                print("   SAVE THIS PASSWORD! You'll need it to decrypt your database.\n")
+        else:
+            db_password = input("   Enter database encryption password: ").strip()
+        
+        # Initialize encryption and get database key
+        db_key = DatabaseEncryption.initialize_encryption(db_password)
+        app.config['DB_ENCRYPTION_KEY'] = db_key
+        print("   ✅ Database encryption initialized\n")
+    except Exception as e:
+        print(f"   ❌ Encryption initialization failed: {e}")
+        print("   Starting without encryption. Install cryptography package.\n")
+
+    # Auto-backup thread (daily) with retention
+    def _auto_backup_worker():
+        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+        retention = 14  # keep last 14 backups by default
+        interval_hours = 24
+        while True:
+            try:
+                # Build backup zip (encrypted if key present)
+                raw_zip = io.BytesIO()
+                with zipfile.ZipFile(raw_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    def add_file(path: Path, arcname: str):
+                        if path.exists():
+                            zf.write(str(path), arcname)
+                    add_file(DB_FILE, 'crypto_master.db')
+                    add_file(BASE_DIR / '.db_key', '.db_key')
+                    add_file(BASE_DIR / '.db_salt', '.db_salt')
+                    add_file(CONFIG_FILE, 'config.json')
+                    if API_KEYS_ENCRYPTED_FILE.exists():
+                        add_file(API_KEYS_ENCRYPTED_FILE, 'api_keys_encrypted.json')
+                    else:
+                        add_file(API_KEYS_FILE, 'api_keys.json')
+                    add_file(WALLETS_FILE, 'wallets.json')
+                    add_file(USERS_FILE, 'web_users.json')
+
+                raw_zip.seek(0)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                db_key = app.config.get('DB_ENCRYPTION_KEY')
+                if db_key:
+                    cipher = Fernet(db_key)
+                    enc_bytes = cipher.encrypt(raw_zip.getvalue())
+                    out_path = BACKUPS_DIR / f'backup_{timestamp}.zip.enc'
+                    with open(out_path, 'wb') as f:
+                        f.write(enc_bytes)
+                else:
+                    out_path = BACKUPS_DIR / f'backup_{timestamp}.zip'
+                    with open(out_path, 'wb') as f:
+                        f.write(raw_zip.getvalue())
+
+                # Retention: keep newest N
+                backups = sorted(BACKUPS_DIR.glob('backup_*.zip*'), key=lambda p: p.stat().st_mtime, reverse=True)
+                for old in backups[retention:]:
+                    try:
+                        old.unlink()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            _time.sleep(interval_hours * 3600)
+
+    t = threading.Thread(target=_auto_backup_worker, daemon=True)
+    t.start()
     
     # Generate SSL certificate
     cert_file, key_file = generate_self_signed_cert()

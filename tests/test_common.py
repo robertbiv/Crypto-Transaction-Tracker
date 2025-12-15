@@ -26,7 +26,6 @@ if parent_dir not in sys.path:
 import Crypto_Tax_Engine as app
 import Setup as setup_script
 import Auto_Runner
-import Migration_2025 as mig
 from Interactive_Review_Fixer import InteractiveReviewFixer
 from contextlib import redirect_stdout
 

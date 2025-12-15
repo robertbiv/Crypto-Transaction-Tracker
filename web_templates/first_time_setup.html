@@ -190,6 +190,37 @@
                 Create Account & Continue to Setup
             </button>
         </form>
+
+        <div style="margin: 24px 0; text-align: center; color: var(--md-sys-color-on-surface-variant);">
+            <span>— or —</span>
+        </div>
+
+        <div class="card" style="border: 1px dashed var(--md-sys-color-surface-variant); padding: 16px; border-radius: 12px;">
+            <h3 style="margin-bottom: 8px;">Restore From Backup</h3>
+            <p style="margin-bottom: 12px; color: var(--md-sys-color-on-surface-variant);">Upload a backup zip created from this app to restore your previous setup.</p>
+            <div class="form-group">
+                <label class="form-label" for="backupFile">Backup File (.zip or .zip.enc)</label>
+                <input type="file" id="backupFile" class="form-input" accept=".zip,.enc" />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="backupPassword">Password (if encrypted)</label>
+                <input type="password" id="backupPassword" class="form-input" placeholder="Enter encryption password (if .enc)" />
+            </div>
+            <div class="form-group" style="margin-top: 8px;">
+                <label class="form-label">Restore Mode</label>
+                <div style="display:flex; gap: 12px; align-items:center;">
+                    <label><input type="radio" name="restoreMode" value="merge" checked> Merge into current database (recommended)</label>
+                    <label><input type="radio" name="restoreMode" value="replace"> Replace current database</label>
+                </div>
+            </div>
+            <button id="restoreBtn" class="btn btn-secondary" style="width: 100%;">
+                <span class="material-icons" style="vertical-align: middle;">upload</span>
+                Upload & Restore Backup
+            </button>
+            <p style="margin-top: 8px; font-size: 0.85rem; color: var(--md-sys-color-on-surface-variant);">
+                After successful restore, please restart the server to apply changes.
+            </p>
+        </div>
         
         <div style="margin-top: 24px; text-align: center; color: var(--md-sys-color-on-surface-variant); font-size: 0.85rem;">
             <p><span class="material-icons" style="font-size: 1rem; vertical-align: middle;">info</span> 
@@ -273,5 +304,45 @@
             setTimeout(() => alert.remove(), 3000);
         }
     }
+
+    // Restore from backup handler
+    document.getElementById('restoreBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('backupFile');
+        const passwordInput = document.getElementById('backupPassword');
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            showAlert('Please select a backup file to upload', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        if (passwordInput.value) formData.append('password', passwordInput.value);
+        const mode = document.querySelector('input[name="restoreMode"]:checked')?.value || 'merge';
+        formData.append('mode', mode);
+
+        const btn = document.getElementById('restoreBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-icons rotating" style="vertical-align: middle;">sync</span> Restoring...';
+
+        try {
+            const resp = await fetch('/api/wizard/restore-backup', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                showAlert('✅ Backup restored. Reloading...', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                showAlert(data.error || 'Restore failed', 'error');
+            }
+        } catch (err) {
+            showAlert('Restore failed: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-icons" style="vertical-align: middle;">upload</span> Upload & Restore Backup';
+        }
+    });
 </script>
 {% endblock %}
