@@ -230,7 +230,13 @@
         try {
             const response = await api.post('/api/run', {});
             const result = JSON.parse(response.data);
-            showAlert(result.message, 'success');
+            
+            // Start tracking progress
+            if (result.task_id) {
+                progressTracker.trackTask(result.task_id, 'Running Tax Calculation');
+            } else {
+                showAlert(result.message, 'success');
+            }
         } catch (error) {
             showAlert('Failed to start calculation: ' + error.message, 'error');
         }

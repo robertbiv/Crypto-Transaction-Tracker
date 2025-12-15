@@ -822,7 +822,7 @@
             const outputBox = document.getElementById('setupOutput');
             const nextBtn = document.getElementById('nextBtn');
             
-            outputBox.textContent = 'Starting setup script...\n';
+            outputBox.textContent = '';
             nextBtn.disabled = true;
             setupScriptRan = false;
             
@@ -834,16 +834,38 @@
                 
                 const data = await response.json();
                 
-                if (data.success) {
-                    outputBox.textContent = data.output || 'Setup completed successfully!';
-                    showAlert('✅ System initialized successfully!', 'success');
-                    setupScriptRan = true;
-                    nextBtn.disabled = false;
+                if (data.task_id) {
+                    // Use progress tracker
+                    await progressTracker.trackTask(data.task_id, 'Running Setup Script');
+                    
+                    // Get final result from progress store
+                    const progressResponse = await fetch('/api/progress/' + data.task_id);
+                    const progressData = await progressResponse.json();
+                    
+                    if (progressData.status === 'completed') {
+                        outputBox.textContent = progressData.output || 'Setup completed successfully!';
+                        showAlert('✅ System initialized successfully!', 'success');
+                        setupScriptRan = true;
+                        nextBtn.disabled = false;
+                    } else if (progressData.status === 'error') {
+                        outputBox.textContent = 'ERROR:\n' + (progressData.error || progressData.message || 'Setup failed');
+                        showAlert('❌ Setup script failed. Please check the output.', 'error');
+                        setupScriptRan = true; // Allow continuing anyway
+                        nextBtn.disabled = false;
+                    }
                 } else {
-                    outputBox.textContent = 'ERROR:\n' + (data.error || 'Setup failed');
-                    showAlert('❌ Setup script failed. Please check the output.', 'error');
-                    setupScriptRan = true; // Allow continuing anyway
-                    nextBtn.disabled = false;
+                    // Fallback for old response format
+                    if (data.success) {
+                        outputBox.textContent = data.output || 'Setup completed successfully!';
+                        showAlert('✅ System initialized successfully!', 'success');
+                        setupScriptRan = true;
+                        nextBtn.disabled = false;
+                    } else {
+                        outputBox.textContent = 'ERROR:\n' + (data.error || 'Setup failed');
+                        showAlert('❌ Setup script failed. Please check the output.', 'error');
+                        setupScriptRan = true; // Allow continuing anyway
+                        nextBtn.disabled = false;
+                    }
                 }
             } catch (error) {
                 outputBox.textContent = 'ERROR:\n' + error.message;

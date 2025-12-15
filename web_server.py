@@ -97,6 +97,9 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 app.config['WTF_CSRF_ENABLED'] = True
 app.config['WTF_CSRF_TIME_LIMIT'] = None  # CSRF tokens don't expire
 
+# Progress tracking for long-running operations
+progress_store = {}
+
 # Disable CORS - API should only be accessible from same origin (web UI)
 # CORS(app)  # Removed for security
 
@@ -1833,6 +1836,20 @@ def api_upload_csv():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/progress/<task_id>', methods=['GET'])
+@login_required
+def api_get_progress(task_id):
+    """Get progress of a long-running task"""
+    try:
+        progress = progress_store.get(task_id, {
+            'status': 'not_found',
+            'progress': 0,
+            'message': 'Task not found'
+        })
+        return jsonify(progress)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/run', methods=['POST'])
 @login_required
 @web_security_required
@@ -1855,18 +1872,59 @@ def api_run_tax_calculation():
         if not auto_runner.exists():
             return jsonify({'error': 'Auto_Runner.py not found'}), 404
         
+        # Generate task ID
+        task_id = f"tax_calc_{secrets.token_hex(8)}"
+        
+        # Initialize progress
+        progress_store[task_id] = {
+            'status': 'running',
+            'progress': 0,
+            'message': 'Starting tax calculation...',
+            'started_at': datetime.now(timezone.utc).isoformat()
+        }
+        
         # Check for cascade mode
         data = request.get_json() or {}
         cmd = [sys.executable, str(auto_runner)]
         if data.get('cascade'):
             cmd.append('--cascade')
             
-        # Run Auto_Runner.py in background
-        subprocess.Popen(cmd)
+        # Run Auto_Runner.py in background with progress tracking
+        def run_with_progress():
+            try:
+                progress_store[task_id]['progress'] = 10
+                progress_store[task_id]['message'] = 'Running tax calculation...'
+                
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                
+                # Monitor process
+                while process.poll() is None:
+                    _time.sleep(1)
+                    # Increment progress (max 90% until complete)
+                    if progress_store[task_id]['progress'] < 90:
+                        progress_store[task_id]['progress'] += 5
+                
+                stdout, stderr = process.communicate()
+                
+                if process.returncode == 0:
+                    progress_store[task_id]['status'] = 'completed'
+                    progress_store[task_id]['progress'] = 100
+                    progress_store[task_id]['message'] = 'Tax calculation completed successfully'
+                else:
+                    progress_store[task_id]['status'] = 'error'
+                    progress_store[task_id]['message'] = f'Tax calculation failed: {stderr[:200]}'
+                    
+            except Exception as e:
+                progress_store[task_id]['status'] = 'error'
+                progress_store[task_id]['message'] = f'Error: {str(e)}'
+        
+        thread = threading.Thread(target=run_with_progress, daemon=True)
+        thread.start()
         
         result = {
             'success': True,
-            'message': 'Tax calculation started. Check reports page for results.'
+            'task_id': task_id,
+            'message': 'Tax calculation started. Progress will be tracked.'
         }
         
         # encrypted_response = encrypt_data(result)
@@ -1947,28 +2005,76 @@ def api_wizard_run_setup():
         if not setup_script.exists():
             return jsonify({'error': 'Setup.py not found'}), 404
         
-        # Run the script and capture output (shell=False for security)
-        env = os.environ.copy()
-        env['SETUP_WIZARD_MODE'] = '1'
+        # Generate unique task ID for progress tracking
+        task_id = str(uuid.uuid4())
         
-        result = subprocess.run(
-            [sys.executable, str(setup_script)],
-            capture_output=True,
-            text=True,
-            cwd=str(BASE_DIR),
-            timeout=60,
-            shell=False,  # Explicitly set for security
-            stdin=subprocess.DEVNULL, # Prevent interactive prompts
-            env=env
-        )
+        # Initialize progress
+        progress_store[task_id] = {
+            'progress': 0,
+            'status': 'running',
+            'message': 'Initializing setup...'
+        }
         
-        return jsonify({
-            'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr if result.returncode != 0 else None
-        })
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': 'Setup script timed out'}), 500
+        # Run setup in background thread
+        def run_setup_thread():
+            try:
+                # Start the setup process
+                env = os.environ.copy()
+                env['SETUP_WIZARD_MODE'] = '1'
+                
+                # Update progress
+                progress_store[task_id]['progress'] = 10
+                progress_store[task_id]['message'] = 'Running setup script...'
+                
+                process = subprocess.Popen(
+                    [sys.executable, str(setup_script)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=str(BASE_DIR),
+                    shell=False,
+                    stdin=subprocess.DEVNULL,
+                    env=env
+                )
+                
+                # Monitor progress - increment periodically
+                progress = 20
+                while process.poll() is None:
+                    if progress < 90:
+                        progress += 5
+                        progress_store[task_id]['progress'] = progress
+                        progress_store[task_id]['message'] = f'Setup in progress ({progress}%)...'
+                    time.sleep(0.5)
+                
+                # Get output
+                stdout, stderr = process.communicate(timeout=60)
+                
+                # Check result
+                if process.returncode == 0:
+                    progress_store[task_id]['progress'] = 100
+                    progress_store[task_id]['status'] = 'completed'
+                    progress_store[task_id]['message'] = 'Setup completed successfully!'
+                    progress_store[task_id]['output'] = stdout
+                else:
+                    progress_store[task_id]['status'] = 'error'
+                    progress_store[task_id]['message'] = f'Setup failed: {stderr}'
+                    progress_store[task_id]['error'] = stderr
+                    progress_store[task_id]['output'] = stdout
+                    
+            except subprocess.TimeoutExpired:
+                progress_store[task_id]['status'] = 'error'
+                progress_store[task_id]['message'] = 'Setup script timed out'
+            except Exception as e:
+                progress_store[task_id]['status'] = 'error'
+                progress_store[task_id]['message'] = f'Error: {str(e)}'
+        
+        # Start thread
+        thread = threading.Thread(target=run_setup_thread, daemon=True)
+        thread.start()
+        
+        # Return task ID for progress tracking
+        return jsonify({'task_id': task_id})
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
