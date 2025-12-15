@@ -133,6 +133,26 @@
                     <span class="material-icons" style="vertical-align: middle;">download</span>
                     Download Full Backup
                 </button>
+                
+                <div style="margin-top: 16px; padding: 12px; background: var(--md-sys-color-surface-variant); border-radius: 8px; font-size: 0.9rem;">
+                    <strong>📦 About Your Backup:</strong>
+                    <ul style="margin-left: 20px; margin-top: 8px; line-height: 1.6;">
+                        <li><strong>What's included:</strong> Database, configuration files, API keys, wallets, user accounts</li>
+                        <li><strong>File format:</strong> <code>.zip.enc</code> (encrypted) or <code>.zip</code> (if encryption not enabled)</li>
+                        <li><strong>Password:</strong> If encrypted, you'll need your database password to restore</li>
+                    </ul>
+                    
+                    <strong style="display: block; margin-top: 12px;">🔄 How to Restore:</strong>
+                    <ol style="margin-left: 20px; margin-top: 8px; line-height: 1.6;">
+                        <li><strong>During First-Time Setup:</strong> Look for "Restore From Backup" option on the welcome screen</li>
+                        <li><strong>During Setup Wizard:</strong> In Step 2, you'll see "Restore From Backup (Optional)" section</li>
+                        <li>Upload your backup file and enter the password if it's encrypted</li>
+                        <li>Choose "Merge" to keep existing data or "Replace" to overwrite everything</li>
+                        <li>The page will auto-reload after successful restoration</li>
+                    </ol>
+                    
+                    <p style="margin-top: 12px; color: var(--md-sys-color-error);"><strong>⚠️ Important:</strong> Keep this backup file safe and remember your password!</p>
+                </div>
             </div>
             
             <div id="resetStep2" style="display: none; margin-top: 16px; border-top: 1px solid var(--md-sys-color-outline-variant); padding-top: 16px;">
