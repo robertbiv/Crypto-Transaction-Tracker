@@ -35,7 +35,7 @@
     <div style="margin-top: 24px;">
         <h3>Manual Run</h3>
         <p style="margin: 8px 0;">Run a tax calculation immediately:</p>
-        <button class="btn btn-primary" onclick="runTaxCalculation()">
+        <button id="runTaxCalcNowBtn" class="btn btn-primary">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
             Run Tax Calculation Now
         </button>
@@ -58,5 +58,10 @@
             showAlert('Failed to start calculation: ' + error.message, 'error');
         }
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('runTaxCalcNowBtn');
+        if (btn) btn.addEventListener('click', runTaxCalculation);
+    });
 </script>
 {% endblock %}

@@ -81,15 +81,15 @@
     <h2 class="card-title">Generate New Reports</h2>
     <p style="margin-bottom: 16px;">Start a new tax calculation run to generate updated reports.</p>
     <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <button class="btn btn-primary" onclick="runTaxCalculation()">
+        <button id="runTaxCalcBtn" class="btn btn-primary">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
             Run Tax Calculation
         </button>
-        <button class="btn btn-secondary" onclick="runCascadeCalculation()" style="background-color: #FF9800; color: white;">
+        <button id="runCascadeBtn" class="btn btn-secondary" style="background-color: #FF9800; color: white;">
             <span class="material-icons" style="vertical-align: middle;">history</span>
             Full Recalculation (Cascade)
         </button>
-        <button class="btn btn-secondary" onclick="uploadCSV()">
+        <button id="uploadCsvBtn" class="btn btn-secondary">
             <span class="material-icons" style="vertical-align: middle;">upload_file</span>
             Upload CSV
         </button>
@@ -111,7 +111,7 @@
 </div>
 
 <!-- File upload modal -->
-<input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleFileUpload()">
+<input type="file" id="csvFileInput" accept=".csv" style="display: none;">
 {% endblock %}
 
 {% block extra_js %}
@@ -146,7 +146,7 @@
                                     <span>${formatDate(report.modified)}</span>
                                 </div>
                                 <div class="report-actions">
-                                    <button class="btn btn-primary" onclick="downloadReport('${report.path}', '${report.name}')">
+                                    <button class="btn btn-primary report-download-btn" data-path="${report.path}" data-name="${report.name}">
                                         <span class="material-icons" style="vertical-align: middle; font-size: 18px;">download</span>
                                         Download
                                     </button>
@@ -236,6 +236,14 @@
         } catch (error) {
             showAlert('Failed to download report: ' + error.message, 'error');
         }
+    }
+
+    function _bindReportDownloads() {
+        document.querySelectorAll('.report-download-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                downloadReport(btn.dataset.path, btn.dataset.name);
+            });
+        });
     }
     
     async function runTaxCalculation() {
@@ -355,11 +363,19 @@
         }
     }
 
-    // Load data on page load
+    // Bind events and load data on page load
     document.addEventListener('DOMContentLoaded', () => {
+        const runBtn = document.getElementById('runTaxCalcBtn');
+        if (runBtn) runBtn.addEventListener('click', runTaxCalculation);
+        const cascadeBtn = document.getElementById('runCascadeBtn');
+        if (cascadeBtn) cascadeBtn.addEventListener('click', runCascadeCalculation);
+        const uploadBtn = document.getElementById('uploadCsvBtn');
+        if (uploadBtn) uploadBtn.addEventListener('click', uploadCSV);
+        const fileInput = document.getElementById('csvFileInput');
+        if (fileInput) fileInput.addEventListener('change', handleFileUpload);
+
         loadReports();
         loadGainsLossesChart();
-        checkStatus();
-    });
+        checkStatus();        _bindReportDownloads();    });
 </script>
 {% endblock %}

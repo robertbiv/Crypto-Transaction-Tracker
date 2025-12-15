@@ -517,7 +517,7 @@
                     <!-- Wallets will be loaded here -->
                 </div>
                 
-                <button class="btn btn-add btn-small" onclick="addWallet()">
+                <button id="addWalletBtn" class="btn btn-add btn-small">
                     <span class="material-icons" style="vertical-align: middle; font-size: 16px;">add</span>
                     Add Wallet
                 </button>
@@ -936,11 +936,18 @@
                     walletDiv.innerHTML = `
                         <input type="text" class="form-input small" value="${currency}" placeholder="Currency (e.g., BTC, ETH)" data-currency="${currency}" data-index="${index}">
                         <input type="text" class="form-input" value="${address}" placeholder="Wallet Address" data-address="${currency}" data-index="${index}">
-                        <button class="btn btn-remove btn-small" onclick="removeWallet('${currency}', ${index})">Remove</button>
+                        <button class="btn btn-remove btn-small wallet-remove-btn" data-currency="${currency}" data-index="${index}">Remove</button>
                     `;
                     container.appendChild(walletDiv);
                 });
             }
+            
+            // Bind remove buttons
+            container.querySelectorAll('.wallet-remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    removeWallet(btn.dataset.currency, parseInt(btn.dataset.index));
+                });
+            });
             
             if (Object.keys(window.wallets).length === 0) {
                 container.innerHTML = '<p class="step-description">No wallets added yet. Click "Add Wallet" to add one.</p>';
@@ -1073,8 +1080,12 @@
             }
         }
         
-        // Initialize
-        updateProgress();
+        // Bind events on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const addBtn = document.getElementById('addWalletBtn');
+            if (addBtn) addBtn.addEventListener('click', addWallet);
+            updateProgress();
+        });
     </script>
 </body>
 </html>

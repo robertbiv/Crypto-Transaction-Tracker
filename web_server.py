@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives import hashes
 import bcrypt
 import jwt
 import Crypto_Tax_Engine as tax_app  # Import for status updates
+from Crypto_Tax_Engine import DatabaseManager, Ingestor  # For unified CSV ingestion
 
 # Configuration paths - avoid importing full engine to reduce dependencies
 BASE_DIR = Path(__file__).parent
@@ -397,6 +398,38 @@ def get_db_connection():
     conn = sqlite3.connect(str(DB_FILE))
     conn.row_factory = sqlite3.Row
     return conn
+
+def _ingest_csv_with_engine(saved_path: Path):
+    """Use the engine's Ingestor to process a single CSV file into trades and archive it.
+    Returns a summary dict with total_rows and new_trades.
+    """
+    # Count CSV rows (excluding header) for reporting
+    total_rows = 0
+    try:
+        with open(saved_path, 'r', encoding='utf-8-sig', newline='') as f:
+            reader = csv.DictReader(f)
+            for _ in reader:
+                total_rows += 1
+    except Exception:
+        total_rows = 0
+
+    db = DatabaseManager()
+    try:
+        before = db.cursor.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+        ing = Ingestor(db)
+        batch = f"CSV_{saved_path.name}_{datetime.now().strftime('%Y%m%d')}"
+        # Process and archive using engine logic
+        ing._proc_csv_smart(saved_path, batch)
+        ing._archive(saved_path)
+        db.commit()
+        after = db.cursor.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+        delta = max(0, int(after) - int(before))
+        return { 'total_rows': total_rows, 'new_trades': delta }
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 def init_db():
     """Initialize database tables"""
@@ -810,6 +843,31 @@ def api_get_transactions():
         print(f"Error getting transactions: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/transactions/template', methods=['GET'])
+@login_required
+@web_security_required
+def api_transactions_template():
+    """Serve a CSV template for transaction uploads (unified with ingestor headers)."""
+    try:
+        # Provide commonly recognized ingestor headers
+        headers = [
+            'date','type','received_coin','received_amount','sent_coin','sent_amount','price_usd','fee','fee_coin','destination','source'
+        ]
+        sample_rows = [
+            ['2024-01-01T12:00:00Z','trade','BTC','0.001','','','42000','0','','','MANUAL'],
+            ['2024-01-02T08:00:00Z','staking','ETH','0.01','','','0','0','','','MANUAL']
+        ]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(headers)
+        for r in sample_rows:
+            writer.writerow(r)
+        csv_bytes = io.BytesIO(buf.getvalue().encode('utf-8'))
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return send_file(csv_bytes, mimetype='text/csv', as_attachment=True, download_name=f'transactions_template_{ts}.csv')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/transactions', methods=['POST'])
 @login_required
 @web_security_required
@@ -871,6 +929,37 @@ def api_create_transaction():
         print(f"Error creating transaction: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/transactions/upload', methods=['POST'])
+@login_required
+@web_security_required
+def api_upload_transactions():
+    """Upload a CSV file and ingest via engine for accurate, unified parsing."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        file = request.files['file']
+        if not file or file.filename.strip() == '':
+            return jsonify({'error': 'Empty filename'}), 400
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({'error': 'Only .csv files are accepted'}), 400
+
+        filename = secure_filename(file.filename)
+        saved_path = UPLOAD_FOLDER / filename
+        file.save(str(saved_path))
+
+        summary = _ingest_csv_with_engine(saved_path)
+        try:
+            tax_app.mark_data_changed()
+        except Exception:
+            pass
+
+        return jsonify({
+            'success': True,
+            'total_rows': summary.get('total_rows', 0),
+            'new_trades': summary.get('new_trades', 0)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 @app.route('/api/transactions/<transaction_id>', methods=['PUT'])
 @login_required
 @web_security_required
@@ -1268,34 +1357,32 @@ def api_get_stats():
 @login_required
 @web_security_required
 def api_upload_csv():
-    """Upload CSV files"""
+    """Upload CSV and ingest via engine (unified with Transactions upload)."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
-    
     file = request.files['file']
-    
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
-    
-    if not file.filename.endswith('.csv'):
+    if not file.filename.lower().endswith('.csv'):
         return jsonify({'error': 'Only CSV files are allowed'}), 400
-    
     try:
         filename = secure_filename(file.filename)
-        filepath = UPLOAD_FOLDER / filename
-        file.save(str(filepath))
-        
-        # Mark data as changed
-        tax_app.mark_data_changed()
-        
+        saved_path = UPLOAD_FOLDER / filename
+        file.save(str(saved_path))
+
+        summary = _ingest_csv_with_engine(saved_path)
+        try:
+            tax_app.mark_data_changed()
+        except Exception:
+            pass
+
         result = {
             'success': True,
-            'message': f'File {filename} uploaded successfully',
-            'filename': filename
+            'message': f"Imported {summary.get('new_trades', 0)} trades from {filename} (rows: {summary.get('total_rows', 0)})",
+            'filename': filename,
+            'new_trades': summary.get('new_trades', 0),
+            'total_rows': summary.get('total_rows', 0)
         }
-        
-        # encrypted_response = encrypt_data(result)
-        # return jsonify({'data': encrypted_response})
         return jsonify({'data': json.dumps(result)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
