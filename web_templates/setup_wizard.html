@@ -921,6 +921,7 @@
                                 <label class="form-label">${key.toUpperCase()}</label>
                                 ${fields.map(field => `
                                     <input type="text" 
+                                           id="wizard-api-${key}-${field}"
                                            class="form-input" 
                                            style="margin-bottom: 8px;"
                                            placeholder="${field}" 
@@ -928,6 +929,10 @@
                                            data-field="${field}"
                                            value="${keyData[field] || ''}">
                                 `).join('')}
+                                <button class="btn btn-secondary" onclick="testWizardApiKey('${key}')" style="margin-bottom: 8px;">
+                                    Test Connection
+                                </button>
+                                <div id="wizard-test-result-${key}" style="margin-bottom: 8px;"></div>
                             `;
                             categoryDiv.appendChild(keyDiv);
                         });
@@ -987,6 +992,51 @@
             }
         }
         
+        async function testWizardApiKey(exchange) {
+            const resultDiv = document.getElementById('wizard-test-result-' + exchange);
+            const apiKeyInput = document.getElementById('wizard-api-' + exchange + '-apiKey');
+            const secretInput = document.getElementById('wizard-api-' + exchange + '-secret');
+            
+            if (!apiKeyInput || !secretInput) {
+                resultDiv.innerHTML = '<p style="color: var(--md-sys-color-error); font-size: 14px;">Could not find API key fields</p>';
+                return;
+            }
+            
+            const apiKey = apiKeyInput.value.trim();
+            const secret = secretInput.value.trim();
+            
+            if (!apiKey || !secret) {
+                resultDiv.innerHTML = '<p style="color: var(--md-sys-color-error); font-size: 14px;">Please enter both API key and secret</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant); font-size: 14px;">Testing...</p>';
+            
+            try {
+                const response = await fetch('/api/api-keys/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        exchange: exchange,
+                        apiKey: apiKey,
+                        secret: secret
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: ${error.message}</p>`;
+            }
+        }
+        
         function renderWallets() {
             const container = document.getElementById('walletsContainer');
             container.innerHTML = '';
@@ -999,8 +1049,10 @@
                     walletDiv.className = 'wallet-entry';
                     walletDiv.innerHTML = `
                         <input type="text" class="form-input small" value="${currency}" placeholder="Currency (e.g., BTC, ETH)" data-currency="${currency}" data-index="${index}">
-                        <input type="text" class="form-input" value="${address}" placeholder="Wallet Address" data-address="${currency}" data-index="${index}">
+                        <input type="text" class="form-input" id="wizard-wallet-${currency}-${index}" value="${address}" placeholder="Wallet Address" data-address="${currency}" data-index="${index}">
+                        <button class="btn btn-secondary btn-small" onclick="testWizardWallet('${currency}', ${index})" style="margin-right: 8px;">Test</button>
                         <button class="btn btn-remove btn-small wallet-remove-btn" data-currency="${currency}" data-index="${index}">Remove</button>
+                        <div id="wizard-wallet-test-${currency}-${index}" style="grid-column: 2 / -1; margin-top: 4px;"></div>
                     `;
                     container.appendChild(walletDiv);
                 });
@@ -1035,6 +1087,42 @@
                     inputs[inputs.length - 1].focus();
                 }
             }, 100);
+        }
+        
+        async function testWizardWallet(currency, index) {
+            const resultDiv = document.getElementById('wizard-wallet-test-' + currency + '-' + index);
+            const addressInput = document.getElementById('wizard-wallet-' + currency + '-' + index);
+            const address = addressInput.value.trim();
+            
+            if (!address) {
+                resultDiv.innerHTML = '<p style="color: var(--md-sys-color-error); font-size: 14px;">Please enter a wallet address</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant); font-size: 14px;">Validating format...</p>';
+            
+            try {
+                const response = await fetch('/api/wallets/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        blockchain: currency,
+                        address: address
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: ${error.message}</p>`;
+            }
         }
         
         function removeWallet(currency, index) {

@@ -393,10 +393,14 @@
                     html += `
                         <div class="wallet-entry">
                             <input type="text" class="form-input" placeholder="Currency (e.g., BTC, ETH)" value="${currency}" readonly>
-                            <input type="text" class="form-input" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}">
+                            <input type="text" class="form-input" id="wallet-${currency}-${index}" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}">
+                            <button class="btn btn-secondary" onclick="testWalletAddress('${currency}', ${index})" style="margin-right: 8px;">
+                                Test
+                            </button>
                             <button class="btn btn-secondary remove-wallet-btn" data-currency="${currency}" data-index="${index}">
                                 <span class="material-icons" style="font-size: 16px;">delete</span>
                             </button>
+                            <div id="wallet-test-result-${currency}-${index}" style="margin-top: 4px; grid-column: 2 / -1;"></div>
                         </div>
                     `;
                 });
@@ -487,14 +491,18 @@
                     <h4>${exchange.charAt(0).toUpperCase() + exchange.slice(1)}</h4>
                     <div class="form-group">
                         <label class="form-label">API Key</label>
-                        <input type="text" class="form-input" data-exchange="${exchange}" data-field="apiKey" 
+                        <input type="text" class="form-input" id="apikey-${exchange}-key" data-exchange="${exchange}" data-field="apiKey" 
                                value="${keys.apiKey || ''}" placeholder="Enter API key or leave blank">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Secret</label>
-                        <input type="password" class="form-input" data-exchange="${exchange}" data-field="secret" 
+                        <input type="password" class="form-input" id="apikey-${exchange}-secret" data-exchange="${exchange}" data-field="secret" 
                                value="${keys.secret || ''}" placeholder="Enter secret or leave blank">
                     </div>
+                    <button class="btn btn-secondary" style="margin-bottom: 16px;" onclick="testApiKey('${exchange}')">
+                        Test Connection
+                    </button>
+                    <div id="test-result-${exchange}" style="margin-top: 8px;"></div>
                 </div>
             `;
         }
@@ -528,6 +536,84 @@
             await loadApiKeys(); // Reload to show masked values
         } catch (error) {
             showAlert('Failed to save API keys: ' + error.message, 'error');
+        }
+    }
+    
+    async function testApiKey(exchange) {
+        const resultDiv = document.getElementById('test-result-' + exchange);
+        const apiKeyInput = document.getElementById('apikey-' + exchange + '-key');
+        const secretInput = document.getElementById('apikey-' + exchange + '-secret');
+        
+        const apiKey = apiKeyInput.value.trim();
+        const secret = secretInput.value.trim();
+        
+        if (!apiKey || !secret || apiKey.includes('*')) {
+            resultDiv.innerHTML = '<p style="color: var(--md-sys-color-error); font-size: 14px;">Please enter both API key and secret (unmasked values)</p>';
+            return;
+        }
+        
+        resultDiv.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant); font-size: 14px;">Testing...</p>';
+        
+        try {
+            const response = await fetch('/api/api-keys/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.getElementById('csrf_token').value
+                },
+                body: JSON.stringify({
+                    exchange: exchange,
+                    apiKey: apiKey,
+                    secret: secret
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: ${error.message}</p>`;
+        }
+    }
+    
+    async function testWalletAddress(currency, index) {
+        const resultDiv = document.getElementById('wallet-test-result-' + currency + '-' + index);
+        const addressInput = document.getElementById('wallet-' + currency + '-' + index);
+        const address = addressInput.value.trim();
+        
+        if (!address) {
+            resultDiv.innerHTML = '<p style="color: var(--md-sys-color-error); font-size: 14px;">Please enter a wallet address</p>';
+            return;
+        }
+        
+        resultDiv.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant); font-size: 14px;">Validating format...</p>';
+        
+        try {
+            const response = await fetch('/api/wallets/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.getElementById('csrf_token').value
+                },
+                body: JSON.stringify({
+                    blockchain: currency,
+                    address: address
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: ${error.message}</p>`;
         }
     }
     
