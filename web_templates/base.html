@@ -276,6 +276,64 @@
             color: var(--md-sys-color-error);
             margin-bottom: 16px;
         }
+        
+        .progress-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        
+        .progress-content {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            min-width: 400px;
+            max-width: 600px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        
+        .progress-title {
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--md-sys-color-on-surface);
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: var(--md-sys-color-surface-variant);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--md-sys-color-primary), var(--md-sys-color-tertiary));
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+        
+        .progress-message {
+            color: var(--md-sys-color-on-surface-variant);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        
+        .progress-percentage {
+            color: var(--md-sys-color-primary);
+            font-weight: 500;
+            font-size: 1.1rem;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -317,6 +375,18 @@
                 <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 8px;">refresh</span>
                 Retry Connection
             </button>
+        </div>
+    </div>
+    
+    <!-- Progress Modal -->
+    <div id="progress-modal" class="progress-modal">
+        <div class="progress-content">
+            <h3 class="progress-title" id="progress-title">Processing...</h3>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div class="progress-message" id="progress-message">Initializing...</div>
+            <div class="progress-percentage" id="progress-percentage">0%</div>
         </div>
     </div>
     
@@ -552,6 +622,77 @@
                 container.insertBefore(alertDiv, container.firstChild);
             }
         }
+        
+        // Progress tracking
+        class ProgressTracker {
+            constructor() {
+                this.modal = document.getElementById('progress-modal');
+                this.title = document.getElementById('progress-title');
+                this.bar = document.getElementById('progress-bar');
+                this.message = document.getElementById('progress-message');
+                this.percentage = document.getElementById('progress-percentage');
+                this.pollInterval = null;
+                this.taskId = null;
+            }
+            
+            show(title = 'Processing...') {
+                this.title.textContent = title;
+                this.updateProgress(0, 'Initializing...');
+                this.modal.style.display = 'flex';
+            }
+            
+            hide() {
+                this.modal.style.display = 'none';
+                if (this.pollInterval) {
+                    clearInterval(this.pollInterval);
+                    this.pollInterval = null;
+                }
+                this.taskId = null;
+            }
+            
+            updateProgress(progress, message = '') {
+                this.bar.style.width = progress + '%';
+                this.percentage.textContent = Math.round(progress) + '%';
+                if (message) {
+                    this.message.textContent = message;
+                }
+            }
+            
+            async trackTask(taskId, title = 'Processing...') {
+                this.taskId = taskId;
+                this.show(title);
+                
+                // Poll progress endpoint
+                this.pollInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/progress/${taskId}`);
+                        const data = await response.json();
+                        
+                        this.updateProgress(data.progress || 0, data.message || '');
+                        
+                        if (data.status === 'completed') {
+                            this.updateProgress(100, 'Completed successfully!');
+                            setTimeout(() => {
+                                this.hide();
+                                showAlert('Operation completed successfully!', 'success');
+                                // Reload page to show updated data
+                                window.location.reload();
+                            }, 1500);
+                        } else if (data.status === 'error') {
+                            this.hide();
+                            showAlert('Error: ' + data.message, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Progress polling error:', error);
+                        this.hide();
+                        showAlert('Failed to track progress: ' + error.message, 'error');
+                    }
+                }, 1000); // Poll every second
+            }
+        }
+        
+        // Global progress tracker instance
+        const progressTracker = new ProgressTracker();
     </script>
     
     {% block extra_js %}{% endblock %}
