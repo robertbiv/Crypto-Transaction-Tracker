@@ -18,6 +18,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+import filelock
 
 # ==========================================
 # CONSTANTS
@@ -54,7 +55,11 @@ DB_KEY_FILE = BASE_DIR / '.db_key'  # Encrypted database key (hidden file)
 DB_SALT_FILE = BASE_DIR / '.db_salt'  # Salt for key derivation (hidden file)
 CURRENT_YEAR_OVERRIDE = None
 KEYS_FILE = BASE_DIR / 'api_keys.json'
+API_KEYS_ENCRYPTED_FILE = BASE_DIR / 'api_keys_encrypted.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
+WALLETS_ENCRYPTED_FILE = BASE_DIR / 'wallets_encrypted.json'
+API_KEY_ENCRYPTION_FILE = BASE_DIR / 'api_key_encryption.key'
+WEB_ENCRYPTION_KEY_FILE = BASE_DIR / 'web_encryption.key'
 CONFIG_FILE = BASE_DIR / 'config.json'
 STATUS_FILE = BASE_DIR / 'status.json'
 
@@ -95,6 +100,262 @@ def set_run_context(context: str):
 set_run_context(RUN_CONTEXT)
 
 class ApiAuthError(Exception): pass
+
+
+# ==========================================
+# ENCRYPTED STORAGE HELPERS (API keys, wallets)
+# ==========================================
+def _ensure_parent(path: Path):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+
+def _get_or_create_key(path: Path):
+    if path.exists():
+        try:
+            return path.read_bytes()
+        except Exception:
+            pass
+    key = Fernet.generate_key()
+    _ensure_parent(path)
+    try:
+        path.write_bytes(key)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Windows: warn user to restrict ACLs manually
+            logger.warning(f"[SECURITY] Key file {path.name} created. Please restrict file permissions manually on Windows.")
+    except Exception:
+        pass
+    return key
+
+
+def _api_keys_encrypted_path():
+    return API_KEYS_ENCRYPTED_FILE
+
+
+def _wallets_encrypted_path():
+    return WALLETS_ENCRYPTED_FILE
+
+
+def get_api_key_cipher():
+    """Get Fernet cipher for API keys, derived from DB password if available."""
+    # Try password-derived key first
+    if DB_SALT_FILE.exists():
+        try:
+            with open(DB_SALT_FILE, 'rb') as f:
+                salt = f.read()
+            # Try to get password from environment or use fallback
+            # In production, password comes from web login; CLI may need env var
+            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            if password:
+                key = DatabaseEncryption.derive_fernet_key(password, salt, 'api_keys')
+                return Fernet(key)
+        except Exception:
+            pass
+    # Fallback to file-based key for backward compatibility
+    return Fernet(_get_or_create_key(API_KEY_ENCRYPTION_FILE))
+
+
+def get_wallet_cipher():
+    """Get Fernet cipher for wallets, derived from DB password if available."""
+    # Try password-derived key first
+    if DB_SALT_FILE.exists():
+        try:
+            with open(DB_SALT_FILE, 'rb') as f:
+                salt = f.read()
+            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            if password:
+                key = DatabaseEncryption.derive_fernet_key(password, salt, 'wallets')
+                return Fernet(key)
+        except Exception:
+            pass
+    # Fallback to file-based key for backward compatibility
+    return Fernet(_get_or_create_key(WEB_ENCRYPTION_KEY_FILE))
+
+
+def encrypt_api_keys(data):
+    try:
+        json_data = json.dumps(data)
+        encrypted = get_api_key_cipher().encrypt(json_data.encode())
+        return base64.b64encode(encrypted).decode()
+    except Exception:
+        return None
+
+
+def decrypt_api_keys(encrypted_data):
+    try:
+        encrypted_bytes = base64.b64decode(encrypted_data)
+        decrypted = get_api_key_cipher().decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode())
+    except Exception:
+        return None
+
+
+def encrypt_wallets(data):
+    try:
+        payload = json.dumps(data) if isinstance(data, (dict, list)) else data
+        if isinstance(payload, str):
+            payload = payload.encode('utf-8')
+        encrypted = get_wallet_cipher().encrypt(payload)
+        return base64.b64encode(encrypted).decode()
+    except Exception:
+        return None
+
+
+def decrypt_wallets(encrypted_data):
+    try:
+        encrypted_bytes = base64.b64decode(encrypted_data)
+        decrypted = get_wallet_cipher().decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode('utf-8'))
+    except Exception:
+        return None
+
+
+def load_api_keys_file():
+    candidates = []
+    for path in [_api_keys_encrypted_path(), API_KEYS_ENCRYPTED_FILE, KEYS_FILE]:
+        if path not in candidates:
+            candidates.append(path)
+
+    legacy = None
+    decrypt_failed = False
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            with open(path, 'r') as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and 'ciphertext' in raw:
+                data = decrypt_api_keys(raw['ciphertext'])
+                if data is not None:
+                    return data
+                else:
+                    logger.error(f"[SECURITY] Failed to decrypt API keys from {path}. Ciphertext may be corrupted.")
+                    decrypt_failed = True
+            if isinstance(raw, str):
+                data = decrypt_api_keys(raw)
+                if data is not None:
+                    return data
+                else:
+                    logger.error(f"[SECURITY] Failed to decrypt API keys from {path}. Ciphertext may be corrupted.")
+                    decrypt_failed = True
+            if isinstance(raw, dict) and 'ciphertext' not in raw:
+                legacy = raw
+        except Exception as e:
+            logger.warning(f"Failed to read API keys from {path}: {e}")
+            continue
+
+    if decrypt_failed:
+        raise ValueError("API keys file exists but decryption failed. Check encryption keys and file integrity.")
+
+    if legacy is not None:
+        try:
+            logger.info("Migrating legacy plaintext API keys to encrypted storage")
+            save_api_keys_file(legacy)
+        except Exception as e:
+            logger.error(f"Failed to migrate API keys: {e}")
+            pass
+        return legacy
+    return {}
+
+
+def save_api_keys_file(data):
+    ciphertext = encrypt_api_keys(data)
+    if not ciphertext:
+        raise ValueError("Failed to encrypt API keys. Cannot save.")
+    target = _api_keys_encrypted_path()
+    _ensure_parent(target)
+    lock = filelock.FileLock(str(target) + '.lock', timeout=10)
+    try:
+        with lock:
+            with open(target, 'w') as f:
+                json.dump({'ciphertext': ciphertext}, f, indent=4)
+    except filelock.Timeout:
+        logger.error(f"Failed to acquire lock for {target}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save API keys: {e}")
+        raise
+    try:
+        if KEYS_FILE.exists():
+            KEYS_FILE.unlink()
+    except Exception:
+        pass
+
+
+def load_wallets_file():
+    candidates = []
+    for path in [_wallets_encrypted_path(), WALLETS_ENCRYPTED_FILE, WALLETS_FILE]:
+        if path not in candidates:
+            candidates.append(path)
+
+    legacy = None
+    decrypt_failed = False
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            with open(path, 'r') as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and 'ciphertext' in raw:
+                data = decrypt_wallets(raw['ciphertext'])
+                if data is not None:
+                    return data
+                else:
+                    logger.error(f"[SECURITY] Failed to decrypt wallets from {path}. Ciphertext may be corrupted.")
+                    decrypt_failed = True
+            if isinstance(raw, str):
+                data = decrypt_wallets(raw)
+                if data is not None:
+                    return data
+                else:
+                    logger.error(f"[SECURITY] Failed to decrypt wallets from {path}. Ciphertext may be corrupted.")
+                    decrypt_failed = True
+            if isinstance(raw, dict) and 'ciphertext' not in raw:
+                legacy = raw
+        except Exception as e:
+            logger.warning(f"Failed to read wallets from {path}: {e}")
+            continue
+
+    if decrypt_failed:
+        raise ValueError("Wallets file exists but decryption failed. Check encryption keys and file integrity.")
+
+    if legacy is not None:
+        try:
+            logger.info("Migrating legacy plaintext wallets to encrypted storage")
+            save_wallets_file(legacy)
+        except Exception as e:
+            logger.error(f"Failed to migrate wallets: {e}")
+            pass
+        return legacy
+    return {}
+
+
+def save_wallets_file(data):
+    ciphertext = encrypt_wallets(data)
+    if not ciphertext:
+        raise ValueError("Failed to encrypt wallets. Cannot save.")
+    target = _wallets_encrypted_path()
+    _ensure_parent(target)
+    lock = filelock.FileLock(str(target) + '.lock', timeout=10)
+    try:
+        with lock:
+            with open(target, 'w') as f:
+                json.dump({'ciphertext': ciphertext}, f, indent=4)
+    except filelock.Timeout:
+        logger.error(f"Failed to acquire lock for {target}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save wallets: {e}")
+        raise
+    try:
+        if WALLETS_FILE.exists():
+            WALLETS_FILE.unlink()
+    except Exception:
+        pass
 
 def initialize_folders():
     for d in [INPUT_DIR, ARCHIVE_DIR, OUTPUT_DIR, LOG_DIR]:
@@ -256,18 +517,22 @@ class DatabaseEncryption:
     """
     
     @staticmethod
-    def derive_key_from_password(password: str, salt: bytes = None):
+    def derive_key_from_password(password: str, salt: bytes = None, context: str = ""):
         """Derive encryption key from password using PBKDF2.
         
         Args:
             password: User password
             salt: Optional salt. If None, generates random salt.
+            context: Optional context string to derive different keys from same password
             
         Returns:
             (key, salt) tuple where key is base64-encoded Fernet key
         """
         if salt is None:
             salt = os.urandom(DB_ENCRYPTION_SALT_LENGTH)
+        
+        # Mix context into password to derive different keys
+        password_with_context = f"{password}::{context}" if context else password
         
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -276,9 +541,15 @@ class DatabaseEncryption:
             iterations=DB_ENCRYPTION_ITERATIONS,
         )
         
-        derived = kdf.derive(password.encode())
+        derived = kdf.derive(password_with_context.encode())
         fernet_key = base64.urlsafe_b64encode(derived)
         return fernet_key, salt
+    
+    @staticmethod
+    def derive_fernet_key(password: str, salt: bytes, context: str):
+        """Derive a Fernet key from password for a specific context (e.g., 'api_keys', 'wallets')."""
+        key, _ = DatabaseEncryption.derive_key_from_password(password, salt, context)
+        return key
     
     @staticmethod
     def generate_random_key():
@@ -286,17 +557,17 @@ class DatabaseEncryption:
         return Fernet.generate_key()
     
     @staticmethod
-    def encrypt_key(db_key: bytes, password: str, salt: bytes = None):
+    def encrypt_key(db_key: bytes, password: str, salt: bytes = None, context: str = ""):
         """Encrypt database key with password-derived key."""
-        password_key, used_salt = DatabaseEncryption.derive_key_from_password(password, salt)
+        password_key, used_salt = DatabaseEncryption.derive_key_from_password(password, salt, context)
         cipher = Fernet(password_key)
         encrypted_key = cipher.encrypt(db_key)
         return encrypted_key, used_salt
     
     @staticmethod
-    def decrypt_key(encrypted_key: bytes, password: str, salt: bytes):
+    def decrypt_key(encrypted_key: bytes, password: str, salt: bytes, context: str = ""):
         """Decrypt database key using password."""
-        password_key, _ = DatabaseEncryption.derive_key_from_password(password, salt)
+        password_key, _ = DatabaseEncryption.derive_key_from_password(password, salt, context)
         cipher = Fernet(password_key)
         return cipher.decrypt(encrypted_key)
     
@@ -707,8 +978,9 @@ class Ingestor:
 
     def run_api_sync(self):
         logger.info("--- 2. SYNCING APIS ---")
-        if not KEYS_FILE.exists(): return
-        with open(KEYS_FILE) as f: keys = json.load(f)
+        keys = load_api_keys_file()
+        if not keys:
+            return
         self.db.create_safety_backup()
         try:
             for name, creds in keys.items():
@@ -737,11 +1009,11 @@ class StakeTaxCSVManager:
         # Implementation of StakeTax CSV logic (same as previous, omitted for brevity but required)
         pass
     def _get_wallets_from_file(self):
-        if not WALLETS_FILE.exists(): return []
+        raw = load_wallets_file()
+        if not raw:
+            return []
+        addrs = []
         try:
-            with open(WALLETS_FILE) as f:
-                raw = json.load(f)
-            addrs = []
             for _, v in raw.items():
                 if isinstance(v, dict) and 'addresses' in v:
                     addrs.extend(v['addresses'])
@@ -750,7 +1022,7 @@ class StakeTaxCSVManager:
                 elif isinstance(v, str):
                     addrs.append(v)
             return addrs
-        except:
+        except Exception:
             return []
 
 # ==========================================
@@ -810,34 +1082,30 @@ class WalletAuditor:
         logger.info("RUNNING AUDIT: Wallet address balances cross-check")
         # Respect throttling even if external checks are mocked
         try:
-            if GLOBAL_CONFIG.get('performance', {}).get('respect_free_tier_limits', False) and WALLETS_FILE.exists():
-                with open(WALLETS_FILE) as f:
-                    raw = json.load(f)
-                # Sleep once per address to simulate throttling
-                for _, v in raw.items():
+            wallets = load_wallets_file()
+            if GLOBAL_CONFIG.get('performance', {}).get('respect_free_tier_limits', False) and wallets:
+                for _, v in wallets.items():
                     addrs = v.get('addresses') if isinstance(v, dict) else v
                     if not addrs: continue
                     for _ in (addrs if isinstance(addrs, list) else [addrs]):
                         time.sleep(0.1)
-            if KEYS_FILE.exists():
-                with open(KEYS_FILE) as f:
-                    keys = json.load(f)
-                # Simulate network retries when any key present
-                if keys:
-                    for _ in range(5):
-                        try:
-                            requests.get("https://api.moralis.io/health", timeout=1)
-                        except:
-                            time.sleep(0.05)
+
+            keys = load_api_keys_file()
+            if keys:
+                for _ in range(5):
+                    try:
+                        requests.get("https://api.moralis.io/health", timeout=1)
+                    except:
+                        time.sleep(0.05)
                 bc_key = keys.get('blockchair', {}).get('apiKey', '')
                 if bc_key:
                     self.check_blockchair(bc_key)
         except:
             pass
     def check_blockchair(self, api_key):
-        if not WALLETS_FILE.exists(): return 0
-        with open(WALLETS_FILE) as f:
-            wallets = json.load(f)
+        wallets = load_wallets_file()
+        if not wallets:
+            return 0
         total_calls = 0
         for chain, data in wallets.items():
             addrs = data.get('addresses') if isinstance(data, dict) else data
@@ -1219,10 +1487,11 @@ if __name__ == "__main__":
     logger.info("--- CRYPTO TAX MASTER (2025 Compliance Edition) ---")
     initialize_folders()
     try:
-        if not KEYS_FILE.exists(): raise ApiAuthError("Missing keys")
+        if not load_api_keys_file(): raise ApiAuthError("Missing keys")
         db = DatabaseManager()
-        Ingestor(db).run_csv_scan()
-        Ingestor(db).run_api_sync()
+        ingestor = Ingestor(db)
+        ingestor.run_csv_scan()
+        ingestor.run_api_sync()
         StakeTaxCSVManager(db).run()
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():

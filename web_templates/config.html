@@ -481,33 +481,90 @@
     function displayApiKeys() {
         const container = document.getElementById('apiKeysContainer');
         
-        let html = '';
-        const exchanges = ['binance', 'binanceus', 'coinbase', 'kraken', 'gemini'];
+        // All available exchanges
+        const allExchanges = [
+            'binance', 'binanceus', 'coinbase', 'kraken', 'gemini', 'bybit', 'kucoin', 
+            'huobi', 'bitfinex', 'bitstamp', 'poloniex', 'upbit', 'bithumb'
+        ];
         
-        for (const exchange of exchanges) {
+        // Find which ones are configured (have values)
+        const configured = allExchanges.filter(exchange => {
             const keys = apiKeysData[exchange] || {};
+            return Object.values(keys).some(v => v && v !== '*****');
+        });
+        
+        const available = allExchanges.filter(e => !configured.includes(e));
+        
+        let html = '';
+        
+        // Add dropdown for unconfigured exchanges
+        if (available.length > 0) {
             html += `
-                <div class="api-key-section">
-                    <h4>${exchange.charAt(0).toUpperCase() + exchange.slice(1)}</h4>
-                    <div class="form-group">
-                        <label class="form-label">API Key</label>
-                        <input type="text" class="form-input" id="apikey-${exchange}-key" data-exchange="${exchange}" data-field="apiKey" 
-                               value="${keys.apiKey || ''}" placeholder="Enter API key or leave blank">
+                <div style="margin-bottom: 24px; padding: 16px; background: var(--md-sys-color-surface-variant); border-radius: 8px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="exchangeDropdown" class="form-input" style="flex: 1; max-width: 300px;">
+                            <option value="">+ Add New Exchange</option>
+                            ${available.map(ex => `<option value="${ex}">${ex.charAt(0).toUpperCase() + ex.slice(1)}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-primary" onclick="addNewExchange()">Add</button>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Secret</label>
-                        <input type="password" class="form-input" id="apikey-${exchange}-secret" data-exchange="${exchange}" data-field="secret" 
-                               value="${keys.secret || ''}" placeholder="Enter secret or leave blank">
-                    </div>
-                    <button class="btn btn-secondary" style="margin-bottom: 16px;" onclick="testApiKey('${exchange}')">
-                        Test Connection
-                    </button>
-                    <div id="test-result-${exchange}" style="margin-top: 8px;"></div>
                 </div>
             `;
         }
         
+        // Display configured exchanges
+        if (configured.length > 0) {
+            html += '<h4 style="margin-bottom: 16px;">Configured Exchanges</h4>';
+            
+            for (const exchange of configured) {
+                const keys = apiKeysData[exchange] || {};
+                html += `
+                    <div class="api-key-section" id="exchange-${exchange}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h4 style="margin: 0;">${exchange.charAt(0).toUpperCase() + exchange.slice(1)}</h4>
+                            <button class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" onclick="removeConfiguredExchange('${exchange}')">Remove</button>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">API Key</label>
+                            <input type="text" class="form-input" id="apikey-${exchange}-key" data-exchange="${exchange}" data-field="apiKey" 
+                                   value="${keys.apiKey || ''}" placeholder="Enter API key (leave blank to skip)">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Secret</label>
+                            <input type="password" class="form-input" id="apikey-${exchange}-secret" data-exchange="${exchange}" data-field="secret" 
+                                   value="${keys.secret || ''}" placeholder="Enter secret (leave blank to skip)">
+                        </div>
+                        <button class="btn btn-secondary" style="margin-bottom: 16px;" onclick="testApiKey('${exchange}')">
+                            Test Connection
+                        </button>
+                        <div id="test-result-${exchange}" style="margin-top: 8px;"></div>
+                    </div>
+                `;
+            }
+        } else {
+            html += '<p style="color: var(--md-sys-color-on-surface-variant);">No API keys configured yet. Add one from the dropdown above.</p>';
+        }
+        
         container.innerHTML = html;
+    }
+    
+    function addNewExchange() {
+        const dropdown = document.getElementById('exchangeDropdown');
+        const exchange = dropdown.value;
+        if (!exchange) return;
+        
+        // Add to apiKeysData
+        if (!apiKeysData[exchange]) {
+            apiKeysData[exchange] = { apiKey: '', secret: '' };
+        }
+        
+        // Refresh display
+        displayApiKeys();
+    }
+    
+    function removeConfiguredExchange(exchange) {
+        delete apiKeysData[exchange];
+        displayApiKeys();
     }
     
     async function saveApiKeys() {
@@ -572,8 +629,10 @@
             
             if (result.success) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
-            } else {
+            } else if (result.error) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: Unknown error</p>`;
             }
         } catch (error) {
             resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: ${error.message}</p>`;
@@ -609,8 +668,10 @@
             
             if (result.success) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
-            } else {
+            } else if (result.error) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+            } else {
+                resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: Unknown error</p>`;
             }
         } catch (error) {
             resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: ${error.message}</p>`;

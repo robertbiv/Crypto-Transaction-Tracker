@@ -37,6 +37,7 @@ import logging
 import threading
 import time as _time
 import tempfile
+import uuid
 import Crypto_Tax_Engine as tax_app  # Import for status updates
 from Crypto_Tax_Engine import DatabaseManager, Ingestor, DatabaseEncryption  # For unified CSV ingestion
 
@@ -52,6 +53,7 @@ CONFIG_FILE = BASE_DIR / 'config.json'
 API_KEYS_FILE = BASE_DIR / 'api_keys.json'
 API_KEYS_ENCRYPTED_FILE = BASE_DIR / 'api_keys_encrypted.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
+WALLETS_ENCRYPTED_FILE = BASE_DIR / 'wallets_encrypted.json'
 OUTPUT_DIR = BASE_DIR / 'outputs'
 ENCRYPTION_KEY_FILE = BASE_DIR / 'web_encryption.key'
 API_KEY_ENCRYPTION_FILE = BASE_DIR / 'api_key_encryption.key'
@@ -119,7 +121,22 @@ limiter = Limiter(
 
 # API Key Encryption Functions
 def get_api_key_cipher():
-    """Get or create Fernet cipher for API key encryption"""
+    """Get Fernet cipher for API key encryption, derived from DB password."""
+    # Try password-derived key first (preferred for portability)
+    db_salt_file = BASE_DIR / '.db_salt'
+    if db_salt_file.exists() and app.config.get('DB_ENCRYPTION_KEY'):
+        try:
+            with open(db_salt_file, 'rb') as f:
+                salt = f.read()
+            # Derive key from DB password (stored in session during login)
+            password = session.get('_db_password')
+            if password:
+                key = DatabaseEncryption.derive_fernet_key(password, salt, 'api_keys')
+                return Fernet(key)
+        except Exception:
+            pass
+    
+    # Fallback to file-based key for backward compatibility or when password unavailable
     if not API_KEY_ENCRYPTION_FILE.exists():
         key = Fernet.generate_key()
         with open(API_KEY_ENCRYPTION_FILE, 'wb') as f:
@@ -149,6 +166,204 @@ def decrypt_api_keys(encrypted_data):
     except Exception as e:
         print(f"Decryption error: {e}")
         return None
+
+# Wallet encryption uses the main web encryption key
+def encrypt_wallets(data):
+    try:
+        if isinstance(data, (dict, list)):
+            data = json.dumps(data)
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        
+        # Try password-derived cipher first
+        db_salt_file = BASE_DIR / '.db_salt'
+        if db_salt_file.exists() and app.config.get('DB_ENCRYPTION_KEY'):
+            try:
+                with open(db_salt_file, 'rb') as f:
+                    salt = f.read()
+                password = session.get('_db_password')
+                if password:
+                    key = DatabaseEncryption.derive_fernet_key(password, salt, 'wallets')
+                    cipher = Fernet(key)
+                    encrypted = cipher.encrypt(data)
+                    return base64.b64encode(encrypted).decode()
+            except Exception:
+                pass
+        
+        # Fallback to general cipher_suite
+        encrypted = cipher_suite.encrypt(data)
+        return base64.b64encode(encrypted).decode()
+    except Exception as e:
+        print(f"Wallet encryption error: {e}")
+        return None
+
+def decrypt_wallets(encrypted_data):
+    try:
+        encrypted_bytes = base64.b64decode(encrypted_data)
+        
+        # Try password-derived cipher first
+        db_salt_file = BASE_DIR / '.db_salt'
+        if db_salt_file.exists() and app.config.get('DB_ENCRYPTION_KEY'):
+            try:
+                with open(db_salt_file, 'rb') as f:
+                    salt = f.read()
+                password = session.get('_db_password')
+                if password:
+                    key = DatabaseEncryption.derive_fernet_key(password, salt, 'wallets')
+                    cipher = Fernet(key)
+                    decrypted = cipher.decrypt(encrypted_bytes)
+                    return json.loads(decrypted.decode('utf-8'))
+            except Exception:
+                pass
+        
+        # Fallback to general cipher_suite
+        decrypted = cipher_suite.decrypt(encrypted_bytes)
+        return json.loads(decrypted.decode('utf-8'))
+    except Exception as e:
+        print(f"Wallet decryption error: {e}")
+        return None
+
+# ------------------------------------------
+# Unified loaders/savers with migration
+# ------------------------------------------
+def load_api_keys_file():
+    """Load API keys from encrypted file; fallback to plain JSON for migration."""
+    candidates = []
+    for candidate in [API_KEYS_ENCRYPTED_FILE, API_KEYS_FILE]:
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    legacy = None
+    decrypt_failed = False
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            with open(path, 'r') as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and 'ciphertext' in raw:
+                decrypted = decrypt_api_keys(raw['ciphertext'])
+                if decrypted is not None:
+                    return decrypted
+                else:
+                    print(f"[SECURITY ERROR] Failed to decrypt API keys from {path}. Ciphertext may be corrupted.")
+                    audit_log('DECRYPT_FAILED', f'API keys decryption failed: {path}')
+                    decrypt_failed = True
+            if isinstance(raw, str):
+                decrypted = decrypt_api_keys(raw)
+                if decrypted is not None:
+                    return decrypted
+                else:
+                    print(f"[SECURITY ERROR] Failed to decrypt API keys from {path}. Ciphertext may be corrupted.")
+                    audit_log('DECRYPT_FAILED', f'API keys decryption failed: {path}')
+                    decrypt_failed = True
+            if isinstance(raw, dict) and 'ciphertext' not in raw:
+                legacy = raw
+        except Exception as e:
+            print(f"Failed to load api keys from {path}: {e}")
+
+    if decrypt_failed:
+        raise ValueError("API keys file exists but decryption failed. Check encryption keys and file integrity.")
+
+    if legacy is not None:
+        try:
+            print("[MIGRATION] Migrating legacy plaintext API keys to encrypted storage")
+            audit_log('MIGRATION', 'API keys migrated to encrypted storage')
+            save_api_keys_file(legacy)
+        except Exception as e:
+            print(f"Failed to migrate api keys to encrypted storage: {e}")
+        return legacy
+    return {}
+
+def save_api_keys_file(data):
+    """Encrypt and save API keys to disk (removes legacy plain file)."""
+    ciphertext = encrypt_api_keys(data)
+    if not ciphertext:
+        raise ValueError("Failed to encrypt API keys. Cannot save.")
+    target = API_KEYS_ENCRYPTED_FILE
+    lock = filelock.FileLock(str(target) + '.lock', timeout=10)
+    try:
+        with lock:
+            with open(target, 'w') as f:
+                json.dump({'ciphertext': ciphertext}, f, indent=4)
+    except filelock.Timeout:
+        print(f"[ERROR] Failed to acquire lock for {target}")
+        raise
+    # Remove legacy plain file to ensure at-rest encryption
+    try:
+        if API_KEYS_FILE.exists():
+            API_KEYS_FILE.unlink()
+    except OSError:
+        pass
+
+def load_wallets_file():
+    """Load wallets from encrypted file; fallback to plain JSON for migration."""
+    candidates = []
+    for candidate in [WALLETS_ENCRYPTED_FILE, WALLETS_FILE]:
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    legacy = None
+    decrypt_failed = False
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            with open(path, 'r') as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and 'ciphertext' in raw:
+                decrypted = decrypt_wallets(raw['ciphertext'])
+                if decrypted is not None:
+                    return decrypted
+                else:
+                    print(f"[SECURITY ERROR] Failed to decrypt wallets from {path}. Ciphertext may be corrupted.")
+                    audit_log('DECRYPT_FAILED', f'Wallets decryption failed: {path}')
+                    decrypt_failed = True
+            if isinstance(raw, str):
+                decrypted = decrypt_wallets(raw)
+                if decrypted is not None:
+                    return decrypted
+                else:
+                    print(f"[SECURITY ERROR] Failed to decrypt wallets from {path}. Ciphertext may be corrupted.")
+                    audit_log('DECRYPT_FAILED', f'Wallets decryption failed: {path}')
+                    decrypt_failed = True
+            if isinstance(raw, dict) and 'ciphertext' not in raw:
+                legacy = raw
+        except Exception as e:
+            print(f"Failed to load wallets from {path}: {e}")
+
+    if decrypt_failed:
+        raise ValueError("Wallets file exists but decryption failed. Check encryption keys and file integrity.")
+
+    if legacy is not None:
+        try:
+            print("[MIGRATION] Migrating legacy plaintext wallets to encrypted storage")
+            audit_log('MIGRATION', 'Wallets migrated to encrypted storage')
+            save_wallets_file(legacy)
+        except Exception as e:
+            print(f"Failed to migrate wallets to encrypted storage: {e}")
+        return legacy
+    return {}
+
+def save_wallets_file(data):
+    """Encrypt and save wallets to disk (removes legacy plain file)."""
+    ciphertext = encrypt_wallets(data)
+    if not ciphertext:
+        raise ValueError("Failed to encrypt wallets. Cannot save.")
+    target = WALLETS_ENCRYPTED_FILE
+    lock = filelock.FileLock(str(target) + '.lock', timeout=10)
+    try:
+        with lock:
+            with open(target, 'w') as f:
+                json.dump({'ciphertext': ciphertext}, f, indent=4)
+    except filelock.Timeout:
+        print(f"[ERROR] Failed to acquire lock for {target}")
+        raise
+    try:
+        if WALLETS_FILE.exists():
+            WALLETS_FILE.unlink()
+    except OSError:
+        pass
 
 @app.before_request
 def generate_nonce():
@@ -720,11 +935,20 @@ def login():
             session.clear()
             session['username'] = username
             session['csrf_token'] = secrets.token_hex(32)
-            session['csrf_created_at'] = time.time()
+            session['csrf_created_at'] = _time.time()
             session.permanent = True
+            # Store password in encrypted session for deriving encryption keys
+            session['_db_password'] = password
             
             # Audit log successful login
             audit_log('LOGIN_SUCCESS', f'User {username} logged in', username)
+            
+            # Initialize/unlock database encryption with password
+            try:
+                db_key = DatabaseEncryption.initialize_encryption(password)
+                app.config['DB_ENCRYPTION_KEY'] = db_key
+            except Exception as e:
+                print(f"Warning: Could not unlock database: {e}")
             
             if request.is_json:
                 return jsonify({'success': True, 'message': 'Login successful'})
@@ -860,7 +1084,11 @@ def api_backup_zip():
             add_file(API_KEYS_ENCRYPTED_FILE, 'api_keys_encrypted.json')
             if 'api_keys_encrypted.json' not in manifest['includes']:
                 add_file(API_KEYS_FILE, 'api_keys.json')
-            add_file(WALLETS_FILE, 'wallets.json')
+
+            # Prefer encrypted wallets if present
+            add_file(WALLETS_ENCRYPTED_FILE, 'wallets_encrypted.json')
+            if 'wallets_encrypted.json' not in manifest['includes']:
+                add_file(WALLETS_FILE, 'wallets.json')
             add_file(USERS_FILE, 'web_users.json')
 
             # Add manifest
@@ -1036,11 +1264,112 @@ def api_wizard_restore_backup():
             restore_member('.db_key', BASE_DIR / '.db_key')
             restore_member('.db_salt', BASE_DIR / '.db_salt')
             restore_member('config.json', CONFIG_FILE)
-            if 'api_keys_encrypted.json' in members:
-                restore_member('api_keys_encrypted.json', API_KEYS_ENCRYPTED_FILE)
+            
+            # Handle API keys: merge or replace based on mode
+            if mode == 'merge':
+                # Load existing API keys
+                existing_api_keys = {}
+                try:
+                    existing_api_keys = load_api_keys_file()
+                except Exception:
+                    pass
+                
+                # Extract and load backup API keys to temp location
+                backup_api_keys = {}
+                if 'api_keys_encrypted.json' in members:
+                    try:
+                        with zf.open('api_keys_encrypted.json') as src:
+                            backup_data = json.load(src)
+                            if isinstance(backup_data, dict) and 'ciphertext' in backup_data:
+                                backup_api_keys = decrypt_api_keys(backup_data['ciphertext']) or {}
+                    except Exception:
+                        pass
+                elif 'api_keys.json' in members:
+                    try:
+                        with zf.open('api_keys.json') as src:
+                            backup_api_keys = json.load(src)
+                    except Exception:
+                        pass
+                
+                # Merge: backup keys take precedence, but keep existing keys not in backup
+                merged_api_keys = {**existing_api_keys, **backup_api_keys}
+                
+                # Save merged result
+                if merged_api_keys:
+                    try:
+                        save_api_keys_file(merged_api_keys)
+                    except Exception:
+                        pass
             else:
-                restore_member('api_keys.json', API_KEYS_FILE)
-            restore_member('wallets.json', WALLETS_FILE)
+                # Replace mode: just restore from backup
+                if 'api_keys_encrypted.json' in members:
+                    restore_member('api_keys_encrypted.json', API_KEYS_ENCRYPTED_FILE)
+                else:
+                    restore_member('api_keys.json', API_KEYS_FILE)
+
+            # Handle wallets: merge or replace based on mode
+            if mode == 'merge':
+                # Load existing wallets
+                existing_wallets = {}
+                try:
+                    existing_wallets = load_wallets_file()
+                except Exception:
+                    pass
+                
+                # Extract and load backup wallets
+                backup_wallets = {}
+                if 'wallets_encrypted.json' in members:
+                    try:
+                        with zf.open('wallets_encrypted.json') as src:
+                            backup_data = json.load(src)
+                            if isinstance(backup_data, dict) and 'ciphertext' in backup_data:
+                                backup_wallets = decrypt_wallets(backup_data['ciphertext']) or {}
+                    except Exception:
+                        pass
+                elif 'wallets.json' in members:
+                    try:
+                        with zf.open('wallets.json') as src:
+                            backup_wallets = json.load(src)
+                    except Exception:
+                        pass
+                
+                # Merge wallets intelligently
+                merged_wallets = {}
+                all_chains = set(existing_wallets.keys()) | set(backup_wallets.keys())
+                
+                for chain in all_chains:
+                    existing_addrs = existing_wallets.get(chain, [])
+                    backup_addrs = backup_wallets.get(chain, [])
+                    
+                    # Normalize to lists
+                    if isinstance(existing_addrs, dict):
+                        existing_addrs = existing_addrs.get('addresses', [])
+                    if not isinstance(existing_addrs, list):
+                        existing_addrs = [existing_addrs] if existing_addrs else []
+                    
+                    if isinstance(backup_addrs, dict):
+                        backup_addrs = backup_addrs.get('addresses', [])
+                    if not isinstance(backup_addrs, list):
+                        backup_addrs = [backup_addrs] if backup_addrs else []
+                    
+                    # Merge and deduplicate addresses
+                    all_addrs = list(set(existing_addrs + backup_addrs))
+                    if all_addrs:
+                        merged_wallets[chain] = all_addrs
+                
+                # Save merged result
+                if merged_wallets:
+                    try:
+                        save_wallets_file(merged_wallets)
+                    except Exception:
+                        pass
+            else:
+                # Replace mode: just restore from backup
+                if 'wallets_encrypted.json' in members:
+                    restore_member('wallets_encrypted.json', WALLETS_ENCRYPTED_FILE)
+                else:
+                    restore_member('wallets.json', WALLETS_FILE)
+            
             restore_member('web_users.json', USERS_FILE)
 
         return jsonify({'success': True, 'message': 'Backup restored. Please restart the server.'})
@@ -1057,8 +1386,8 @@ def factory_reset():
             os.remove(DB_FILE)
         init_db() # Recreate empty schema
         
-        # 2. Delete Configs
-        for f in [CONFIG_FILE, API_KEYS_FILE, WALLETS_FILE]:
+        # 2. Delete Configs (encrypted and legacy)
+        for f in [CONFIG_FILE, API_KEYS_FILE, API_KEYS_ENCRYPTED_FILE, WALLETS_FILE, WALLETS_ENCRYPTED_FILE, API_KEY_ENCRYPTION_FILE, ENCRYPTION_KEY_FILE]:
             if f.exists():
                 os.remove(f)
                 
@@ -1240,7 +1569,6 @@ def api_create_transaction():
     
     try:
         # Generate a unique ID
-        import uuid
         tx_id = str(uuid.uuid4())
         
         # Prepare values with defaults
@@ -1430,11 +1758,7 @@ def api_update_config():
 def api_get_wallets():
     """Get wallets - encrypted response"""
     try:
-        if WALLETS_FILE.exists():
-            with open(WALLETS_FILE, 'r') as f:
-                wallets = json.load(f)
-        else:
-            wallets = {}
+        wallets = load_wallets_file()
         
         # encrypted_response = encrypt_data(wallets)
         # return jsonify({'data': encrypted_response})
@@ -1452,16 +1776,12 @@ def api_update_wallets():
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        # data = decrypt_data(encrypted_payload)
         data = json.loads(encrypted_payload)
-    except:
+    except Exception:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     try:
-        lock = filelock.FileLock(str(WALLETS_FILE) + '.lock')
-        with lock:
-            with open(WALLETS_FILE, 'w') as f:
-                json.dump(data, f, indent=4)
+        save_wallets_file(data)
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'Wallets updated'})
         # return jsonify({'data': encrypted_response})
@@ -1475,19 +1795,14 @@ def api_update_wallets():
 def api_get_api_keys():
     """Get API keys (masked for security) - encrypted response"""
     try:
-        if API_KEYS_FILE.exists():
-            with open(API_KEYS_FILE, 'r') as f:
-                api_keys = json.load(f)
-            
-            # Mask sensitive data
-            for exchange, keys in api_keys.items():
-                if isinstance(keys, dict):
-                    for key, value in keys.items():
-                        if key in ['apiKey', 'secret', 'password'] and value:
-                            if len(value) > 8 and not value.startswith('PASTE_'):
-                                api_keys[exchange][key] = value[:4] + '*' * (len(value) - 8) + value[-4:]
-        else:
-            api_keys = {}
+        api_keys = load_api_keys_file()
+        # Mask sensitive data
+        for exchange, keys in api_keys.items():
+            if isinstance(keys, dict):
+                for key, value in keys.items():
+                    if key in ['apiKey', 'secret', 'password'] and value:
+                        if len(value) > 8 and not value.startswith('PASTE_'):
+                            api_keys[exchange][key] = value[:4] + '*' * (len(value) - 8) + value[-4:]
         
         # encrypted_response = encrypt_data(api_keys)
         # return jsonify({'data': encrypted_response})
@@ -1505,18 +1820,12 @@ def api_update_api_keys():
         return jsonify({'error': 'Missing encrypted data'}), 400
     
     try:
-        # data = decrypt_data(encrypted_payload)
         data = json.loads(encrypted_payload)
-    except:
+    except Exception:
         return jsonify({'error': 'Invalid encrypted data'}), 400
     
     try:
-        # Load existing keys
-        if API_KEYS_FILE.exists():
-            with open(API_KEYS_FILE, 'r') as f:
-                existing_keys = json.load(f)
-        else:
-            existing_keys = {}
+        existing_keys = load_api_keys_file()
         
         # Update only non-masked values
         for exchange, keys in data.items():
@@ -1529,10 +1838,7 @@ def api_update_api_keys():
                     if value and '*' not in value:
                         existing_keys[exchange][key] = value
         
-        lock = filelock.FileLock(str(API_KEYS_FILE) + '.lock')
-        with lock:
-            with open(API_KEYS_FILE, 'w') as f:
-                json.dump(existing_keys, f, indent=4)
+        save_api_keys_file(existing_keys)
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'API keys updated'})
         # return jsonify({'data': encrypted_response})
@@ -1596,7 +1902,7 @@ def api_test_api_key():
             })
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/wallets/test', methods=['POST'])
 @login_required
@@ -1645,7 +1951,7 @@ def api_test_wallet():
             })
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==========================================
 # API ROUTES - WARNINGS & REPORTS
@@ -2055,7 +2361,7 @@ def api_wizard_run_setup():
                         progress += 5
                         progress_store[task_id]['progress'] = progress
                         progress_store[task_id]['message'] = f'Setup in progress ({progress}%)...'
-                    time.sleep(0.5)
+                    _time.sleep(0.5)
                 
                 # Get output
                 stdout, stderr = process.communicate(timeout=60)
@@ -2145,16 +2451,10 @@ def api_wizard_save_config():
             return jsonify({'error': 'Missing type or data'}), 400
         
         if config_type == 'api_keys':
-            lock = filelock.FileLock(str(API_KEYS_FILE) + '.lock')
-            with lock:
-                with open(API_KEYS_FILE, 'w') as f:
-                    json.dump(config_data, f, indent=4)
+            save_api_keys_file(config_data)
         
         elif config_type == 'wallets':
-            lock = filelock.FileLock(str(WALLETS_FILE) + '.lock')
-            with lock:
-                with open(WALLETS_FILE, 'w') as f:
-                    json.dump(config_data, f, indent=4)
+            save_wallets_file(config_data)
         
         elif config_type == 'config':
             lock = filelock.FileLock(str(CONFIG_FILE) + '.lock')
@@ -2644,7 +2944,11 @@ def api_system_health():
             })
         
         # Check 4: Configuration files
-        config_files = {'config.json': CONFIG_FILE, 'api_keys.json': API_KEYS_FILE, 'wallets.json': WALLETS_FILE}
+        config_files = {
+            'config.json': CONFIG_FILE,
+            'api_keys (encrypted)': API_KEYS_ENCRYPTED_FILE,
+            'wallets (encrypted)': WALLETS_ENCRYPTED_FILE
+        }
         missing_configs = []
         for name, path in config_files.items():
             if not path.exists():
@@ -2768,13 +3072,9 @@ def api_save_setup_config():
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(current_config, f, indent=4)
                 
-        # 2. Update api_keys.json
+        # 2. Update api_keys.json (encrypted)
         if 'api_keys' in data:
-            current_keys = {}
-            if API_KEYS_FILE.exists():
-                with open(API_KEYS_FILE, 'r') as f:
-                    current_keys = json.load(f)
-            
+            current_keys = load_api_keys_file()
             new_keys = data['api_keys']
             for provider, keys in new_keys.items():
                 if provider not in current_keys:
@@ -2782,17 +3082,11 @@ def api_save_setup_config():
                 for k, v in keys.items():
                     if v and v != "PASTE_KEY" and v != "PASTE_SECRET":
                         current_keys[provider][k] = v
-                        
-            with open(API_KEYS_FILE, 'w') as f:
-                json.dump(current_keys, f, indent=4)
+            save_api_keys_file(current_keys)
 
-        # 3. Update wallets.json
+        # 3. Update wallets.json (encrypted)
         if 'wallets' in data:
-            current_wallets = {}
-            if WALLETS_FILE.exists():
-                with open(WALLETS_FILE, 'r') as f:
-                    current_wallets = json.load(f)
-            
+            current_wallets = load_wallets_file()
             new_wallets = data['wallets']
             for chain, wallet_data in new_wallets.items():
                 if 'addresses' in wallet_data:
@@ -2804,9 +3098,7 @@ def api_save_setup_config():
                         if chain not in current_wallets:
                             current_wallets[chain] = {}
                         current_wallets[chain]['addresses'] = valid_addresses
-                        
-            with open(WALLETS_FILE, 'w') as f:
-                json.dump(current_wallets, f, indent=4)
+            save_wallets_file(current_wallets)
                 
         return jsonify({'success': True, 'message': 'Configuration saved successfully'})
         
@@ -2888,7 +3180,11 @@ def main():
                         add_file(API_KEYS_ENCRYPTED_FILE, 'api_keys_encrypted.json')
                     else:
                         add_file(API_KEYS_FILE, 'api_keys.json')
-                    add_file(WALLETS_FILE, 'wallets.json')
+
+                    if WALLETS_ENCRYPTED_FILE.exists():
+                        add_file(WALLETS_ENCRYPTED_FILE, 'wallets_encrypted.json')
+                    else:
+                        add_file(WALLETS_FILE, 'wallets.json')
                     add_file(USERS_FILE, 'web_users.json')
 
                 raw_zip.seek(0)

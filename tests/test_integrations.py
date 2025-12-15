@@ -35,8 +35,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
                 "addresses": ["SolanaAddr1", "SolanaAddr2"]
             }
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_config, f)
+        app.save_wallets_file(wallets_config)
         
         # Create a mock StakeTaxCSVManager to test wallet extraction
         try:
@@ -59,8 +58,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
     def test_staking_enabled_with_empty_wallets(self):
         """Test: Staking enabled but no wallets configured"""
         wallets_config = {}
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_config, f)
+        app.save_wallets_file(wallets_config)
         
         try:
             manager = app.StakeTaxCSVManager(self.db)
@@ -210,8 +208,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
             "bitcoin": {"addresses": ["bc1xyz"]},
             "solana": {"addresses": ["SolanaAddr1"]}
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_data, f)
+        app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
         manager = app.StakeTaxCSVManager(db)
@@ -230,8 +227,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
             "BTC": "bc1xyz",
             "SOL": ["SolanaAddr1"]
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_data, f)
+        app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
         manager = app.StakeTaxCSVManager(db)
@@ -249,8 +245,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
             "BTC": ["bc1xyz"],
             "solana": {"addresses": ["SolanaAddr1"]}
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_data, f)
+        app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
         manager = app.StakeTaxCSVManager(db)
@@ -682,8 +677,7 @@ class TestBlockchainIntegration(unittest.TestCase):
         initial_wallets = {
             'ethereum': ['0x1111111111111111111111111111111111111111']
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(initial_wallets, f)
+        app.save_wallets_file(initial_wallets)
         
         # Add a second Ethereum wallet
         success, message = fixer._save_wallet_address('0x2222222222222222222222222222222222222222', 'ETH')
@@ -691,8 +685,7 @@ class TestBlockchainIntegration(unittest.TestCase):
         self.assertTrue(success)
         
         # Verify both wallets exist
-        with open(app.WALLETS_FILE, 'r') as f:
-            wallets_data = json.load(f)
+        wallets_data = app.load_wallets_file()
         
         self.assertEqual(len(wallets_data['ethereum']), 2)
         self.assertIn('0x1111111111111111111111111111111111111111', wallets_data['ethereum'])
@@ -701,6 +694,9 @@ class TestBlockchainIntegration(unittest.TestCase):
     def test_wallet_no_duplicates(self):
         """Test: Duplicate wallets are not added twice"""
         from Interactive_Review_Fixer import InteractiveReviewFixer
+        
+        # Ensure clean state
+        app.save_wallets_file({})
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -715,8 +711,7 @@ class TestBlockchainIntegration(unittest.TestCase):
         self.assertIn('already exists', message2.lower())
         
         # Verify only one copy exists
-        with open(app.WALLETS_FILE, 'r') as f:
-            wallets_data = json.load(f)
+        wallets_data = app.load_wallets_file()
         
         self.assertEqual(len(wallets_data['ethereum']), 1)
     
@@ -774,8 +769,7 @@ class TestBlockchainIntegration(unittest.TestCase):
             'ethereum': ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb'],
             'polygon': ['0x8888888888888888888888888888888888888888']
         }
-        with open(app.WALLETS_FILE, 'w') as f:
-            json.dump(wallets_data, f)
+        app.save_wallets_file(wallets_data)
         
         # For BTC, it should only load bitcoin wallets
         # We can't easily test the actual API call, but we can verify wallet loading logic

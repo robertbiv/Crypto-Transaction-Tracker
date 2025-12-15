@@ -721,13 +721,9 @@ class InteractiveReviewFixer:
         
         # Load or create wallets.json
         try:
-            if app.WALLETS_FILE.exists():
-                with open(app.WALLETS_FILE, 'r') as f:
-                    wallets = json.load(f)
-            else:
-                wallets = {}
+            wallets = app.load_wallets_file()
         except Exception as e:
-            return False, f"Error reading wallets.json: {e}"
+            return False, f"Error reading wallets: {e}"
         
         # Initialize chain section if needed
         if chain not in wallets:
@@ -740,18 +736,20 @@ class InteractiveReviewFixer:
             else:
                 wallets[chain] = []
         
+        # Ensure it's a list
+        if not isinstance(wallets[chain], list):
+            wallets[chain] = [wallets[chain]] if wallets[chain] else []
+        
         # Add wallet if not already present
         if wallet_address not in wallets[chain]:
             wallets[chain].append(wallet_address)
             
-            # Save back to file
+            # Save back to file (encrypted)
             try:
-                app.WALLETS_FILE.parent.mkdir(parents=True, exist_ok=True)
-                with open(app.WALLETS_FILE, 'w') as f:
-                    json.dump(wallets, f, indent=2)
+                app.save_wallets_file(wallets)
                 return True, f"✓ Saved wallet to {chain} section in wallets.json"
             except Exception as e:
-                return False, f"Error saving wallets.json: {e}"
+                return False, f"Error saving wallets: {e}"
         else:
             return True, f"Wallet already exists in {chain} section"
     

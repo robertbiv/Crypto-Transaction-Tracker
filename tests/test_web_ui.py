@@ -714,7 +714,7 @@ class TestWebUIHealthChecks(unittest.TestCase):
     
     def test_configuration_files_check(self):
         """Test configuration files check"""
-        config_files = ['config.json', 'api_keys.json', 'wallets.json']
+        config_files = ['config.json', 'api_keys_encrypted.json', 'wallets_encrypted.json']
         self.assertEqual(len(config_files), 3)
         print("✓ Configuration files check defined")
     
