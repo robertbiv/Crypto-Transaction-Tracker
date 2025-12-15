@@ -72,8 +72,8 @@ class TestConfigHandling(unittest.TestCase):
     @patch('requests.get')
     def test_blockchair_optionality(self, mock_get):
         app.GLOBAL_CONFIG['general']['run_audit'] = True
-        with open(app.KEYS_FILE, 'w') as f: json.dump({"blockchair": {"apiKey": "PASTE_KEY_OPTIONAL"}}, f)
-        with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1z..."]}, f)
+        app.save_api_keys_file({"blockchair": {"apiKey": "PASTE_KEY_OPTIONAL"}})
+        app.save_wallets_file({"BTC": ["1A1z..."]})
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"data": {"1A1z...": {"address": {"balance": 100000000}}}}

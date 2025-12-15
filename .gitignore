@@ -11,6 +11,7 @@ certs/
 testcreds/
 .db_key
 .db_salt
+*.key
 
 # Data: Local databases and caches
 crypto_master.db

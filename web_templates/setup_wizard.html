@@ -683,6 +683,48 @@
             }
         }
         
+        // Progress tracking class
+        class ProgressTracker {
+            constructor() {
+                this.pollInterval = null;
+                this.taskId = null;
+            }
+            
+            async trackTask(taskId, title = 'Processing...') {
+                this.taskId = taskId;
+                
+                // Poll progress endpoint
+                return new Promise((resolve, reject) => {
+                    this.pollInterval = setInterval(async () => {
+                        try {
+                            const response = await fetch(`/api/progress/${taskId}`);
+                            const data = await response.json();
+                            
+                            if (data.status === 'completed') {
+                                clearInterval(this.pollInterval);
+                                this.pollInterval = null;
+                                this.taskId = null;
+                                resolve(data);
+                            } else if (data.status === 'error') {
+                                clearInterval(this.pollInterval);
+                                this.pollInterval = null;
+                                this.taskId = null;
+                                reject(new Error(data.message || 'Task failed'));
+                            }
+                        } catch (error) {
+                            clearInterval(this.pollInterval);
+                            this.pollInterval = null;
+                            this.taskId = null;
+                            reject(error);
+                        }
+                    }, 1000); // Poll every second
+                });
+            }
+        }
+        
+        // Global progress tracker instance
+        const progressTracker = new ProgressTracker();
+        
         function updateProgress() {
             document.querySelectorAll('.progress-step').forEach((step, index) => {
                 const stepNum = index + 1;
@@ -927,49 +969,129 @@
                     const apiKeys = data.data;
                     container.innerHTML = '';
                     
-                    // Group API keys by category
-                    const categories = {
-                        'Blockchain Providers': ['moralis', 'blockchair'],
-                        'Exchanges': Object.keys(apiKeys).filter(k => !['moralis', 'blockchair', '_INSTRUCTIONS'].includes(k))
-                    };
+                    // All available exchanges
+                    const allExchanges = [
+                        'binance', 'binanceus', 'coinbase', 'kraken', 'gemini', 'bybit', 'kucoin', 
+                        'huobi', 'bitfinex', 'bitstamp', 'poloniex', 'upbit', 'bithumb'
+                    ];
+                    const blockchainProviders = ['moralis', 'blockchair'];
                     
-                    for (const [category, keys] of Object.entries(categories)) {
-                        if (keys.length === 0) continue;
+                    // Separate configured from available
+                    const configured = Object.keys(apiKeys).filter(k => 
+                        !['_INSTRUCTIONS'].includes(k) && 
+                        Object.values(apiKeys[k]).some(v => v) // Has at least one value
+                    );
+                    const available = allExchanges.filter(e => !configured.includes(e));
+                    
+                    // Build dropdown for new APIs
+                    if (available.length > 0) {
+                        const dropdownDiv = document.createElement('div');
+                        dropdownDiv.style.marginBottom = '24px';
+                        dropdownDiv.innerHTML = `
+                            <div style="display: flex; gap: 8px;">
+                                <select id="exchangeDropdown" class="form-input" style="flex: 1; max-width: 300px;">
+                                    <option value="">+ Add Exchange API Key</option>
+                                    ${available.map(ex => `<option value="${ex}">${ex.charAt(0).toUpperCase() + ex.slice(1)}</option>`).join('')}
+                                </select>
+                                <button class="btn btn-primary" onclick="addExchange()" style="padding: 8px 16px;">Add</button>
+                            </div>
+                        `;
+                        container.appendChild(dropdownDiv);
                         
-                        const categoryDiv = document.createElement('div');
-                        categoryDiv.className = 'api-key-group';
-                        categoryDiv.innerHTML = `<h4>${category}</h4>`;
-                        
-                        keys.forEach(key => {
-                            if (key === '_INSTRUCTIONS') return;
-                            
-                            const keyData = apiKeys[key] || {};
-                            const fields = Object.keys(keyData);
-                            
-                            const keyDiv = document.createElement('div');
-                            keyDiv.style.marginBottom = '16px';
-                            keyDiv.innerHTML = `
-                                <label class="form-label">${key.toUpperCase()}</label>
-                                ${fields.map(field => `
+                        const script = document.createElement('script');
+                        script.innerHTML = `
+                            window.addExchange = function() {
+                                const dropdown = document.getElementById('exchangeDropdown');
+                                const exchange = dropdown.value;
+                                if (!exchange) return;
+                                
+                                // Create section for new exchange
+                                const section = document.createElement('div');
+                                section.id = 'exchange-' + exchange;
+                                section.style.marginBottom = '16px';
+                                section.innerHTML = \`
+                                    <label class="form-label">\${exchange.toUpperCase()}</label>
                                     <input type="text" 
-                                           id="wizard-api-${key}-${field}"
+                                           id="wizard-api-\${exchange}-apiKey"
                                            class="form-input" 
                                            style="margin-bottom: 8px;"
-                                           placeholder="${field}" 
-                                           data-api="${key}" 
-                                           data-field="${field}"
-                                           value="${keyData[field] || ''}">
-                                `).join('')}
+                                           placeholder="API Key" 
+                                           data-api="\${exchange}" 
+                                           data-field="apiKey">
+                                    <input type="text" 
+                                           id="wizard-api-\${exchange}-secret"
+                                           class="form-input" 
+                                           style="margin-bottom: 8px;"
+                                           placeholder="Secret" 
+                                           data-api="\${exchange}" 
+                                           data-field="secret">
+                                    <button class="btn btn-secondary" onclick="testWizardApiKey('\${exchange}')" style="margin-bottom: 8px;">
+                                        Test Connection
+                                    </button>
+                                    <div id="wizard-test-result-\${exchange}" style="margin-bottom: 8px;"></div>
+                                    <button class="btn btn-outline" style="padding: 8px 12px; font-size: 12px;" onclick="removeExchange('\${exchange}')">Remove</button>
+                                \`;
+                                document.getElementById('configuredApiKeys').appendChild(section);
+                                dropdown.value = '';
+                            }
+                            
+                            window.removeExchange = function(exchange) {
+                                const section = document.getElementById('exchange-' + exchange);
+                                if (section) section.remove();
+                                
+                                // Re-add to dropdown
+                                const dropdown = document.getElementById('exchangeDropdown');
+                                const option = document.createElement('option');
+                                option.value = exchange;
+                                option.textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
+                                dropdown.appendChild(option);
+                            }
+                        \`;
+                        container.appendChild(script);
+                    }
+                    
+                    // Display configured APIs
+                    const configuredDiv = document.createElement('div');
+                    configuredDiv.id = 'configuredApiKeys';
+                    
+                    if (configured.length > 0) {
+                        configured.forEach(key => {
+                            const keyData = apiKeys[key] || {};
+                            const keyDiv = document.createElement('div');
+                            keyDiv.id = 'exchange-' + key;
+                            keyDiv.style.marginBottom = '16px';
+                            
+                            const fields = ['apiKey', 'secret', 'password', 'uid'];
+                            keyDiv.innerHTML = `
+                                <label class="form-label">${key.toUpperCase()}</label>
+                                ${fields.map(field => {
+                                    if (!keyData.hasOwnProperty(field)) return '';
+                                    return `
+                                        <input type="text" 
+                                               id="wizard-api-${key}-${field}"
+                                               class="form-input" 
+                                               style="margin-bottom: 8px;"
+                                               placeholder="${field}" 
+                                               data-api="${key}" 
+                                               data-field="${field}"
+                                               value="${keyData[field] || ''}">
+                                    `;
+                                }).join('')}
                                 <button class="btn btn-secondary" onclick="testWizardApiKey('${key}')" style="margin-bottom: 8px;">
                                     Test Connection
                                 </button>
                                 <div id="wizard-test-result-${key}" style="margin-bottom: 8px;"></div>
+                                <button class="btn btn-outline" style="padding: 8px 12px; font-size: 12px;" onclick="removeExchange('${key}')">Remove</button>
                             `;
-                            categoryDiv.appendChild(keyDiv);
+                            configuredDiv.appendChild(keyDiv);
                         });
-                        
-                        container.appendChild(categoryDiv);
+                    } else {
+                        const emptyMsg = document.createElement('p');
+                        emptyMsg.textContent = 'No API keys configured yet. Add one above to get started.';
+                        configuredDiv.appendChild(emptyMsg);
                     }
+                    
+                    container.appendChild(configuredDiv);
                 } else {
                     container.innerHTML = '<p>Could not load API keys. You can configure them later.</p>';
                 }
@@ -1060,8 +1182,10 @@
                 
                 if (result.success) {
                     resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
-                } else {
+                } else if (result.error) {
                     resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: Unknown error</p>`;
                 }
             } catch (error) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Test failed: ${error.message}</p>`;
@@ -1148,8 +1272,10 @@
                 
                 if (result.success) {
                     resultDiv.innerHTML = `<p style="color: var(--md-sys-color-tertiary); font-size: 14px;">${result.message}</p>`;
-                } else {
+                } else if (result.error) {
                     resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ ${result.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: Unknown error</p>`;
                 }
             } catch (error) {
                 resultDiv.innerHTML = `<p style="color: var(--md-sys-color-error); font-size: 14px;">✗ Validation failed: ${error.message}</p>`;
