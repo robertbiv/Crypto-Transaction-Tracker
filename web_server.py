@@ -1526,6 +1526,113 @@ def api_update_api_keys():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/api-keys/test', methods=['POST'])
+@login_required
+@web_security_required
+def api_test_api_key():
+    """Test if exchange API key is valid"""
+    try:
+        data = request.get_json()
+        exchange = data.get('exchange', '').lower()
+        api_key = data.get('apiKey', '').strip()
+        secret = data.get('secret', '').strip()
+        
+        if not exchange or not api_key or not secret:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        # Import ccxt
+        import ccxt
+        
+        # Check if exchange is supported
+        if not hasattr(ccxt, exchange):
+            return jsonify({'success': False, 'error': f'Exchange "{exchange}" not supported'}), 400
+        
+        # Try to create exchange instance and fetch balance
+        try:
+            exchange_class = getattr(ccxt, exchange)
+            exchange_obj = exchange_class({
+                'apiKey': api_key,
+                'secret': secret,
+                'enableRateLimit': True,
+                'timeout': 10000
+            })
+            
+            # Test by fetching balance (read-only operation)
+            balance = exchange_obj.fetch_balance()
+            
+            return jsonify({
+                'success': True, 
+                'message': f'✓ {exchange.capitalize()} API key is valid',
+                'details': f'Successfully authenticated and fetched balance'
+            })
+        except ccxt.AuthenticationError as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Authentication failed: {str(e)}'
+            })
+        except ccxt.NetworkError as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Network error: {str(e)}'
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Test failed: {str(e)}'
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallets/test', methods=['POST'])
+@login_required
+@web_security_required
+def api_test_wallet():
+    """Test if wallet address is valid format"""
+    try:
+        data = request.get_json()
+        blockchain = data.get('blockchain', '').upper()
+        address = data.get('address', '').strip()
+        
+        if not blockchain or not address:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        # Basic validation patterns for different blockchains
+        validation_patterns = {
+            'BTC': (r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$', 'Bitcoin'),
+            'ETH': (r'^0x[a-fA-F0-9]{40}$', 'Ethereum'),
+            'MATIC': (r'^0x[a-fA-F0-9]{40}$', 'Polygon'),
+            'BNB': (r'^0x[a-fA-F0-9]{40}$|^bnb[a-z0-9]{39}$', 'BNB Chain'),
+            'SOL': (r'^[1-9A-HJ-NP-Za-km-z]{32,44}$', 'Solana'),
+            'ADA': (r'^addr1[a-z0-9]{58,}$', 'Cardano'),
+            'DOT': (r'^1[a-zA-Z0-9]{47}$', 'Polkadot'),
+            'AVAX': (r'^0x[a-fA-F0-9]{40}$|^X-avax1[a-z0-9]{38}$', 'Avalanche'),
+        }
+        
+        if blockchain not in validation_patterns:
+            return jsonify({
+                'success': False, 
+                'error': f'Blockchain "{blockchain}" validation not supported yet'
+            }), 400
+        
+        import re
+        pattern, name = validation_patterns[blockchain]
+        
+        if re.match(pattern, address):
+            return jsonify({
+                'success': True,
+                'message': f'✓ Valid {name} address format',
+                'details': f'Address has correct format for {blockchain}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid {name} address format'
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==========================================
 # API ROUTES - WARNINGS & REPORTS
 # ==========================================
