@@ -46,21 +46,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("verify_stress_test")
 
 def run_verification():
+    import time
     logger.info("Starting Stress Test Verification...")
+    start_total = time.time()
 
     # 1. Setup Environment
     logger.info("Setting up environment...")
+    t0 = time.time()
     
     # Enable strict broker mode (Recommended Config)
-    Crypto_Tax_Engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
-    Crypto_Tax_Engine.STRICT_BROKER_MODE = True
+    crypto_tax_engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+    crypto_tax_engine.STRICT_BROKER_MODE = True
     logger.info("Enabled strict_broker_mode (Recommended Config).")
+    logger.info(f"[TIMING] Setup environment: {time.time() - t0:.2f}s")
 
+    t0 = time.time()
     # Backup existing DB if it exists
     if DB_FILE.exists():
         shutil.move(str(DB_FILE), str(DB_FILE) + ".verify_backup")
         logger.info("Backed up existing database.")
-    
     # Clear inputs directory
     if INPUT_DIR.exists():
         for item in INPUT_DIR.iterdir():
@@ -70,67 +74,67 @@ def run_verification():
                 shutil.rmtree(item)
     else:
         INPUT_DIR.mkdir(parents=True)
-    
     # Copy stress test data
     stress_test_dir = Path(__file__).parent / "stress_test_data"
     csv_files = list(stress_test_dir.glob("*.csv"))
     for csv in csv_files:
         shutil.copy(csv, INPUT_DIR / csv.name)
     logger.info(f"Copied {len(csv_files)} CSV files to inputs/.")
+    logger.info(f"[TIMING] Data prep: {time.time() - t0:.2f}s")
 
     try:
         # 2. Run Engine
+        t0 = time.time()
         logger.info("Initializing Database...")
         initialize_folders()
         db = DatabaseManager()
-        
+        logger.info(f"[TIMING] DB init: {time.time() - t0:.2f}s")
+        t0 = time.time()
         logger.info("Running Ingestor...")
         ingestor = Ingestor(db)
         ingestor.run_csv_scan()
+        logger.info(f"[TIMING] Ingestor: {time.time() - t0:.2f}s")
         # Skip API sync as this is a stress test with CSVs only
-        
         # We don't need price fetcher because the generator put prices in the CSVs 
         # and Ingestor should pick them up if mapped correctly.
-        
         actual_short_term = 0.0
         actual_long_term = 0.0
         actual_income = 0.0
-        
         # Run for each year in the generated data (2023, 2024)
         for year in ['2023', '2024']:
+            t_year = time.time()
             logger.info(f"Running Tax Engine for {year}...")
             engine = TaxEngine(db, year)
             engine.run()
+            logger.info(f"[TIMING] TaxEngine.run() {year}: {time.time() - t_year:.2f}s")
+            t_export = time.time()
             engine.export()
-            
+            logger.info(f"[TIMING] TaxEngine.export() {year}: {time.time() - t_export:.2f}s")
             # Accumulate results
             year_dir = OUTPUT_DIR / f"Year_{year}"
             cap_gains_file = year_dir / "TURBOTAX_CAP_GAINS.csv"
             income_file = year_dir / "INCOME_REPORT.csv"
-            
             if cap_gains_file.exists():
                 df_cg = pd.read_csv(cap_gains_file)
                 # Calculate Gain if missing
                 if 'Gain' not in df_cg.columns and 'Proceeds' in df_cg.columns and 'Cost Basis' in df_cg.columns:
                     df_cg['Gain'] = df_cg['Proceeds'] - df_cg['Cost Basis']
-                
                 if 'Gain' in df_cg.columns and 'Term' in df_cg.columns:
                     actual_short_term += df_cg[df_cg['Term'] == 'Short']['Gain'].sum()
                     actual_long_term += df_cg[df_cg['Term'] == 'Long']['Gain'].sum()
-            
             if income_file.exists():
                 df_inc = pd.read_csv(income_file)
                 if 'USD' in df_inc.columns:
                     actual_income += df_inc['USD'].sum()
         
         # 3. Verify Results
+        t0 = time.time()
         logger.info("Verifying results...")
         
         # Load Expected Results
         expected_file_json = stress_test_dir / "expected_results.json"
         expected_file_txt = stress_test_dir / "EXPECTED_OUTPUT.txt"
         expected_data = {}
-        
         if expected_file_json.exists():
             import json
             logger.info(f"Loading expected results from {expected_file_json.name}")
@@ -154,6 +158,7 @@ def run_verification():
         else:
             logger.error("No expected results file found!")
             return
+        logger.info(f"[TIMING] Results verification: {time.time() - t0:.2f}s")
 
         # Compare
         logger.info("\n=== RESULTS COMPARISON ===")
@@ -179,6 +184,7 @@ def run_verification():
             logger.info("\nSUCCESS: Results match within tolerance.")
         else:
             logger.error("\nFAILURE: Results do not match expected values.")
+        logger.info(f"[TIMING] TOTAL: {time.time() - start_total:.2f}s")
             
     except Exception as e:
         logger.exception(f"Verification failed with error: {e}")

@@ -1150,7 +1150,7 @@ class TaxEngine:
         if ds:
             earliest = min(ds)
             acq = earliest.strftime('%m/%d/%Y') if len(ds)==1 else 'VARIOUS'
-            if (d - earliest).days > 365: term = 'Long'
+            if (d - earliest).days >= 365: term = 'Long'
         return b, term, acq
 
     def _transfer(self, c, a, from_src, to_src, d):

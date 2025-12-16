@@ -249,6 +249,10 @@ def main():
             "_INSTRUCTIONS": "StakeTax CSV auto-import. Set enabled=True to auto-generate staking reward CSVs from all wallets in wallets.json, import into DB, and archive. Requires StakeTax CLI installed (pip install staketaxcsv). Supports all major staking protocols.",
             "enabled": False,
             "protocols_to_sync": ["all"]
+        },
+        "ui": {
+            "download_warnings_enabled": True,
+            "_INSTRUCTIONS": "download_warnings_enabled: Set to True to require users to acknowledge a warning before downloading tax reports. Recommended: True. If set to False, a persistent banner will remind users to always double-check all outputs and consult a tax professional."
         }
     }
     validate_json(CONFIG_FILE, config_data)

@@ -2198,7 +2198,15 @@ def api_run_tax_calculation():
                     progress_store[task_id]['message'] = 'Tax calculation completed successfully'
                 else:
                     progress_store[task_id]['status'] = 'error'
-                    progress_store[task_id]['message'] = f'Tax calculation failed: {stderr[:200]}'
+                    error_msg = stderr[:500] if stderr else 'Unknown error'
+                    
+                    # Check for specific error types to provide better user guidance
+                    if 'rate limit' in error_msg.lower() or '429' in error_msg:
+                        progress_store[task_id]['message'] = 'API rate limit reached. Please wait a few minutes and try again, or the system will use cached price data.'
+                    elif 'api' in error_msg.lower() and ('timeout' in error_msg.lower() or 'connection' in error_msg.lower()):
+                        progress_store[task_id]['message'] = 'API connection error. Check your internet connection and try again.'
+                    else:
+                        progress_store[task_id]['message'] = f'Tax calculation failed: {error_msg}'
                     
             except Exception as e:
                 progress_store[task_id]['status'] = 'error'
