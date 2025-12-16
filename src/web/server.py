@@ -724,6 +724,36 @@ def get_transactions(page=1, per_page=50, search=None, filters=None):
 # AUTHENTICATION ROUTES
 # ==========================================
 
+@app.route('/api/tos/status', methods=['GET'])
+def get_tos_status():
+    """Get ToS acceptance status"""
+    from src.utils.tos_checker import tos_accepted, read_tos
+    
+    return jsonify({
+        'tos_accepted': tos_accepted(),
+        'tos_content': read_tos()
+    })
+
+@app.route('/api/tos/accept', methods=['POST'])
+def accept_tos():
+    """Mark ToS as accepted"""
+    from src.utils.tos_checker import mark_tos_accepted, tos_accepted
+    
+    data = request.get_json() or {}
+    accept = data.get('accept', False)
+    
+    if not accept:
+        return jsonify({'error': 'ToS must be accepted to proceed'}), 400
+    
+    mark_tos_accepted()
+    
+    audit_log('TOS_ACCEPTED', 'User accepted Terms of Service through web UI')
+    
+    return jsonify({
+        'success': True,
+        'tos_accepted': tos_accepted()
+    })
+
 @app.route('/api/csrf-token', methods=['GET'])
 def get_csrf_token():
     """Get CSRF token for API requests"""
@@ -736,9 +766,16 @@ def get_csrf_token():
 @app.route('/first-time-setup', methods=['GET', 'POST'])
 def first_time_setup():
     """First-time setup page for creating admin account"""
+    from src.utils.tos_checker import tos_accepted
+    
     # If users already exist, redirect to login
     if not is_first_time_setup():
         return redirect(url_for('login'))
+    
+    # Check if ToS was accepted
+    if not tos_accepted():
+        # Redirect to ToS acceptance page (will be shown in setup wizard)
+        return redirect(url_for('setup_wizard'))
     
     if request.method == 'POST':
         # Double-check no users exist (race condition protection)
@@ -1867,6 +1904,20 @@ def api_get_warnings():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/download-warnings-config', methods=['GET'])
+@login_required
+def get_download_warnings_config():
+    """Get download warnings configuration"""
+    try:
+        config = load_config()
+        warnings_enabled = config.get('ui', {}).get('download_warnings_enabled', True)
+        return jsonify({
+            'enabled': warnings_enabled,
+            'message': 'Download warnings are ' + ('enabled' if warnings_enabled else 'DISABLED - Remember to always review outputs with a tax professional!')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/reports', methods=['GET'])
 @login_required
 @web_security_required
@@ -1919,9 +1970,57 @@ def api_download_report(report_path):
         if not file_path.exists():
             return jsonify({'error': 'File not found'}), 404
         
+        # Log the download for audit trail
+        audit_log('REPORT_DOWNLOADED', f'Downloaded: {report_path}')
+        
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-warning-acknowledged', methods=['POST'])
+@login_required
+def download_warning_acknowledged():
+    """Acknowledge the download warning and proceed with download"""
+    try:
+        data = request.get_json() or {}
+        user_confirmed = data.get('confirmed', False)
+        report_path = data.get('report_path', '')
+        
+        # Check if warnings are enabled in config
+        config = load_config()
+        warnings_enabled = config.get('ui', {}).get('download_warnings_enabled', True)
+        
+        # If warnings enabled, user must confirm
+        if warnings_enabled and not user_confirmed:
+            return jsonify({'error': 'Must acknowledge the warning'}), 400
+        
+        # If warnings disabled, still require confirmed for security/audit trail
+        if not warnings_enabled and not user_confirmed:
+            return jsonify({'error': 'API requires confirmation'}), 400
+        
+        if not report_path:
+            return jsonify({'error': 'No report path provided'}), 400
+        
+        file_path = BASE_DIR / report_path
+        
+        # Security check
+        if not str(file_path.resolve()).startswith(str(OUTPUT_DIR.resolve())):
+            return jsonify({'error': 'Invalid file path'}), 403
+        
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Log acknowledgment
+        audit_log('DOWNLOAD_WARNING_CONFIRMED', f'User confirmed warning before downloading: {report_path}')
+        
+        # Return success with download URL
+        return jsonify({
+            'success': True,
+            'download_url': f'/api/reports/download/{report_path}'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # ==========================================
 # API ROUTES - STATISTICS & CHARTS
@@ -3127,6 +3226,10 @@ def api_test_schedule():
 def main():
     """Start the web server"""
     global scheduler
+    
+    # Check ToS acceptance before starting web UI
+    from src.utils.tos_checker import check_and_prompt_tos
+    check_and_prompt_tos()
 
     print("=" * 60)
     print("Crypto Tax Generator - Web UI Server")

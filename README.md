@@ -1,8 +1,8 @@
-# **🛡️ Crypto Tax Automation Engine (V30)**
+# **🛡️ Crypto Tax Automation Engine**
 
-A professional-grade, self-hosted Python system for tracking cryptocurrency taxes. It is designed to be **US Tax Law Compliant** (IRS Pub 544), featuring robust handling of Capital Gains, Wash Sales, Loss Carryovers, and FBAR reporting.
+Personal, self-hosted Python tooling I built to track my own crypto activity. It is **designed to follow 2025 US tax guidelines (IRS Pub 544)** but **not guaranteed correct or complete**. I have **no tax training**—this is a personal project for simple transaction tracking. Always review every result and consult a qualified tax professional.
 
-**Privacy First:** This software runs entirely on your local machine. No financial data is sent to the developer.
+**Privacy First:** Intended to run locally only; do **not** expose it to the internet. No telemetry is sent to the developer. API keys and wallet data are stored encrypted at rest; you are responsible for host security and access control.
 
 ## **🌐 Web UI**
 
@@ -10,6 +10,7 @@ A professional-grade, self-hosted Python system for tracking cryptocurrency taxe
 - 🔐 **Secure**: HTTPS with self-signed certificates
 - 🔒 **Encrypted**: All API operations encrypted end-to-end
 - 🛡️ **Protected**: CSRF protection and request signing
+- 🏠 **Local-Only**: Intended for localhost/LAN; do not expose publicly
 - 📱 **Mobile-Ready**: Responsive design for all devices
 - 🎨 **Modern UI**: Google Material Design 3
 
@@ -19,13 +20,15 @@ pip install Flask Flask-CORS bcrypt PyJWT cryptography
 python3 start_web_ui.py
 ```
 
-Access at **https://localhost:5000** (Default: admin/admin123)
+Access at **https://localhost:5000**
 
-See [Web UI User Guide](docs/WEB_UI_GUIDE.md) for detailed documentation.
+See [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) for command-line usage; the Web UI includes inline help and onboarding.
 
 ## **🌟 Key Features**
 
 ### **🇺🇸 US Tax Compliance**
+
+Designed to follow 2025 guidance but not guaranteed correct—verify with a tax professional.
 
 * **FIFO/HIFO Accounting:** Uses FIFO by default, with optional HIFO. HIFO sorts lots by highest price for sells.  
 * **Wash Sale Rule:** Detects buys within 30 days before and after a loss sale. Disallows the proportional loss and flags affected TT rows.  
@@ -48,16 +51,16 @@ See [Web UI User Guide](docs/WEB_UI_GUIDE.md) for detailed documentation.
   - Complex DeFi/LP transactions needing verification
   - Missing prices or unmatched sells
 
-### **🛡️ System Resilience**
+### **🛡️ Reliability (Tested in Theory, Not Guaranteed)**
 
-* **Chaos Tested:** Validated against 1,000+ random high-volatility trade simulations.  
-* **Crash Proof:** Handles power outages or crashes mid-write by restoring from .bak files.  
-* **Network Resilience:** Implements exponential backoff retries for spotty internet connections.  
-* **Data Integrity:** Automatically detects database corruption and rebuilds from raw inputs if necessary.
+* **Simulation Tested:** Run against scripted scenarios and random-volatility simulations. Results can still be wrong—review outputs manually.
+* **Backups Implemented:** Creates .bak files before writes, but corruption/data loss can still occur.
+* **Retry Logic:** Includes basic retry/backoff for network calls; failures can still happen.
+* **Data Checks:** Attempts to detect bad inputs or corruption, but may miss issues.
 
 ## **⚠️ Weaknesses & Limitations**
 
-While robust, this engine is software, not a CPA. Be aware of these limitations:
+While helpful, this engine is software, not a CPA. Be aware of these limitations and verify all outputs with a tax professional:
 
 1. **Constructive Sales:** The engine does **not** detect "Constructive Sales" (e.g., shorting-against-the-box). If you hold a long position and open an offsetting short position to lock in gains without selling, this software will not trigger a tax event.  
 2. **Specific Identification:** The engine assumes **FIFO** (or HIFO if configured). It does not support "Specific Identification" of lots (picking exactly which Bitcoin utxo to sell) unless you manually manipulate the input data.  
@@ -65,7 +68,10 @@ While robust, this engine is software, not a CPA. Be aware of these limitations:
 4. **NFTs:** Non-Fungible Tokens are treated as generic assets. It does not handle complex NFT minting gas logic automatically unless imported as a standard trade.  
 5. **Gift Basis:** For received gifts, the engine relies on **you** entering the correct "Donor's Basis" in the manual CSV. If you enter the market price instead, your tax liability may be calculated incorrectly.
 
-## **⚠️ Important Note on HIFO Accounting**
+6. **Error Risk:** Calculations, price fetches, and imports can be wrong or incomplete. Always inspect the generated CSVs.
+7. **No Liability:** Use at your own risk. The author assumes no responsibility for errors, omissions, or compliance outcomes.
+
+### **⚠️ Important Note on HIFO Accounting**
 
 The engine supports **HIFO** (Highest-In, First-Out) via configuration, but be warned:
 
@@ -85,64 +91,50 @@ See `config.json` for detailed instructions. The setup script annotates non‑re
 
 ## **📂 The Ecosystem**
 
-The script automatically builds and maintains this structure:
+The repo layout (post-setup) looks like this:
 
 ```
-/My_Crypto_Tax_Folder
+/Crypto Taxes
 │
-├── README.md                      # [DOCS] This manual
-├── requirements.txt               # [DOCS] Python dependencies list
-├── .gitignore                     # [DOCS] Git ignore file (Crucial for security)
-│
-├── Setup.py                       # [USER] Run once to initialize folders/files
-├── docs/                          # [DOCS] Supporting documentation
-│   ├── Supported Blockchains.md   # [DOCS] List of supported chains
-│   ├── Supported Exchanges.md     # [DOCS] List of supported exchanges
-│   ├── WALLET_FORMAT_COMPATIBILITY.md # [DOCS] Wallet format reference
-│   ├── KNOWN_LIMITATIONS.md       # [DOCS] Architectural limitations & workarounds
-│   ├── STAKING_SETUP.md           # [DOCS] Staking rewards tax reporting guide
-│   ├── STAKING_QUICK_START.md     # [DOCS] 10-minute quick setup
-│   └── STAKING_EXAMPLES.md        # [DOCS] Real-world staking scenarios
-├── tests/                         # [USER] Test suite & documentation
-│   ├── unit_test.py               # [USER] Verification suite (148 tests, 45 test classes)
-│   ├── test_wallet_compatibility.py # [USER] Wallet format compatibility tests
-│   ├── TEST_COVERAGE_SUMMARY.md   # [DOCS] Detailed test coverage breakdown
-│   └── FINAL_STATUS.md            # [DOCS] Executive summary & checklist
-│
-├── Auto_Runner.py                 # [USER] Run this to sync & update taxes
-├── Crypto_Tax_Engine.py           # [CORE] The logic engine (do not delete)
-├── Tax_Reviewer.py                # [CORE] Manual review assistant (heuristic audit scanner)
-├── Interactive_Review_Fixer.py    # [USER] Guided tool to fix detected audit risks
-│
-├── api_keys.json                  # [USER] Your Exchange & Audit Keys
-├── wallets.json                   # [USER] Your Public Addresses (For Audit)
-├── config.json                    # [USER] Settings (Enable/Disable Audit, Backups, HIFO)
-│
-├── crypto_master.db               # [AUTO] The permanent database
-├── crypto_master.db.bak           # [AUTO] Safety backup (Last known good state)
-├── stablecoins_cache.json         # [AUTO] Cached list of stablecoins
-│
+├── README.md                       # Project overview and operations guide
+├── requirements.txt                # Python dependencies
+├── Setup.py                        # Initialize folders/files
+├── cli.py                          # CLI entry point for common tasks
+├── auto_runner.py                  # Sync, process, and generate tax reports
+├── start_web_ui.py                 # Launch self-hosted web UI
+├── web_server.py                   # Legacy web server entrypoint
+├── Crypto_Tax_Engine.py            # Core tax engine (imported by scripts)
+├── Tax_Reviewer.py                 # Manual review assistant entrypoint
+├── docs/
+│   ├── CLI_GUIDE.md                # Command-line usage guide
+│   └── CODING_STANDARDS.md         # Project-wide documentation/header standards
+├── api_keys_encrypted.json         # Encrypted exchange/API credentials
+├── wallets_encrypted.json          # Encrypted wallet/address book
+├── stablecoins_cache.json          # Cached stablecoin list
 ├── configs/
-│   └── cached_token_addresses.json # [AUTO] Cached ERC-20/token contract addresses (7-day refresh)
-│
-├── inputs/                        # [USER] Drop manual CSVs here (MoonPay, etc.)
-├── processed_archive/             # [AUTO] Old CSVs move here after processing
-│
-└── outputs/
-   ├── logs/                      # [AUTO] Timestamped text logs of every run
-   ├── Year_2024/                 # [AUTO] Finalized Tax Reports
-      └── Year_2025/                 # [AUTO] Live/Draft Tax Reports
-         ├── TURBOTAX_CAP_GAINS.csv
-         ├── INCOME_REPORT.csv
-         ├── US_TAX_LOSS_ANALYSIS.csv
-         ├── WASH_SALE_REPORT.csv
-         ├── 1099_RECONCILIATION.csv
-         ├── 1099_RECONCILIATION_DETAILED.csv
-         ├── CURRENT_HOLDINGS_DRAFT.csv
-         ├── EOY_HOLDINGS_SNAPSHOT.csv
-         ├── TAX_REPORT.csv
-         ├── REVIEW_WARNINGS.csv        # [AUTO] High-priority audit risks
-         └── REVIEW_SUGGESTIONS.csv     # [AUTO] Medium/low-priority items for review
+│   ├── config.json                 # User settings
+│   ├── cached_token_addresses.json # Token metadata cache
+│   └── stablecoins_cache.json      # Stablecoin list cache
+├── inputs/                         # Drop manual CSVs here
+├── outputs/
+│   ├── logs/                       # Run logs
+│   ├── Year_2024/                  # Year-specific reports
+│   └── Year_2025/
+├── processed_archive/              # Archived processed inputs
+├── src/
+│   ├── core/                       # Engine, database, encryption, reviewer
+│   ├── tools/                      # Setup and review fixer utilities
+│   ├── utils/                      # Config, logger, constants
+│   └── web/                        # Web server components
+├── tests/
+│   ├── conftest.py                 # Pytest session config
+│   ├── generate_stress_test_data.py# Stress-test data generator
+│   ├── verify_stress_test.py       # Stress-test verification runner
+│   ├── split_tests.py              # Legacy splitter utility
+│   ├── test_comprehensive_scenarios.py # Full end-to-end scenarios
+│   └── ... focused test modules (compliance, ingest, UI, etc.)
+├── web_static/                     # Static assets for web UI
+└── web_templates/                  # HTML templates for web UI
 ```
 
 ## **🔗 APIs Used & Privacy Policies**
@@ -170,7 +162,19 @@ This program sends no telemetry data. All network traffic consists of direct req
    * **Why:** To fetch historical prices when current exchange data is incomplete.  
    * [Privacy Policy](https://finance.yahoo.com/privacy)
 
+## **⚠️ Critical Disclaimer (Read First)**
+
+- Designed to follow 2025 US tax guidelines but **not warranted accurate or complete**. Results can be wrong; always review with a qualified tax professional.
+- I have **no tax training**. This was built for my own simple transaction tracking.
+- **No liability** is accepted for errors, omissions, data loss, or compliance outcomes. Use at your own risk.
+- Intended for **local use only**. Do not expose the app or APIs to the internet; HTTPS uses self-signed certs and is not hardened for public access.
+- Secrets are stored in encrypted files, but you are responsible for host security, key management, and backups.
+
+**Before using the Program, you must accept the [Terms of Service](TERMS_OF_SERVICE.md). Acceptance is required and will be prompted on first run.**
+
 ## **🚀 Quick Start**
+
+> ⚠️ **BEFORE YOU FILE:** Review every CSV output with a qualified tax professional. Do not file based solely on this tool's output. Cryptocurrency tax reporting is complex and changing; errors here could result in audit, penalties, or misstatement. **This is your responsibility.**
 
 ### **1. Install Requirements**
 
@@ -202,8 +206,8 @@ python Setup.py
 
 ### **3. Configure**
 
-* **api_keys.json:** Add Read-Only keys for exchanges. Add a **Moralis** key for EVM/Solana audits.  
-* **wallets.json:** Add public addresses for on-chain audits. To add multiple wallets for the same coin, use a JSON array of addresses. Example:
+* **api_keys_encrypted.json:** Add Read-Only keys for exchanges. Add a **Moralis** key for EVM/Solana audits.  
+* **wallets_encrypted.json:** Add public addresses for on-chain audits. To add multiple wallets for the same coin, use a JSON array of addresses. Example:
 
 ```json
 {
@@ -228,7 +232,7 @@ python Setup.py
 
 **Notes:** Use public addresses only (do NOT paste private keys). For EVM chains prefer checksummed `0x...` addresses when possible.
 
-* **config.json:** (Optional) Configure staking rewards auto-import and other settings:
+* **configs/config.json:** (Optional) Configure staking rewards auto-import and other settings:
   - `accounting.method`: Switch to "HIFO" if desired (Defaults to "FIFO")
   - `staking.enabled`: Enable/disable StakeTaxCSV auto-import (requires StakeTaxCSV installed)
   - `staking.protocols_to_sync`: Which protocols to sync (e.g., `["lido", "aave"]` or `["all"]`)
@@ -238,34 +242,36 @@ python Setup.py
 To sync data, calculate taxes, and generate reports:
 
 ```bash
-python Auto_Runner.py
+python auto_runner.py
 ```
 
-### **5. Verify (Unit Tests)**
+### **5. Verify (Tests)**
 
-The current release passes 197 tests covering accounting, compliance, auditor, ingestor, and reporting.
+Run the full suite:
 
 ```bash
 pytest -q
 ```
 
-To run the comprehensive test suite and verify the math is perfect before filing:
+Useful focused runs:
 
 ```bash
-python tests/unit_test.py
+# End-to-end scenarios and regressions
+python -m pytest -q tests/test_comprehensive_scenarios.py
+
+# Web setup wizard flow
+python -m pytest -q tests/test_setup_workflow.py
+
+# Stress harness (generate then verify)
+python tests/generate_stress_test_data.py
+python tests/verify_stress_test.py
 ```
-
-This runs **148 test methods** across **45 test classes** including edge cases, random scenarios, US tax compliance verification, and graceful error handling.
-
-**For detailed test coverage information**, see:
-- `tests/TEST_COVERAGE_SUMMARY.md` - Comprehensive breakdown of all 148 tests by component and tax rule
-- `tests/FINAL_STATUS.md` - Executive summary and production readiness checklist
 
 ## **📂 Output Files (outputs/Year_YYYY/)**
 
 | File Name | Description |
 | :---- | :---- |
-| **TURBOTAX_CAP_GAINS.csv** | The primary report for Schedule D. Includes Proceeds, Cost Basis, and Gain/Loss. |
+| **CAP_GAINS_REPORT.csv** | Capital gains detail for Schedule D; generic CSV compatible with tax software. |
 | **INCOME_REPORT.csv** | Total value of Staking, Mining, Forks, and Airdrops (Ordinary Income). |
 | **US_TAX_LOSS_ANALYSIS.csv** | Summary of Net Short/Long positions, Allowable Deduction ($3k), and Carryovers. |
 | **WASH_SALE_REPORT.csv** | Detailed list of losses disallowed due to the Wash Sale rule. |
@@ -276,7 +282,7 @@ This runs **148 test methods** across **45 test classes** including edge cases, 
 
 ## **🔍 Manual Review Assistant (Heuristic Scanner)**
 
-After generating tax reports, the system automatically runs a **heuristic-based manual review** that flags potential audit risks. This helps catch issues that automated tax software might miss.
+After generating tax reports, the system automatically runs a **heuristic-based manual review** that flags potential audit risks. These heuristics can miss issues or produce false positives—treat them as prompts to review, not guarantees.
 
 ### **What It Detects**
 
@@ -305,14 +311,14 @@ The reviewer scans for:
 5. **Missing Prices or Unmatched Sells** (🚨 HIGH)
    - Finds transactions with zero USD prices or sells without sufficient basis
    - **Risk:** Incorrect gain calculations; broker mismatch in strict mode
-   - **Action:** Run Auto_Runner to fetch prices; check for missing import data
+  - **Action:** Run auto_runner.py to fetch prices; check for missing import data
 
 ### **How to Use**
 
 The review runs automatically when you execute:
 
 ```bash
-python Auto_Runner.py
+python auto_runner.py
 ```
 
 Or when running the main engine directly:
@@ -327,14 +333,18 @@ python Crypto_Tax_Engine.py
 
 ### **Interactive Review Fixer**
 
-After the Tax Reviewer detects issues, use the **Interactive Review Fixer** to address them through a guided, transaction-by-transaction workflow.
+After the Tax Reviewer detects issues, use the **Interactive Review Fixer** (src/tools/review_fixer.py) to address them through a guided, transaction-by-transaction workflow.
 
 #### **How to Use**
 
 Run the fixer for a specific tax year:
 
 ```bash
-python Interactive_Review_Fixer.py 2024
+# Direct invocation
+python src/tools/review_fixer.py 2024
+
+# Via CLI wrapper
+python cli.py fix-review 2024
 ```
 
 #### **What It Does**
@@ -437,7 +447,7 @@ Applied 15 fixes:
 ✓ Backup still available at: trades_backup_before_fix_20251211_143022.db
 
 Re-run tax calculations to see updated results:
-  python Auto_Runner.py
+  python auto_runner.py
 ```
 
 #### **Features**
@@ -477,7 +487,7 @@ Re-run tax calculations to see updated results:
 Once you've fixed issues, re-run the tax calculation:
 
 ```bash
-python Auto_Runner.py
+python auto_runner.py
 ```
 
 The reviewer will run again. Successfully fixed items won't appear. Skipped items will reappear for review later.
@@ -545,7 +555,7 @@ pip install staketaxcsv
 
 #### **2. Enable in config.json**
 
-Edit your `config.json` file and enable the staking section. Wallet addresses are **automatically pulled** from your `wallets.json` file:
+Edit your `config.json` file and enable the staking section. Wallet addresses are **automatically pulled** from your `wallets_encrypted.json` file:
 
 ```json
 {
@@ -560,14 +570,14 @@ Edit your `config.json` file and enable the staking section. Wallet addresses ar
 - `enabled` (bool): Enable/disable StakeTaxCSV auto-import
 - `protocols_to_sync` (array): Which protocols to sync. Use `["all"]` for all protocols, or specify specific ones like `["lido", "aave", "compound"]`
 
-**Note:** Wallet addresses are automatically read from `wallets.json` — no separate configuration needed!
+**Note:** Wallet addresses are automatically read from `wallets_encrypted.json` — no separate configuration needed!
 
-#### **3. Run Auto_Runner.py**
+#### **3. Run auto_runner.py**
 
 The StakeTaxCSV manager runs automatically:
 
 ```bash
-python Auto_Runner.py
+python auto_runner.py
 ```
 
 **Output:**
@@ -646,7 +656,7 @@ date,coin,amount,protocol,usd_value_at_time
 1. Export or calculate your Figment rewards from their dashboard
 2. Get the USD price for each date (CoinGecko, Yahoo Finance, etc.)
 3. Create `inputs/figment_staking.csv` with the data
-4. Run `python Auto_Runner.py`
+4. Run `python auto_runner.py`
 5. The rewards are imported with deduplication (same as StakeTaxCSV)
 
 #### **Tax Treatment**
@@ -676,13 +686,14 @@ To run the full test suite (recommended):
 
 ```bash
 # Windows
-& ".venv\Scripts\python.exe" tests/unit_test.py
+& ".venv\Scripts\python.exe" -m pytest -q
 
 # Linux/Mac
-python3 tests/unit_test.py
+python3 -m pytest -q
 ```
 
-This runner automatically enables `TEST_MODE` to speed up execution by reducing API rate limit wait times.
-
-For more details on running specific tests or using `pytest`, see [tests/README.md](tests/README.md).
+Common targeted runs:
+- Full regression: `python -m pytest -q tests/test_comprehensive_scenarios.py`
+- Setup wizard: `python -m pytest -q tests/test_setup_workflow.py`
+- Stress harness: `python tests/generate_stress_test_data.py` then `python tests/verify_stress_test.py`
 
