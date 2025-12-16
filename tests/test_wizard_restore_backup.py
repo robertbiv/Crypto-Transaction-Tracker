@@ -7,7 +7,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 import web_server as ws
-from Crypto_Tax_Engine import DatabaseEncryption
+from src.core.engine import DatabaseEncryption
 
 
 @pytest.fixture()
@@ -111,3 +111,5 @@ def test_wizard_restore_requires_file(client_and_tmp):
     assert resp.status_code == 400
     payload = resp.get_json()
     assert 'Missing file' in payload.get('error', '')
+
+

@@ -8,7 +8,7 @@ import pytest
 @pytest.fixture()
 def app_client(tmp_path, monkeypatch):
     # Import modules
-    import Crypto_Tax_Engine as cte
+    import src.core.engine as cte
     import web_server as ws
 
     # Sandbox directories
@@ -126,3 +126,5 @@ def test_transactions_crud_create_update_delete(app_client):
     # Delete
     del_resp = client.delete(f'/api/transactions/{tx_id}', headers=_headers(csrf))
     assert del_resp.status_code == 200
+
+

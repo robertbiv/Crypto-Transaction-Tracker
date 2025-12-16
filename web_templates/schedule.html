@@ -4,64 +4,395 @@
 
 {% block extra_css %}
 <style>
-    .schedule-info {
-        background: var(--md-sys-color-primary-container);
+    .schedule-card {
+        background: var(--md-sys-color-surface-container);
         padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+    }
+    
+    .schedule-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    .schedule-status.enabled {
+        background: var(--md-sys-color-primary-container);
+        color: var(--md-sys-color-on-primary-container);
+    }
+    
+    .schedule-status.disabled {
+        background: var(--md-sys-color-error-container);
+        color: var(--md-sys-color-on-error-container);
+    }
+    
+    .schedule-item {
+        background: var(--md-sys-color-surface);
+        padding: 16px;
         border-radius: 8px;
-        margin-bottom: 24px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .schedule-info {
+        flex: 1;
+    }
+    
+    .schedule-actions {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    
+    @media (max-width: 768px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .next-run {
+        color: var(--md-sys-color-primary);
+        font-weight: 500;
+        margin-top: 4px;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom: 24px;">Automated Runs Schedule</h1>
+<h1 style="margin-bottom: 24px;">Automated Tax Calculation Schedule</h1>
 
-<div class="card">
-    <h2 class="card-title">Schedule Tax Calculations</h2>
-    
-    <div class="schedule-info">
-        <h3>Coming Soon!</h3>
-        <p style="margin-top: 8px;">
-            Automated scheduling feature will be available in a future update. 
-            This will allow you to schedule regular tax calculations to run automatically.
-        </p>
+<!-- Status Card -->
+<div class="schedule-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 style="margin: 0;">Scheduling Status</h2>
+        <div class="schedule-status" id="scheduleStatus">
+            <span class="material-icons" id="statusIcon">schedule</span>
+            <span id="statusText">Loading...</span>
+        </div>
     </div>
     
-    <p style="color: var(--md-sys-color-on-surface-variant);">
-        For now, you can manually run tax calculations from the Dashboard or use system cron/task scheduler 
-        to run <code>python3 Auto_Runner.py</code> at your desired intervals.
-    </p>
-    
-    <div style="margin-top: 24px;">
-        <h3>Manual Run</h3>
-        <p style="margin: 8px 0;">Run a tax calculation immediately:</p>
-        <button id="runTaxCalcNowBtn" class="btn btn-primary">
-            <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
-            Run Tax Calculation Now
+    <div style="display: flex; gap: 12px;">
+        <button id="toggleScheduleBtn" class="btn btn-primary">
+            <span class="material-icons">power_settings_new</span>
+            Toggle Scheduling
+        </button>
+        <button id="addScheduleBtn" class="btn btn-secondary">
+            <span class="material-icons">add</span>
+            Add Schedule
         </button>
     </div>
 </div>
+
+<!-- Active Schedules -->
+<div class="card">
+    <h2 class="card-title">Active Schedules</h2>
+    <div id="schedulesList">
+        <p style="color: var(--md-sys-color-on-surface-variant);">Loading schedules...</p>
+    </div>
+</div>
+
+<!-- Add/Edit Schedule Modal -->
+<div id="scheduleModal" class="modal">
+    <div class="modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <h2 style="margin: 0;">Schedule Configuration</h2>
+            <button class="btn-icon" onclick="closeScheduleModal()">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        
+        <form id="scheduleForm">
+            <input type="hidden" id="scheduleId" />
+            
+            <div class="form-group">
+                <label class="form-label">Schedule Name</label>
+                <input type="text" id="scheduleName" class="form-input" placeholder="e.g., Daily Tax Update" required>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Frequency</label>
+                    <select id="scheduleFrequency" class="form-input" required onchange="updateFrequencyFields()">
+                        <option value="">Select frequency...</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Time</label>
+                    <input type="time" id="scheduleTime" class="form-input" value="02:00" required>
+                </div>
+            </div>
+            
+            <div class="form-group" id="dayOfWeekGroup" style="display: none;">
+                <label class="form-label">Day of Week</label>
+                <select id="scheduleDayOfWeek" class="form-input">
+                    <option value="">Select day...</option>
+                    <option value="mon">Monday</option>
+                    <option value="tue">Tuesday</option>
+                    <option value="wed">Wednesday</option>
+                    <option value="thu">Thursday</option>
+                    <option value="fri">Friday</option>
+                    <option value="sat">Saturday</option>
+                    <option value="sun">Sunday</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="scheduleCascade">
+                    <span>Cascade Mode (process all years)</span>
+                </label>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+                <button type="button" class="btn btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Schedule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script nonce="{{ csp_nonce }}">
-    async function runTaxCalculation() {
-        if (!confirm('Start tax calculation? This may take several minutes.')) {
+    let scheduleConfig = null;
+    
+    // Load schedule configuration
+    async function loadScheduleConfig() {
+        try {
+            const response = await api.get('/api/schedule/config');
+            const data = JSON.parse(response.data);
+            scheduleConfig = data.config;
+            
+            // Update status
+            updateStatus(scheduleConfig.enabled);
+            
+            // Render schedules
+            renderSchedules(scheduleConfig.schedules || []);
+            
+        } catch (error) {
+            showAlert('Failed to load schedules: ' + error.message, 'error');
+        }
+    }
+    
+    // Update status display
+    function updateStatus(enabled) {
+        const statusDiv = document.getElementById('scheduleStatus');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusText = document.getElementById('statusText');
+        
+        if (enabled) {
+            statusDiv.className = 'schedule-status enabled';
+            statusIcon.textContent = 'check_circle';
+            statusText.textContent = 'Enabled';
+        } else {
+            statusDiv.className = 'schedule-status disabled';
+            statusIcon.textContent = 'cancel';
+            statusText.textContent = 'Disabled';
+        }
+    }
+    
+    // Render schedules list
+    function renderSchedules(schedules) {
+        const container = document.getElementById('schedulesList');
+        
+        if (!schedules || schedules.length === 0) {
+            container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No schedules configured. Click "Add Schedule" to create one.</p>';
+            return;
+        }
+        
+        container.innerHTML = schedules.map((schedule, index) => `
+            <div class="schedule-item">
+                <div class="schedule-info">
+                    <h3 style="margin: 0 0 8px 0;">${schedule.name || 'Unnamed Schedule'}</h3>
+                    <p style="margin: 0; color: var(--md-sys-color-on-surface-variant);">
+                        <span class="material-icons" style="font-size: 16px; vertical-align: middle;">schedule</span>
+                        ${formatSchedule(schedule)}
+                    </p>
+                </div>
+                <div class="schedule-actions">
+                    <button class="btn-icon" onclick="editSchedule(${index})" title="Edit">
+                        <span class="material-icons">edit</span>
+                    </button>
+                    <button class="btn-icon" onclick="deleteSchedule(${index})" title="Delete">
+                        <span class="material-icons">delete</span>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // Format schedule for display
+    function formatSchedule(schedule) {
+        let text = '';
+        
+        if (schedule.frequency === 'daily') {
+            text = `Daily at ${schedule.time}`;
+        } else if (schedule.frequency === 'weekly') {
+            const dayNames = {mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', 
+                           thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday'};
+            text = `Weekly on ${dayNames[schedule.day_of_week]} at ${schedule.time}`;
+        } else if (schedule.frequency === 'monthly') {
+            text = `Monthly on the 1st at ${schedule.time}`;
+        }
+        
+        if (schedule.cascade) {
+            text += ' <span style="background: var(--md-sys-color-tertiary-container); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">CASCADE</span>';
+        }
+        
+        return text;
+    }
+    
+    // Toggle scheduling
+    async function toggleSchedule() {
+        const newState = !scheduleConfig.enabled;
+        
+        if (!confirm(`Are you sure you want to ${newState ? 'enable' : 'disable'} automated scheduling?`)) {
             return;
         }
         
         try {
-            const response = await api.post('/api/run', {});
-            const result = JSON.parse(response.data);
-            showAlert(result.message, 'success');
+            const response = await api.post('/api/schedule/toggle', {enabled: newState});
+            const data = JSON.parse(response.data);
+            
+            scheduleConfig.enabled = data.enabled;
+            updateStatus(data.enabled);
+            showAlert(`Scheduling ${data.enabled ? 'enabled' : 'disabled'}`, 'success');
+            
         } catch (error) {
-            showAlert('Failed to start calculation: ' + error.message, 'error');
+            showAlert('Failed to toggle scheduling: ' + error.message, 'error');
         }
     }
-
+    
+    // Show add schedule modal
+    function showAddScheduleModal() {
+        document.getElementById('scheduleId').value = '';
+        document.getElementById('scheduleForm').reset();
+        document.getElementById('scheduleTime').value = '02:00';
+        document.getElementById('dayOfWeekGroup').style.display = 'none';
+        document.getElementById('scheduleModal').classList.add('active');
+    }
+    
+    // Edit schedule
+    function editSchedule(index) {
+        const schedule = scheduleConfig.schedules[index];
+        
+        document.getElementById('scheduleId').value = index;
+        document.getElementById('scheduleName').value = schedule.name || '';
+        document.getElementById('scheduleFrequency').value = schedule.frequency;
+        document.getElementById('scheduleTime').value = schedule.time;
+        document.getElementById('scheduleDayOfWeek').value = schedule.day_of_week || '';
+        document.getElementById('scheduleCascade').checked = schedule.cascade || false;
+        
+        updateFrequencyFields();
+        document.getElementById('scheduleModal').classList.add('active');
+    }
+    
+    // Delete schedule
+    async function deleteSchedule(index) {
+        if (!confirm('Delete this schedule?')) {
+            return;
+        }
+        
+        scheduleConfig.schedules.splice(index, 1);
+        await saveScheduleConfig();
+    }
+    
+    // Close modal
+    function closeScheduleModal() {
+        document.getElementById('scheduleModal').classList.remove('active');
+    }
+    
+    // Update frequency-dependent fields
+    function updateFrequencyFields() {
+        const frequency = document.getElementById('scheduleFrequency').value;
+        const dayOfWeekGroup = document.getElementById('dayOfWeekGroup');
+        
+        if (frequency === 'weekly') {
+            dayOfWeekGroup.style.display = 'block';
+            document.getElementById('scheduleDayOfWeek').required = true;
+        } else {
+            dayOfWeekGroup.style.display = 'none';
+            document.getElementById('scheduleDayOfWeek').required = false;
+        }
+    }
+    
+    // Save schedule
+    async function saveSchedule(event) {
+        event.preventDefault();
+        
+        const indexStr = document.getElementById('scheduleId').value;
+        const schedule = {
+            id: Date.now().toString(), // Generate unique ID
+            name: document.getElementById('scheduleName').value,
+            frequency: document.getElementById('scheduleFrequency').value,
+            time: document.getElementById('scheduleTime').value,
+            day_of_week: document.getElementById('scheduleDayOfWeek').value || null,
+            cascade: document.getElementById('scheduleCascade').checked
+        };
+        
+        if (indexStr === '') {
+            // New schedule
+            if (!scheduleConfig.schedules) {
+                scheduleConfig.schedules = [];
+            }
+            scheduleConfig.schedules.push(schedule);
+        } else {
+            // Update existing
+            const index = parseInt(indexStr);
+            schedule.id = scheduleConfig.schedules[index].id; // Keep same ID
+            scheduleConfig.schedules[index] = schedule;
+        }
+        
+        await saveScheduleConfig();
+        closeScheduleModal();
+    }
+    
+    // Save configuration to server
+    async function saveScheduleConfig() {
+        try {
+            const response = await api.post('/api/schedule/save', scheduleConfig);
+            const data = JSON.parse(response.data);
+            
+            showAlert('Schedule configuration saved', 'success');
+            await loadScheduleConfig();
+            
+        } catch (error) {
+            showAlert('Failed to save schedule: ' + error.message, 'error');
+        }
+    }
+    
+    // Event listeners
     document.addEventListener('DOMContentLoaded', () => {
-        const btn = document.getElementById('runTaxCalcNowBtn');
-        if (btn) btn.addEventListener('click', runTaxCalculation);
+        loadScheduleConfig();
+        
+        document.getElementById('toggleScheduleBtn').addEventListener('click', toggleSchedule);
+        document.getElementById('addScheduleBtn').addEventListener('click', showAddScheduleModal);
+        document.getElementById('scheduleForm').addEventListener('submit', saveSchedule);
+        
+        // Close modal on outside click
+        document.getElementById('scheduleModal').addEventListener('click', (e) => {
+            if (e.target.id === 'scheduleModal') {
+                closeScheduleModal();
+            }
+        });
     });
 </script>
 {% endblock %}

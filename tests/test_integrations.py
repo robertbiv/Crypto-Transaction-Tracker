@@ -618,7 +618,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_api_key_save(self):
         """Test: API key is saved correctly to api_keys.json"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -642,7 +642,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_api_key_append_not_overwrite(self):
         """Test: New API keys are added without overwriting existing ones"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -666,7 +666,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_wallet_append_not_overwrite(self):
         """Test: New wallets are appended, not overwriting existing wallets"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -693,7 +693,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_wallet_no_duplicates(self):
         """Test: Duplicate wallets are not added twice"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Ensure clean state
         app.save_wallets_file({})
@@ -717,7 +717,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_infer_chain_from_coin(self):
         """Test: Chain inference from coin symbol works correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -738,7 +738,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_detect_chain_from_address(self):
         """Test: Chain detection from wallet address format"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -759,7 +759,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_check_only_correct_blockchain(self):
         """Test: Only the correct blockchain is checked for each coin"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -786,7 +786,7 @@ class TestBlockchainIntegration(unittest.TestCase):
     
     def test_blockchain_explorer_hints(self):
         """Test: Correct blockchain explorer URLs are provided"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -825,7 +825,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cached_token_addresses_structure(self):
         """Test: Token address cache returns proper structure"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         token_map = fixer._get_cached_token_addresses()
@@ -854,7 +854,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_common_token_lookup(self):
         """Test: Common tokens can be looked up across chains"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         token_map = fixer._get_cached_token_addresses()
@@ -883,7 +883,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_file_persistence(self):
         """Test: Cache is persisted to disk"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         cache_dir = self.test_path / 'configs'
         cache_file = cache_dir / 'cached_token_addresses.json'
@@ -906,7 +906,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_includes_major_chains(self):
         """Test: Cache includes major blockchain networks"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         token_map = fixer._get_cached_token_addresses()
@@ -924,7 +924,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_lookup_by_token_and_chain(self):
         """Test: Can lookup specific token on specific chain"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         token_map = fixer._get_cached_token_addresses()
@@ -942,7 +942,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_multiple_sessions_skip_refresh(self):
         """Test: Multiple calls within 7 days skip API refresh (session-level caching)"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # First session
         fixer1 = InteractiveReviewFixer(self.db, 2024)
@@ -961,7 +961,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_graceful_handling_on_api_failure(self):
         """Test: Cache loading gracefully handles API failures"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -975,7 +975,7 @@ class TestTokenAddressCaching(unittest.TestCase):
     
     def test_cache_file_format_json(self):
         """Test: Cache file is valid JSON"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         import json
         
         cache_dir = self.test_path / 'configs'
@@ -998,3 +998,5 @@ class TestTokenAddressCaching(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

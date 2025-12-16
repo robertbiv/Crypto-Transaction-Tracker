@@ -9,8 +9,8 @@ from decimal import Decimal
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import Crypto_Tax_Engine
-from Crypto_Tax_Engine import DatabaseManager, Ingestor, TaxEngine, initialize_folders, INPUT_DIR, DB_FILE, OUTPUT_DIR
+import src.core.engine as crypto_tax_engine
+from src.core.engine import DatabaseManager, Ingestor, TaxEngine, initialize_folders, INPUT_DIR, DB_FILE, OUTPUT_DIR
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -166,3 +166,5 @@ def run_verification():
 
 if __name__ == "__main__":
     run_verification()
+
+

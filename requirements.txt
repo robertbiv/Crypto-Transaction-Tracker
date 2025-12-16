@@ -18,6 +18,9 @@ cryptography==46.0.3                   # Cryptographic recipes
 coincurve==21.0.0                      # Bitcoin and Ethereum curve library
 certifi==2025.11.12                    # Root certificate authority bundle
 curl_cffi==0.13.0                      # CFFI-based curl bindings
+
+# Scheduling
+APScheduler==3.10.4                    # Advanced Python Scheduler for automated runs
 filelock==3.20.0                       # File locking for concurrent access
 
 # Data Parsing & Serialization

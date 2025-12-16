@@ -12,14 +12,20 @@ from decimal import Decimal, InvalidOperation
 import pandas as pd
 import requests
 import time
-import Crypto_Tax_Engine as app
-from Crypto_Tax_Engine import DatabaseManager, logger
+import datetime as dt
+import src.core.engine as app
+from src.core.engine import DatabaseManager, logger
+from src.processors import PriceFetcher
 
-# Token address cache configuration
+# ====================================================================================
+# TOKEN CACHE CONFIGURATION
+# ====================================================================================
 TOKEN_CACHE_FILE = Path("configs/cached_token_addresses.json")
 CACHE_REFRESH_DAYS = 7  # Refresh cache every 7 days
 
-# API Rate Limiting Configuration (CoinGecko Free Tier: 10-30 calls/min)
+# ====================================================================================
+# API RATE LIMITING CONFIGURATION (CoinGecko Free Tier: 10-30 calls/min)
+# ====================================================================================
 # For testing, set TEST_MODE=1 to reduce rate limit waits to 1 second (vs 60s production)
 TEST_MODE = os.environ.get('TEST_MODE') == '1'
 API_REQUEST_DELAY = 0.3  # Seconds between individual API requests (~3 calls/sec max)
@@ -27,6 +33,48 @@ API_BATCH_DELAY = 2  # Seconds after processing 50 tokens
 API_MAX_RETRIES = 5  # Maximum retry attempts for failed requests
 API_INITIAL_BACKOFF = 1  # Initial backoff delay in seconds
 API_MAX_RETRY_WAIT = 1 if TEST_MODE else 60  # Max wait time for rate limit retries (1s test, 60s prod)
+
+# ====================================================================================
+# DATE PARSING HELPER
+# ====================================================================================
+def _parse_date_flexible(date_str):
+    """Parse date string with multiple format fallbacks.
+    
+    Accepts:
+    - ISO format with time: '2023-01-01T00:00:00'
+    - ISO format with time and TZ: '2023-01-01T00:00:00+00:00'
+    - Date with time: '2023-01-01 00:00:00'
+    - Date only: '2023-01-01'
+    """
+    if isinstance(date_str, dt.date):
+        return date_str
+    
+    date_str = str(date_str).strip()
+    
+    # Try pandas to_datetime first (most flexible)
+    try:
+        return pd.to_datetime(date_str, utc=True).date()
+    except (ValueError, pd.errors.ParserError):
+        pass
+    
+    # Try various strptime formats
+    formats = [
+        '%Y-%m-%d %H:%M:%S',  # '2023-01-01 00:00:00'
+        '%Y-%m-%d',           # '2023-01-01'
+        '%Y-%m-%dT%H:%M:%S',  # '2023-01-01T00:00:00'
+    ]
+    
+    for fmt in formats:
+        try:
+            return dt.datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+    
+    # Last resort: parse as ISO and extract date
+    try:
+        return dt.datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+    except (ValueError, AttributeError):
+        raise ValueError(f"Unable to parse date: {date_str}")
 
 class InteractiveReviewFixer:
     """Interactive tool to fix issues detected by Tax Reviewer"""
@@ -251,7 +299,6 @@ class InteractiveReviewFixer:
 
         if choice == '1':
             self._print("\n  Checking blockchain and fetching suggested prices...")
-            from Crypto_Tax_Engine import PriceFetcher
             fetcher = PriceFetcher()
 
             for item in warning['items']:
@@ -452,7 +499,6 @@ class InteractiveReviewFixer:
         print("Most common cause: Entering 'Total Value' instead of 'Price Per Coin'.\n")
         
         # Initialize PriceFetcher to get real market prices
-        from Crypto_Tax_Engine import PriceFetcher
         fetcher = PriceFetcher()
         
         for item in warning['items']:
@@ -517,7 +563,9 @@ class InteractiveReviewFixer:
         
         input("\nPress Enter to continue...")
     
-    # Database modification methods
+    # ====================================================================================
+    # DATABASE MODIFICATION METHODS
+    # ====================================================================================
     
     def _rename_coin(self, transaction_id, old_name, new_name):
         """Rename a coin in the database (staged, not committed)"""
@@ -1003,11 +1051,9 @@ class InteractiveReviewFixer:
         if not blockchair_key:
             return False, None, "Blockchair API key not configured - cannot check Bitcoin transactions"
         
-        import datetime as dt
-        
         try:
             # Parse date
-            tx_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
+            tx_date = _parse_date_flexible(date_str)
             
             for wallet in wallets:
                 try:
@@ -1142,7 +1188,7 @@ class InteractiveReviewFixer:
             api_key = 'YourApiKeyToken'  # Placeholder
         
         try:
-            tx_date = dt.datetime.strptime(date_str, '%Y-%m-%d').date()
+            tx_date = _parse_date_flexible(date_str)
             
             for wallet in wallets:
                 try:
@@ -1449,3 +1495,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

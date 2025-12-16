@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Schedule - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .schedule-info {
+        background: var(--md-sys-color-primary-container);
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 24px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">Automated Runs Schedule</h1>
+
+<div class="card">
+    <h2 class="card-title">Schedule Tax Calculations</h2>
+    
+    <div class="schedule-info">
+        <h3>Coming Soon!</h3>
+        <p style="margin-top: 8px;">
+            Automated scheduling feature will be available in a future update. 
+            This will allow you to schedule regular tax calculations to run automatically.
+        </p>
+    </div>
+    
+    <p style="color: var(--md-sys-color-on-surface-variant);">
+        For now, you can manually run tax calculations from the Dashboard or use system cron/task scheduler 
+        to run <code>python3 Auto_Runner.py</code> at your desired intervals.
+    </p>
+    
+    <div style="margin-top: 24px;">
+        <h3>Manual Run</h3>
+        <p style="margin: 8px 0;">Run a tax calculation immediately:</p>
+        <button id="runTaxCalcNowBtn" class="btn btn-primary">
+            <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
+            Run Tax Calculation Now
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce }}">
+    async function runTaxCalculation() {
+        if (!confirm('Start tax calculation? This may take several minutes.')) {
+            return;
+        }
+        
+        try {
+            const response = await api.post('/api/run', {});
+            const result = JSON.parse(response.data);
+            showAlert(result.message, 'success');
+        } catch (error) {
+            showAlert('Failed to start calculation: ' + error.message, 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('runTaxCalcNowBtn');
+        if (btn) btn.addEventListener('click', runTaxCalculation);
+    });
+</script>
+{% endblock %}

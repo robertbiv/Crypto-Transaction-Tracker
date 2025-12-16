@@ -79,3 +79,5 @@ def test_first_time_setup_get_renders_template(client):
     """GET /first-time-setup should render the template when no users exist."""
     resp = client.get('/first-time-setup')
     assert resp.status_code == 200
+
+
