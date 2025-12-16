@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import timedelta
 from pathlib import Path
 import logging
-import crypto_tax_engine as app
+import src.core.engine as app
 
 logger = logging.getLogger("crypto_tax_engine")
 
@@ -83,7 +83,7 @@ class TaxReviewer:
             logger.info("      For full analysis, ensure tax calculations are run first.")
         
         df = self.db.get_all()
-        df['date'] = pd.to_datetime(df['date'], format='mixed')
+        df['date'] = pd.to_datetime(df['date'], format='mixed', utc=True)
         # Filter for current tax year
         df_year = df[df['date'].dt.year == int(self.year)].copy()
         
