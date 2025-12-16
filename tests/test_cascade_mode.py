@@ -20,7 +20,16 @@ class TestCascadeMode(unittest.TestCase):
         app.OUTPUT_DIR = self.test_path / 'outputs'
         app.INPUT_DIR = self.test_path / 'inputs'
         app.CONFIG_FILE = self.test_path / 'config.json'
+        
+        self.orig_enc_keys_app = app.API_KEYS_ENCRYPTED_FILE
+        app.API_KEYS_ENCRYPTED_FILE = self.test_path / 'api_keys_encrypted.json'
+        
         app.initialize_folders()
+        
+        # Patch encryption module paths
+        import src.core.encryption as encryption_module
+        self.orig_enc_keys = encryption_module.API_KEYS_ENCRYPTED_FILE
+        encryption_module.API_KEYS_ENCRYPTED_FILE = self.test_path / 'api_keys_encrypted.json'
         
         self.db = app.DatabaseManager()
 
@@ -28,6 +37,11 @@ class TestCascadeMode(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
+        app.API_KEYS_ENCRYPTED_FILE = self.orig_enc_keys_app
+        
+        # Restore encryption module paths
+        import src.core.encryption as encryption_module
+        encryption_module.API_KEYS_ENCRYPTED_FILE = self.orig_enc_keys
         app.DB_FILE = self.orig_db
         app.OUTPUT_DIR = self.orig_output
         app.CONFIG_FILE = self.orig_config

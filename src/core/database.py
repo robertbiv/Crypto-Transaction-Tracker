@@ -16,7 +16,28 @@ from datetime import datetime
 from pathlib import Path
 from decimal import Decimal
 
-from src.utils.constants import DB_FILE, BASE_DIR
+# Resolve DB file dynamically to honor engine overrides used in tests
+try:
+    import src.core.engine as _engine
+except Exception:
+    _engine = None
+
+try:
+    from src.utils.constants import BASE_DIR as _BASE_DIR, DB_FILE as _CONST_DB_FILE
+except Exception:
+    _BASE_DIR, _CONST_DB_FILE = Path.cwd(), Path.cwd() / 'crypto_master.db'
+
+def _resolve_db_file():
+    # Prefer engine's DB_FILE if available (tests monkeypatch this)
+    try:
+        if _engine and hasattr(_engine, 'DB_FILE'):
+            return Path(getattr(_engine, 'DB_FILE'))
+    except Exception:
+        pass
+    return Path(_CONST_DB_FILE)
+
+DB_FILE = _resolve_db_file()
+BASE_DIR = _BASE_DIR
 from src.utils.config import load_config
 
 logger = logging.getLogger("crypto_tax_engine")
@@ -94,17 +115,38 @@ class DatabaseManager:
     - Support for cross-wallet transfers
     """
     
-    def __init__(self):
+    def __init__(self, db_file=None):
         """Initialize database connection and ensure schema is up to date."""
         initialize_folders()
+        
+        # Determine DB file path dynamically to support test monkeypatching
+        if db_file:
+            self.db_file = Path(db_file)
+        else:
+            # Lazy import engine to avoid circular dependency and get patched value
+            try:
+                import sys
+                if 'src.core.engine' in sys.modules:
+                    _eng = sys.modules['src.core.engine']
+                    if hasattr(_eng, 'DB_FILE'):
+                        self.db_file = Path(_eng.DB_FILE)
+                    else:
+                        self.db_file = Path(DB_FILE)
+                else:
+                    # Try import if not in modules
+                    import src.core.engine as _eng
+                    self.db_file = Path(_eng.DB_FILE)
+            except Exception:
+                self.db_file = Path(DB_FILE)
+
         self._ensure_integrity()
-        self.conn = sqlite3.connect(str(DB_FILE))
+        self.conn = sqlite3.connect(str(self.db_file))
         self.cursor = self.conn.cursor()
         self._init_tables()
 
     def _backup_path(self):
         """Get path for safety backup file."""
-        return DB_FILE.with_suffix('.bak')
+        return self.db_file.with_suffix('.bak')
 
     def create_safety_backup(self):
         """
@@ -113,10 +155,10 @@ class DatabaseManager:
         """
         if not GLOBAL_CONFIG['general']['create_db_backups']:
             return
-        if DB_FILE.exists():
+        if self.db_file.exists():
             self.conn.commit()
             try:
-                shutil.copy(DB_FILE, self._backup_path())
+                shutil.copy(self.db_file, self._backup_path())
             except Exception as e:
                 logger.warning(f"Failed to create safety backup: {e}")
 
@@ -131,8 +173,8 @@ class DatabaseManager:
         if backup_path.exists():
             self.close()
             try:
-                shutil.copy(backup_path, DB_FILE)
-                self.conn = sqlite3.connect(str(DB_FILE))
+                shutil.copy(backup_path, self.db_file)
+                self.conn = sqlite3.connect(str(self.db_file))
                 self.cursor = self.conn.cursor()
                 logger.info("[SAFE] Restored database backup.")
             except Exception as e:
@@ -147,11 +189,11 @@ class DatabaseManager:
         Check database integrity before opening.
         Recovers corrupted database by moving it aside and starting fresh.
         """
-        if not DB_FILE.exists():
+        if not self.db_file.exists():
             return
         conn = None
         try:
-            conn = sqlite3.connect(f"file:{DB_FILE}?mode=ro", uri=True)
+            conn = sqlite3.connect(f"file:{self.db_file}?mode=ro", uri=True)
             conn.execute("PRAGMA integrity_check")
             conn.close()
         except Exception as e:
@@ -161,14 +203,27 @@ class DatabaseManager:
             finally:
                 self._recover_db()
 
+    def _get_base_dir(self):
+        """Resolve BASE_DIR dynamically to support test monkeypatching."""
+        try:
+            import sys
+            if 'src.core.engine' in sys.modules:
+                _eng = sys.modules['src.core.engine']
+                if hasattr(_eng, 'BASE_DIR'):
+                    return Path(_eng.BASE_DIR)
+            # Fallback to local global or constant
+            return BASE_DIR
+        except Exception:
+            return BASE_DIR
+
     def _recover_db(self):
         """
         Recover from corrupted database by moving it aside.
         Creates a fresh database for new transactions.
         """
         timestamp = datetime.now().strftime("%Y%m%d")
-        corrupt_path = BASE_DIR / f"CORRUPT_{timestamp}.db"
-        shutil.move(str(DB_FILE), str(corrupt_path))
+        corrupt_path = self._get_base_dir() / f"CORRUPT_{timestamp}.db"
+        shutil.move(str(self.db_file), str(corrupt_path))
         logger.error(f"[!] Database corrupted. Moved to {corrupt_path}. Created fresh DB.")
     
     def _migrate_to_text_precision(self):
@@ -366,5 +421,28 @@ class DatabaseManager:
         self.cursor.execute("UPDATE trades SET price_usd=? WHERE id=?", (price_str, uid))
     
     def close(self):
-        """Close database connection."""
-        self.conn.close()
+        """Close database connection safely and release file locks."""
+        try:
+            if hasattr(self, 'conn') and self.conn:
+                try:
+                    self.conn.commit()
+                except Exception:
+                    pass
+                self.conn.close()
+        finally:
+            self.conn = None
+            self.cursor = None
+
+    # Make DatabaseManager usable as a context manager
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    # Ensure connections are closed when object is garbage collected
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
