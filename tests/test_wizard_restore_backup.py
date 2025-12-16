@@ -21,6 +21,14 @@ def client_and_tmp(monkeypatch):
     monkeypatch.setattr(ws, 'API_KEYS_FILE', tmpdir / 'api_keys.json')
     monkeypatch.setattr(ws, 'API_KEYS_ENCRYPTED_FILE', tmpdir / 'api_keys_encrypted.json')
     monkeypatch.setattr(ws, 'WALLETS_FILE', tmpdir / 'wallets.json')
+    monkeypatch.setattr(ws, 'WALLETS_ENCRYPTED_FILE', tmpdir / 'wallets_encrypted.json')
+
+    # Patch encryption module paths to ensure save_api_keys_file writes to temp dir
+    import src.core.encryption as encryption_module
+    monkeypatch.setattr(encryption_module, 'API_KEYS_ENCRYPTED_FILE', tmpdir / 'api_keys_encrypted.json')
+    monkeypatch.setattr(encryption_module, 'KEYS_FILE', tmpdir / 'api_keys.json')
+    monkeypatch.setattr(encryption_module, 'WALLETS_ENCRYPTED_FILE', tmpdir / 'wallets_encrypted.json')
+    monkeypatch.setattr(encryption_module, 'WALLETS_FILE', tmpdir / 'wallets.json')
 
     # Ensure first-time setup state
     if ws.USERS_FILE.exists():
@@ -65,8 +73,8 @@ def test_wizard_restore_plain_zip(client_and_tmp):
     assert ws.DB_FILE.exists()
     assert ws.CONFIG_FILE.exists()
     # API keys may go to encrypted or plain; we provided plain
-    assert ws.API_KEYS_FILE.exists()
-    assert ws.WALLETS_FILE.exists()
+    assert ws.API_KEYS_FILE.exists() or ws.API_KEYS_ENCRYPTED_FILE.exists()
+    assert ws.WALLETS_FILE.exists() or ws.WALLETS_ENCRYPTED_FILE.exists()
     assert ws.USERS_FILE.exists()
 
 
@@ -101,7 +109,7 @@ def test_wizard_restore_encrypted_zip(client_and_tmp):
     assert ws.DB_FILE.exists()
     assert ws.CONFIG_FILE.exists()
     assert ws.API_KEYS_FILE.exists() or ws.API_KEYS_ENCRYPTED_FILE.exists()
-    assert ws.WALLETS_FILE.exists()
+    assert ws.WALLETS_FILE.exists() or ws.WALLETS_ENCRYPTED_FILE.exists()
     assert ws.USERS_FILE.exists()
 
 

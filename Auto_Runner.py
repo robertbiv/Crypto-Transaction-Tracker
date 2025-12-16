@@ -58,6 +58,7 @@ def run_automation():
     log(f"   CRYPTO TAX AUTO-PILOT: STARTED {'(CASCADE MODE)' if CASCADE_MODE else ''}")
     log("=========================================")
 
+    db = None
     try:
         # 1. INITIALIZE DATABASE
         db = tax_app.DatabaseManager()
@@ -171,8 +172,6 @@ def run_automation():
         except Exception as e:
             log(f"   [SKIP] Review assistant not available: {e}", level="warning")
 
-        db.close()
-        
         # Mark run as complete
         tax_app.mark_run_complete(success=True)
         
@@ -184,6 +183,9 @@ def run_automation():
         tax_app.mark_run_complete(success=False)
         log(f"[CRITICAL ERROR] Automation Failed: {e}")
         raise e
+    finally:
+        if db:
+            db.close()
 
 if __name__ == "__main__":
     try:

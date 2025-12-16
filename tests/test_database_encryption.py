@@ -188,9 +188,9 @@ class TestInitialization:
             key_file = tmpdir_path / '.db_key'
             salt_file = tmpdir_path / '.db_salt'
             
-            with patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 password = "mypassword"
                 db_key = DatabaseEncryption.initialize_encryption(password)
@@ -206,9 +206,9 @@ class TestInitialization:
             key_file = tmpdir_path / '.db_key'
             salt_file = tmpdir_path / '.db_salt'
             
-            with patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 password = "mypassword"
                 
@@ -229,9 +229,9 @@ class TestInitialization:
             key_file = tmpdir_path / '.db_key'
             salt_file = tmpdir_path / '.db_salt'
             
-            with patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 # Initialize with correct password
                 DatabaseEncryption.initialize_encryption("correctpassword")
@@ -258,10 +258,10 @@ class TestBackupEncryption:
             salt_file = tmpdir_path / '.db_salt'
             backup_file = tmpdir_path / 'backup.enc'
             
-            with patch('Crypto_Tax_Engine.DB_FILE', db_file), \
-                 patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_FILE', db_file), \
+                 patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 password = "testpassword"
                 
@@ -291,10 +291,10 @@ class TestBackupEncryption:
             salt_file = tmpdir_path / '.db_salt'
             backup_file = tmpdir_path / 'backup.enc'
             
-            with patch('Crypto_Tax_Engine.DB_FILE', db_file), \
-                 patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_FILE', db_file), \
+                 patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 password = "testpassword"
                 
@@ -326,10 +326,10 @@ class TestBackupEncryption:
             salt_file = tmpdir_path / '.db_salt'
             backup_file = tmpdir_path / 'backup.enc'
             
-            with patch('Crypto_Tax_Engine.DB_FILE', db_file), \
-                 patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_FILE', db_file), \
+                 patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 # Create backup with correct password
                 DatabaseEncryption.initialize_encryption("correctpassword")
@@ -352,9 +352,9 @@ class TestSecurityProperties:
             key_file = tmpdir_path / '.db_key'
             salt_file = tmpdir_path / '.db_salt'
             
-            with patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 DatabaseEncryption.initialize_encryption("password")
                 
@@ -386,9 +386,9 @@ class TestSecurityProperties:
             key_file = tmpdir_path / '.db_key'
             salt_file = tmpdir_path / '.db_salt'
             
-            with patch('Crypto_Tax_Engine.DB_KEY_FILE', key_file), \
-                 patch('Crypto_Tax_Engine.DB_SALT_FILE', salt_file), \
-                 patch('Crypto_Tax_Engine.logger'):
+            with patch('src.core.encryption.DB_KEY_FILE', key_file), \
+                 patch('src.core.encryption.DB_SALT_FILE', salt_file), \
+                 patch('src.core.encryption.logger'):
                 
                 DatabaseEncryption.initialize_encryption("correctpassword")
                 

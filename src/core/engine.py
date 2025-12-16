@@ -115,6 +115,15 @@ def set_run_context(context: str):
 
 set_run_context(RUN_CONTEXT)
 
+# In test mode, use an isolated database file to avoid locking the
+# real workspace database (Windows file locks can block teardown).
+try:
+    if os.environ.get('TEST_MODE') == '1':
+        DB_FILE = BASE_DIR / 'test_session.db'
+        DB_BACKUP = BASE_DIR / 'test_session.db.bak'
+except Exception:
+    pass
+
 class ApiAuthError(Exception): pass
 
 
@@ -613,6 +622,8 @@ class Ingestor:
                     
                     self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': sell_price, 'fee': fee, 'batch_id': batch})
                     self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': buy_price, 'fee': 0, 'batch_id': batch})
+                    # Ensure no other branch processes this row
+                    continue
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
                     if 'deposit' in tx_type: act = 'DEPOSIT'

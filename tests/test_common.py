@@ -25,8 +25,10 @@ if parent_dir not in sys.path:
 # Import application logic
 import src.core.engine as app
 import src.tools.setup as setup_script
-import Auto_Runner as auto_runner
-Auto_Runner = auto_runner  # Also export as Auto_Runner for tests that use the capitalized name
+import auto_runner
+# Register alias so both `auto_runner` and legacy `Auto_Runner` resolve in tests
+sys.modules['Auto_Runner'] = auto_runner
+Auto_Runner = auto_runner
 from src.tools.review_fixer import InteractiveReviewFixer
 from contextlib import redirect_stdout
 

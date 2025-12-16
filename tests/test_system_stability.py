@@ -3,9 +3,9 @@ from test_common import *
 
 class TestArchitectureStability(unittest.TestCase):
     def test_import_order_resilience(self):
-        for module in ['Crypto_Tax_Engine', 'Auto_Runner']:
+        for module in ['Crypto_Tax_Engine', 'auto_runner']:
             if module in sys.modules: del sys.modules[module]
-        modules_to_load = ['Crypto_Tax_Engine', 'Auto_Runner']
+        modules_to_load = ['Crypto_Tax_Engine', 'auto_runner']
         random.shuffle(modules_to_load)
         print(f"\n--- TESTING IMPORT ORDER: {modules_to_load} ---")
         try:
@@ -29,15 +29,28 @@ class TestSystemInterruptions(unittest.TestCase):
         app.DB_FILE = self.test_path / 'crash_test.db'
         app.DB_BACKUP = self.test_path / 'crash_test.db.bak'
         app.KEYS_FILE = self.test_path / 'api_keys.json'
+        self.orig_enc_keys_app = app.API_KEYS_ENCRYPTED_FILE
+        app.API_KEYS_ENCRYPTED_FILE = self.test_path / 'api_keys_encrypted.json'
         app.WALLETS_FILE = self.test_path / 'wallets.json'
         app.CONFIG_FILE = self.test_path / 'config.json'
         app.GLOBAL_CONFIG['general']['create_db_backups'] = True
+        
+        # Patch encryption module paths
+        import src.core.encryption as encryption_module
+        self.orig_enc_keys = encryption_module.API_KEYS_ENCRYPTED_FILE
+        encryption_module.API_KEYS_ENCRYPTED_FILE = self.test_path / 'api_keys_encrypted.json'
+        
         app.initialize_folders()
         self.db = app.DatabaseManager()
     def tearDown(self):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
+        app.API_KEYS_ENCRYPTED_FILE = self.orig_enc_keys_app
+        
+        # Restore encryption module paths
+        import src.core.encryption as encryption_module
+        encryption_module.API_KEYS_ENCRYPTED_FILE = self.orig_enc_keys
     def test_mid_write_crash(self):
         self.db.save_trade({'id': 'safe', 'date': '2023-01-01', 'source': 'M', 'action': 'BUY', 'coin': 'BTC', 'amount': 1.0, 'price_usd': 100.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
