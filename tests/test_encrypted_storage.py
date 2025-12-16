@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Encrypted Storage
+================================================================================
+
+Validates encrypted file storage for sensitive data.
+
+Test Coverage:
+    - API keys encryption/decryption
+    - Wallet addresses encryption/decryption
+    - Key file management
+    - Error handling
+    - File permissions
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import shutil
 import tempfile

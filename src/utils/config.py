@@ -1,8 +1,57 @@
 """
-Configuration Management Module
+================================================================================
+CONFIG - Configuration Management and Validation
+================================================================================
 
-Handles loading, validating, and updating application configuration from config.json
-Supports hot-reload and merging with defaults
+Centralized configuration loader with validation and hot-reload support.
+
+Configuration Categories:
+    1. General - Application behavior (audits, backups)
+    2. Accounting - Tax calculation methods (FIFO/HIFO/LIFO)
+    3. Compliance - IRS regulations (wash sales, broker mode)
+    4. API - External service settings (retries, timeouts)
+
+Key Settings:
+    accounting.method:
+        - FIFO: First-In First-Out (IRS default)
+        - HIFO: Highest-In First-Out (optimization, risky)
+        - LIFO: Last-In First-Out (specialty use)
+    
+    compliance.strict_broker_mode:
+        - True: Isolate broker lots for 1099-DA alignment (RECOMMENDED)
+        - False: Allow cross-wallet basis (may cause discrepancies)
+    
+    compliance.staking_taxable_on_receipt:
+        - True: Tax staking rewards at receipt (conservative)
+        - False: Defer until sale (aggressive, IRS may challenge)
+    
+    compliance.wash_sale_rule:
+        - False: Current law (crypto exempt) (DEFAULT)
+        - True: Future law simulation (30-day rule)
+    
+    compliance.defi_lp_conservative:
+        - True: LP deposits = taxable swaps (conservative)
+        - False: LP deposits = non-taxable (aggressive)
+
+File Location:
+    configs/config.json
+
+Features:
+    - Automatic defaults for missing keys
+    - Deep merge of user settings with defaults
+    - Validation and type checking
+    - Hot-reload support (re-read on demand)
+    - Backup corrupt files before reset
+    - Migration from old config versions
+
+Usage:
+    from src.utils.config import load_config
+    config = load_config()
+    method = config['accounting']['method']
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import json

@@ -1,11 +1,41 @@
 """
-Database Management Module
+================================================================================
+DATABASE MANAGER - SQLite Transaction Database
+================================================================================
 
-Provides database operations for the tax calculation engine:
-- SQLite connection management
-- Trade transaction CRUD operations
-- Schema migrations and integrity checks
-- Backup and restore functionality
+Manages all database operations for cryptocurrency trade transactions.
+
+Core Responsibilities:
+    - SQLite connection lifecycle management
+    - Transaction CRUD (Create, Read, Update, Delete) operations
+    - Automatic schema migrations and versioning
+    - Database integrity checking and corruption recovery
+    - Backup and restore functionality
+    - Batch operations for performance
+
+Data Model:
+    - Trades table: All buy/sell/transfer/income transactions
+    - Decimal precision handling (TEXT storage for accuracy)
+    - UTC timestamp normalization
+    - Source/destination tracking for transfers
+    - Batch ID for atomic multi-leg transactions
+
+Features:
+    - Automatic schema updates for new columns
+    - Safety backups before destructive operations
+    - DeFi LP token special handling
+    - Duplicate detection and prevention
+    - Query optimization for large datasets
+
+Integration:
+    - Used by TaxEngine for tax calculations
+    - Used by Ingestor for data import
+    - Used by Web UI for transaction management
+    - Test-friendly with monkeypatchable paths
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import sqlite3

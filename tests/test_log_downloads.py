@@ -1,4 +1,20 @@
-"""Tests for log download functionality"""
+"""
+================================================================================
+TEST: Log Downloads
+================================================================================
+
+Validates log file download functionality through web UI.
+
+Test Coverage:
+    - Log file listing
+    - Single log download
+    - Bulk log download (zip)
+    - Access control
+    - File streaming
+
+Author: robertbiv
+================================================================================
+"""
 import unittest
 import json
 import tempfile

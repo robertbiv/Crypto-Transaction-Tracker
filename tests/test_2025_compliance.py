@@ -1,7 +1,51 @@
 """
-2025 Tax Compliance Tests
-Verifies adherence to specific US tax laws effective for the 2025 tax year,
-including Rev. Proc. 2024-28 (Wallet-Based Cost Tracking) and proposed future rules.
+================================================================================
+TEST: 2025 US Tax Compliance
+================================================================================
+
+Validates compliance with 2025 US tax regulations for digital assets.
+
+Regulatory Coverage:
+    1. Rev. Proc. 2024-28 - Wallet-Based Cost Tracking
+        - Strict broker mode isolation
+        - 1099-DA reconciliation
+        - Basis matching by source
+    
+    2. Proposed Wash Sale Rule (Future Law Simulation)
+        - 30-day window before and after
+        - Substantially identical crypto detection
+        - Loss disallowance calculation
+    
+    3. Broker Reporting (1099-DA)
+        - Separate accounting for custodial sources
+        - Prevention of cross-wallet basis borrowing
+        - Unmatched sell flagging
+    
+    4. Constructive Receipt
+        - Staking rewards taxed at receipt
+        - Mining income recognition
+        - Conservative vs aggressive treatment
+
+Compliance Modes Tested:
+    - strict_broker_mode: True/False
+    - wash_sale_rule: True/False
+    - staking_taxable_on_receipt: True/False
+    - defi_lp_conservative: True/False
+
+Expected Outcomes:
+    - Correct gain/loss calculation under various modes
+    - Proper wash sale disallowance
+    - Accurate 1099-DA alignment
+    - Warning generation for audit risks
+
+References:
+    - IRS Notice 2014-21
+    - Rev. Proc. 2024-28
+    - Proposed Treasury Regulations §1.1091-1
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 from test_common import *
 

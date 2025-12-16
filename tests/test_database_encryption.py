@@ -1,16 +1,25 @@
-"""Unit tests for database encryption functionality.
+"""
+================================================================================
+TEST: Database Encryption
+================================================================================
 
-Tests two-layer encryption system:
-- Layer 1: Random 256-bit key encrypts database
-- Layer 2: Password-derived key (PBKDF2) encrypts Layer 1 key
+Validates two-layer database encryption system.
 
-Covers:
-- Key derivation from password
-- Key encryption/decryption
-- Backup encryption/restoration
-- Password verification
-- Salt handling
-- Edge cases
+Encryption Architecture:
+    Layer 1: Random 256-bit key encrypts database file
+    Layer 2: Password-derived key (PBKDF2) encrypts Layer 1 key
+
+Test Coverage:
+    - Key derivation from password (PBKDF2)
+    - Key encryption/decryption
+    - Backup encryption/restoration
+    - Password verification
+    - Salt generation and handling
+    - Key rotation scenarios
+    - Edge cases and error conditions
+
+Author: robertbiv
+================================================================================
 """
 
 import pytest

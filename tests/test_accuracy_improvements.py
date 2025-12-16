@@ -1,6 +1,20 @@
 """
-Unit tests for accuracy improvements and security hardening
-Tests division-by-zero handling, decimal precision, and exception handling
+================================================================================
+TEST: Accuracy Improvements and Security Hardening
+================================================================================
+
+Validates calculation accuracy and error handling robustness.
+
+Test Coverage:
+    - Division by zero handling
+    - Decimal precision edge cases
+    - Exception handling and recovery
+    - Numeric overflow prevention
+    - Rounding consistency
+    - Security vulnerability prevention
+
+Author: robertbiv
+================================================================================
 """
 
 import pytest

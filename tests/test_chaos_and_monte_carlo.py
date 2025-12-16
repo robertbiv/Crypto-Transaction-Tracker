@@ -1,4 +1,21 @@
-"""Chaos Testing and Monte Carlo Simulations"""
+"""
+================================================================================
+TEST: Chaos Testing and Monte Carlo Simulations
+================================================================================
+
+Validates system behavior under random and chaotic conditions.
+
+Test Coverage:
+    - Random transaction generation
+    - Stress testing with large datasets
+    - Monte Carlo simulations for edge cases
+    - Fuzzing with invalid inputs
+    - Concurrency stress tests
+    - Resource exhaustion scenarios
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestChaosEngine(unittest.TestCase):

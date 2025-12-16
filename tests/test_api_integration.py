@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: Exchange API Integration
+================================================================================
+
+Validates integration with cryptocurrency exchange APIs.
+
+Test Coverage:
+    - CCXT library integration
+    - Exchange API authentication
+    - Trade history fetching
+    - Data normalization
+    - Multi-exchange support
+    - API response parsing
+
+Author: robertbiv
+================================================================================
+"""
+
 import unittest
 from unittest.mock import patch, MagicMock
 import json

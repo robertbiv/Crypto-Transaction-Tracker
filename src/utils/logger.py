@@ -1,10 +1,55 @@
 """
-Logger Configuration Module
+================================================================================
+LOGGER - Unified Logging Configuration
+================================================================================
 
-Provides unified logging across the application with support for:
-- Multiple run contexts (CLI, web, auto-runner, tests)
-- File and console output
-- Context-aware filtering
+Centralized logging infrastructure for all application contexts.
+
+Logging Contexts:
+    - 'cli' - Command-line interface operations
+    - 'web' - Web UI server and API requests
+    - 'autorunner' - Automated batch processing
+    - 'test' - Unit and integration tests
+    - 'imported' - Library/module imports (minimal logging)
+
+Log Destinations:
+    1. File Logs - outputs/logs/{timestamp}.{context}.log
+    2. Console Output - stdout with color formatting
+    3. Rotating Backups - 5MB max per file, 5 backup files
+
+Log Format:
+    {timestamp} {level} [{context}]: {message}
+    Example: 2025-12-16 10:30:45 INFO [autorunner]: Processing year 2024
+
+Log Levels:
+    - DEBUG: Detailed diagnostic information
+    - INFO: General informational messages
+    - WARNING: Warning messages (non-critical issues)
+    - ERROR: Error messages (critical failures)
+    - CRITICAL: System-wide failures
+
+Features:
+    - Context-aware filtering (different verbosity per context)
+    - Rotating file handlers (prevents disk space issues)
+    - UTF-8 encoding support (international characters)
+    - Thread-safe logging
+    - Graceful fallback if log directory unavailable
+    - Test mode isolation (no console spam)
+
+Usage:
+    from src.utils.logger import set_run_context
+    from src.core.engine import logger
+    
+    set_run_context('cli')
+    logger.info('Starting tax calculation')
+
+Configuration:
+    Logger settings respect LOG_DIR from constants.py
+    Max file size and backup count can be adjusted in this module
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import sys

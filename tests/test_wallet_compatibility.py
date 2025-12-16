@@ -1,4 +1,20 @@
-"""Wallet Format Compatibility Tests"""
+"""
+================================================================================
+TEST: Wallet Format Compatibility
+================================================================================
+
+Validates compatibility between different wallet configuration formats.
+
+Test Coverage:
+    - Nested wallet format (new Setup.py)
+    - Flat wallet format (legacy)
+    - Format migration
+    - Address extraction
+    - Multi-chain wallet support
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestWalletCompatibility(unittest.TestCase):

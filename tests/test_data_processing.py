@@ -1,4 +1,21 @@
-"""Data Ingestion and Processing Tests"""
+"""
+================================================================================
+TEST: Data Ingestion and Processing
+================================================================================
+
+Validates CSV import and data processing workflows.
+
+Test Coverage:
+    - CSV format detection (Coinbase, Binance, etc.)
+    - Column mapping and normalization
+    - Date parsing (multiple formats)
+    - Duplicate transaction detection
+    - Data validation and sanitization
+    - Batch processing
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestCSVParsingAndIngestion(unittest.TestCase):

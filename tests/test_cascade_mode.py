@@ -1,4 +1,20 @@
-"""Tests for Cascade Mode Recalculation"""
+"""
+================================================================================
+TEST: Cascade Mode Recalculation
+================================================================================
+
+Validates multi-year sequential tax calculation workflow.
+
+Test Coverage:
+    - Sequential year processing
+    - Carryover loss propagation
+    - Holdings rollover between years
+    - Multi-year consistency
+    - Cascade mode via auto_runner
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 import Auto_Runner as auto_runner
 import sys

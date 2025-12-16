@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: Factory Reset
+================================================================================
+
+Validates complete system reset to default state.
+
+Test Coverage:
+    - Configuration reset
+    - Database deletion
+    - Credentials removal
+    - Backup creation before reset
+    - Selective reset options
+    - Post-reset state validation
+
+Author: robertbiv
+================================================================================
+"""
+
 import unittest
 import sys
 import os

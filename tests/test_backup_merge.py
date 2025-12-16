@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: Backup and Merge Operations
+================================================================================
+
+Validates backup creation and restoration with merge logic.
+
+Test Coverage:
+    - Database backup creation
+    - Backup restoration
+    - API keys merge during restore
+    - Wallet data merge during restore
+    - Conflict resolution
+    - Backup file integrity
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import shutil
 import tempfile

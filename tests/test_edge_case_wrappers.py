@@ -1,3 +1,20 @@
+"""
+================================================================================
+TEST: Edge Case Wrappers
+================================================================================
+
+Validates utility function wrappers and fallback behavior.
+
+Test Coverage:
+    - to_decimal wrapper fallback
+    - Utility function injection
+    - None value handling
+    - Circular import prevention
+
+Author: robertbiv
+================================================================================
+"""
+
 from decimal import Decimal
 
 import src.core.database as database

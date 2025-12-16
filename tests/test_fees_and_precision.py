@@ -1,4 +1,21 @@
-"""Fee Handling and Precision Tests"""
+"""
+================================================================================
+TEST: Fee Handling and Decimal Precision
+================================================================================
+
+Validates accurate fee calculations and decimal precision.
+
+Test Coverage:
+    - Fee inclusion in cost basis
+    - Multi-coin fee handling (paying ETH for BTC transfer)
+    - Decimal precision (satoshi/wei level)
+    - Rounding behavior
+    - Large number calculations
+    - IEEE 754 floating point issues prevention
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestFeeHandling(unittest.TestCase):

@@ -1,3 +1,44 @@
+"""
+================================================================================
+TEST UTILITY: Stress Test Data Generator
+================================================================================
+
+Generates synthetic cryptocurrency transaction data for stress testing.
+
+Produces 500+ transactions across multiple exchanges and wallets with:
+    - Realistic price movements with trends and volatility
+    - Various transaction types (buy, sell, transfer, staking, airdrop)
+    - Edge cases and anomalies to trigger warnings
+    - Known expected outcomes for validation
+
+Generated Files:
+    - binance_history.csv: Centralized exchange format
+    - coinbase_pro.csv: Pro/Advanced trading format
+    - ledger_live.csv: Hardware wallet exports
+    - metamask_polygon.csv: DeFi wallet transactions
+    - kraken_sim.csv: Another exchange for cross-source testing
+    - gemini_sim.csv: Regulated exchange format
+
+Anomalies Injected:
+    - Wash sale candidates (same-day buy/sell)
+    - Orphaned sales (no cost basis)
+    - Zero-price transactions
+    - High-frequency trading patterns
+    - Missing data fields
+
+Expected Output:
+    Generates expected_stats.json with known correct values for:
+    - Total income
+    - Short-term and long-term capital gains
+    - Total fees
+    - Transaction counts
+
+Usage:
+    python tests/generate_stress_test_data.py
+
+Author: robertbiv
+================================================================================
+"""
 import csv
 import random
 import os

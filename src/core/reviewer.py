@@ -1,6 +1,49 @@
 """
-Tax Reviewer - Heuristic-Based Manual Review Assistant (Enhanced)
-Scans completed tax calculations and flags potential audit risks for manual review.
+================================================================================
+TAX REVIEWER - Audit Risk Detection and Manual Review Assistant
+================================================================================
+
+Post-processing analyzer that scans completed tax calculations for
+potential IRS audit triggers and compliance issues.
+
+Detection Heuristics:
+    1. NFT Collectibles - Missing 28% tax rate classification
+    2. Wash Sales - Substantially identical crypto (BTC/WBTC, ETH/WETH)
+    3. Constructive Sales - Offsetting long/short positions
+    4. DeFi Complexity - Multi-protocol LP tokens requiring review
+    5. Missing Prices - Trades with zero or estimated valuations
+    6. Unmatched Sells - Dispositions without cost basis
+    7. High Fees - Potential fat-finger errors or scam detection
+    8. Spam Tokens - Worthless airdrop filtering
+    9. Duplicate Transactions - Same-day/amount/coin patterns
+    10. Price Anomalies - Total value entered as unit price
+    11. FBAR Compliance - Foreign account reporting hints
+
+Risk Categories:
+    - HIGH: Likely IRS audit trigger, requires immediate action
+    - MEDIUM: Best practice violation, recommended to fix
+    - LOW: Informational, optional optimization
+
+Output Reports:
+    - REVIEW_WARNINGS.csv - Detailed issue list with line references
+    - REVIEW_SUMMARY.json - Aggregated statistics and action items
+    - FBAR_HINT.txt - Foreign exchange balance warnings
+
+Integration:
+    - Runs automatically after TaxEngine.export()
+    - Accessible via CLI review command
+    - Web UI displays warnings in dashboard
+    - Feeds into review_fixer.py for guided remediation
+
+References:
+    - IRS Publication 550 (Investment Income and Expenses)
+    - IRS Notice 2014-21 (Virtual Currency Guidance)
+    - Form 8949 Instructions (Capital Asset Sales)
+    - FinCEN Form 114 (FBAR)
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import pandas as pd

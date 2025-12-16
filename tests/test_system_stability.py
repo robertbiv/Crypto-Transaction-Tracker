@@ -1,4 +1,21 @@
-"""System Stability and Architecture Tests"""
+"""
+================================================================================
+TEST: System Stability and Architecture
+================================================================================
+
+Validates system robustness and architectural integrity.
+
+Test Coverage:
+    - Import order resilience
+    - Circular dependency prevention
+    - Module isolation
+    - Memory leak detection
+    - Thread safety
+    - Exception propagation
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestArchitectureStability(unittest.TestCase):

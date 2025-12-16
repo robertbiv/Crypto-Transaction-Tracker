@@ -1,4 +1,20 @@
-"""Tests for API key and wallet validation endpoints"""
+"""
+================================================================================
+TEST: API Key and Wallet Validation
+================================================================================
+
+Validates API endpoint security and input validation.
+
+Test Coverage:
+    - API key validation endpoints
+    - Wallet address validation
+    - Input sanitization
+    - Error responses
+    - Authorization checks
+
+Author: robertbiv
+================================================================================
+"""
 import unittest
 import json
 from unittest.mock import patch, MagicMock

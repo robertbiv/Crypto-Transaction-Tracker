@@ -1,4 +1,22 @@
-"""Edge Cases and Stress Tests"""
+"""
+================================================================================
+TEST: Edge Cases and Stress Testing
+================================================================================
+
+Validates system behavior under extreme and unusual conditions.
+
+Test Coverage:
+    - Extreme values (very large/small amounts)
+    - Missing or null data handling
+    - Malformed CSV imports
+    - Concurrent transaction processing
+    - Memory limits and large datasets
+    - Boundary conditions
+    - Invalid date ranges
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestEdgeCasesExtremeValues(unittest.TestCase):

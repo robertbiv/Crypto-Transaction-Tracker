@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Wizard Restore from Backup
+================================================================================
+
+Validates backup restoration through setup wizard.
+
+Test Coverage:
+    - Backup file upload
+    - Decryption during restore
+    - Data validation
+    - Error handling
+    - Partial restore scenarios
+
+Author: robertbiv
+================================================================================
+"""
+
 import io
 import json
 import tempfile

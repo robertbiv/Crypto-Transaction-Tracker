@@ -1,4 +1,21 @@
-"""Configuration and Setup Tests"""
+"""
+================================================================================
+TEST: Configuration and Setup
+================================================================================
+
+Validates configuration file handling and setup processes.
+
+Test Coverage:
+    - config.json loading and validation
+    - Default configuration generation
+    - Configuration merging (user + defaults)
+    - Invalid configuration handling
+    - Setup wizard workflows
+    - First-run initialization
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestConfigHandling(unittest.TestCase):

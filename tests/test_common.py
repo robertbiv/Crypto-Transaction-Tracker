@@ -1,4 +1,42 @@
-"""Common imports and utilities for all test files"""
+"""
+================================================================================
+TEST COMMON - Shared Test Infrastructure
+================================================================================
+
+Provides common imports, utilities, and fixtures for all test suites.
+
+Exported Utilities:
+    ShadowFIFO - Independent FIFO calculator for validation
+    REAL_GET_PRICE - Original price fetcher for mocking
+    Standard imports - unittest, pandas, pathlib, etc.
+    Application modules - app, setup_script, auto_runner
+
+Test Helpers:
+    - Temporary directory creation
+    - Database isolation
+    - Path monkeypatching
+    - Price fetcher mocking
+    - Standard assertions
+
+Usage:
+    from test_common import *
+    
+    class TestMyFeature(unittest.TestCase):
+        def setUp(self):
+            self.test_dir = tempfile.mkdtemp()
+            # Setup test isolation
+
+Design Philosophy:
+    - Each test gets isolated temp directory
+    - No shared state between tests
+    - Real calculations (integration testing)
+    - Mock external APIs only
+    - Clean teardown guaranteed
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
+"""
 import unittest
 import shutil
 import tempfile

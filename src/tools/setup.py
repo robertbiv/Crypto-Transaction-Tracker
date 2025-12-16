@@ -1,3 +1,52 @@
+"""
+================================================================================
+SETUP WIZARD - First-Time Configuration and Project Initialization
+================================================================================
+
+Interactive setup wizard that initializes the tax engine for first-time use.
+
+Setup Workflow:
+    1. Dependency Validation - Check Python packages and versions
+    2. Folder Creation - Initialize directory structure
+    3. Configuration Files - Generate config.json with defaults
+    4. API Keys Setup - Interactive entry or skip
+    5. Wallet Configuration - Blockchain address registration
+    6. Encryption Initialization - Generate master keys
+    7. Test Run - Optional smoke test of core functions
+
+Created Files:
+    - config.json - Main configuration (accounting method, compliance)
+    - api_keys.json - Exchange API credentials (encrypted)
+    - wallets.json - Blockchain addresses for audit (encrypted)
+    - status.json - First-run flag and version tracking
+    - .db_key / .db_salt - Database encryption keys
+
+Created Folders:
+    - inputs/ - CSV import staging
+    - outputs/ - Generated tax reports
+    - outputs/logs/ - Application logs
+    - outputs/backups/ - Database backups
+    - processed_archive/ - Processed CSV archive
+    - keys/ - Encrypted credentials storage
+    - certs/ - SSL certificates for web UI
+
+2025 Compliance Defaults:
+    - strict_broker_mode: Enabled (1099-DA alignment)
+    - staking_taxable_on_receipt: Enabled (constructive receipt)
+    - wash_sale_rule: Disabled (future law not yet enacted)
+    - accounting_method: FIFO (IRS default)
+    - defi_lp_conservative: Enabled (taxable swaps)
+
+Usage:
+    python src/tools/setup.py
+    python cli.py setup
+
+Author: robertbiv
+Last Modified: December 2025
+Version: 30 (2025 Compliance Edition)
+================================================================================
+"""
+
 import json
 import os
 import sys

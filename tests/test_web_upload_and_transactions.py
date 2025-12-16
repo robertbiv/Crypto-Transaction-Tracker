@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: Web UI Upload and Transaction Management
+================================================================================
+
+Validates web interface file upload and transaction CRUD operations.
+
+Test Coverage:
+    - CSV file upload via web UI
+    - Transaction creation through web forms
+    - Transaction editing
+    - Transaction deletion
+    - Bulk operations
+    - Upload validation
+
+Author: robertbiv
+================================================================================
+"""
+
 import io
 import json
 from pathlib import Path

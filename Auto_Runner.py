@@ -1,11 +1,32 @@
-"""Auto-pilot runner for crypto tax processing.
+"""\n================================================================================
+AUTO RUNNER - Automated Tax Processing Workflow
+================================================================================
 
-Orchestrates end-to-end tax processing workflow including:
-- Data synchronization from CSV and APIs  
-- Staking rewards processing
-- Price fetching and validation
-- Tax calculations for one or more years
-- Report generation and exporting
+Autopilot orchestrator for end-to-end tax calculation workflows.
+Designed for unattended operation and batch processing.
+
+Workflow Stages:
+    1. Data Ingestion - Import trades from CSV files and API sources
+    2. Staking Processing - Integrate staking rewards data
+    3. Price Validation - Fetch missing USD prices from external APIs
+    4. Tax Calculation - Generate tax reports using configured method
+    5. Export Generation - Create TurboTax-compatible CSV outputs
+
+Features:
+    - Cascade mode for multi-year calculations
+    - Configurable year range processing
+    - Automatic backup before processing
+    - Comprehensive error logging
+    - Progress tracking and status updates
+
+Usage:
+    python auto_runner.py
+    python auto_runner.py --cascade
+    python auto_runner.py --years 2023,2024,2025
+
+Author: Crypto Tax Generator Team
+Last Modified: December 2025
+================================================================================
 """
 
 import sys

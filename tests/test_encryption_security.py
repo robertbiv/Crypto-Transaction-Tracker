@@ -1,3 +1,23 @@
+"""
+================================================================================
+TEST: Encryption Security
+================================================================================
+
+Validates security of encrypted storage for sensitive data.
+
+Test Coverage:
+    - Password strength requirements
+    - Key derivation security (PBKDF2)
+    - Salt randomness and uniqueness
+    - Encrypted file permissions
+    - Key rotation scenarios
+    - Encryption algorithm correctness
+    - Attack resistance (brute force, replay)
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import shutil
 import tempfile

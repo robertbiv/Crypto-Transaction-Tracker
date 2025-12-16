@@ -1,3 +1,23 @@
+"""
+================================================================================
+SETUP (Legacy Entry Point) - Redirect to Modern Setup Tool
+================================================================================
+
+Legacy compatibility wrapper that redirects to the new setup.py location.
+
+This file exists for backward compatibility with old documentation and scripts.
+The actual setup wizard is now located at: src/tools/setup.py
+
+Usage:
+    python Setup.py          (legacy, still works)
+    python src/tools/setup.py (new location)
+    python cli.py setup      (recommended)
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
+"""
+
 import json
 import os
 import sys

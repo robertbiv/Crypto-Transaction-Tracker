@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Portable Backups
+================================================================================
+
+Validates password-protected portable backup functionality.
+
+Test Coverage:
+    - Password-derived encryption
+    - Portable backup creation
+    - Cross-machine restoration
+    - Password verification
+    - Backup integrity
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import shutil
 import tempfile

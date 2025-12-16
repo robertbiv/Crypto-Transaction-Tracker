@@ -1,6 +1,21 @@
 """
-Unit tests for setup wizard functionality
-Tests all steps of the setup process including edge cases
+================================================================================
+TEST: Setup Wizard
+================================================================================
+
+Validates first-time configuration and initialization workflow.
+
+Test Coverage:
+    - Dependency validation
+    - Directory structure creation
+    - Configuration file generation
+    - API keys setup
+    - Wallet configuration
+    - Interactive prompts
+    - Error recovery
+
+Author: robertbiv
+================================================================================
 """
 
 import unittest

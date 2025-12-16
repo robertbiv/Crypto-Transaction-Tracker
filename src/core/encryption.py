@@ -1,12 +1,48 @@
 """
-Encryption Utilities Module
+================================================================================
+ENCRYPTION UTILITIES - Secure Storage and Key Management
+================================================================================
 
-Provides encryption/decryption utilities for:
-- Database encryption (two-layer protection)
-- API keys encryption
-- Wallet addresses encryption
+Provides military-grade encryption for sensitive user data.
 
-Uses Fernet (symmetric encryption) with password-derived keys (PBKDF2).
+Encryption Targets:
+    1. Database - Two-layer protection with password-derived keys
+    2. API Keys - Exchange API credentials (read/write/trade access)
+    3. Wallet Addresses - Blockchain addresses for auditing
+    4. Web Session Keys - User authentication tokens
+
+Encryption Technology:
+    - Algorithm: Fernet (AES-128-CBC with HMAC authentication)
+    - Key Derivation: PBKDF2-HMAC-SHA256
+    - Iterations: 480,000 (OWASP 2023 recommendation)
+    - Salt Length: 16 bytes (cryptographically random)
+
+Two-Layer Database Protection:
+    Layer 1: Random 256-bit key encrypts the database file
+    Layer 2: User password-derived key encrypts Layer 1 key
+    
+    Benefits:
+        - Database remains encrypted at rest
+        - Password change doesn't require re-encrypting entire DB
+        - Backups include both encrypted key and encrypted data
+        - Protection against offline attacks
+
+Security Features:
+    - Automatic salt generation and storage
+    - Context-specific key derivation (prevents key reuse)
+    - File locking to prevent corruption during writes
+    - Backup creation before encryption operations
+    - Secure key deletion on errors
+
+Compliance:
+    - GDPR data protection requirements
+    - SOC 2 encryption standards
+    - OWASP cryptography guidelines
+    - IRS Publication 1345 (tax preparer data security)
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import os

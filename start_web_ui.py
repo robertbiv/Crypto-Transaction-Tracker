@@ -1,6 +1,33 @@
 #!/usr/bin/env python3
 """
-Start the Crypto Tax Generator Web UI Server
+================================================================================
+WEB UI LAUNCHER - Start Web Interface Server
+================================================================================
+
+Convenience launcher for the web-based UI server.
+
+Features:
+    - Starts Flask development server with HTTPS support
+    - Automatic certificate generation for local SSL
+    - Browser auto-launch to web interface
+    - Graceful shutdown handling
+
+The web UI provides:
+    - Authenticated access to all tax engine features
+    - Interactive file upload and management
+    - Real-time calculation progress tracking
+    - Report viewing and download
+    - Configuration management
+
+Usage:
+    python start_web_ui.py
+
+Access at: https://localhost:5000
+Default credentials are set during first-time setup.
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import subprocess
