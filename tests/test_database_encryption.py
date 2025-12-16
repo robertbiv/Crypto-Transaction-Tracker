@@ -24,7 +24,7 @@ import os
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from Crypto_Tax_Engine import (
+from src.core.engine import (
     DatabaseEncryption,
     DB_ENCRYPTION_SALT_LENGTH,
     DB_ENCRYPTION_ITERATIONS,
@@ -439,3 +439,5 @@ class TestEdgeCases:
         decrypted_key = DatabaseEncryption.decrypt_key(encrypted_key, password, salt)
         
         assert decrypted_key == db_key
+
+

@@ -1,13 +1,33 @@
-import Crypto_Tax_Engine as tax_app
-import pandas as pd
-from datetime import datetime
+"""Auto-pilot runner for crypto tax processing.
+
+Orchestrates end-to-end tax processing workflow including:
+- Data synchronization from CSV and APIs  
+- Staking rewards processing
+- Price fetching and validation
+- Tax calculations for one or more years
+- Report generation and exporting
+"""
+
 import sys
 import json
+from datetime import datetime
 from pathlib import Path
 
-# --- LOGGING CONFIGURATION ---
-# Note: Log folder creation is deferred to runtime to allow safe imports by Test Suite
-LOG_DIR = tax_app.OUTPUT_DIR / "logs"
+# Import the main engine module
+try:
+    import src.core.engine as tax_app
+except ImportError:
+    # Fallback for direct execution
+    import Crypto_Tax_Engine as tax_app
+
+# LOG_DIR will be set at runtime to allow safe imports by Test Suite
+LOG_DIR = None
+
+def _ensure_log_dir():
+    global LOG_DIR
+    if LOG_DIR is None:
+        LOG_DIR = tax_app.OUTPUT_DIR / "logs"
+    return LOG_DIR
 
 # Mark run context so engine logs show this was started via Auto_Runner
 try:
@@ -85,7 +105,9 @@ def run_automation():
         except Exception:
             tax_app.CURRENT_YEAR_OVERRIDE = None
 
-        # --- CASCADE MODE LOGIC ---
+        # ====================================================================================
+        # CASCADE MODE LOGIC
+        # ====================================================================================
         if CASCADE_MODE:
             log(">>> CASCADE MODE: DETERMINING START YEAR")
             try:
@@ -114,7 +136,9 @@ def run_automation():
                     engine_curr = engine
 
         else:
-            # --- STANDARD MODE LOGIC ---
+            # ====================================================================================
+            # STANDARD MODE LOGIC
+            # ====================================================================================
             prev_year = current_year - 1
             
             # 5. CHECK PREVIOUS YEAR (The "Final Run")

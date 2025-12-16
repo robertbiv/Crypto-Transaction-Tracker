@@ -1,6 +1,6 @@
 """Tests for Cascade Mode Recalculation"""
 from test_common import *
-import Auto_Runner
+import auto_runner
 import sys
 from io import StringIO
 from contextlib import redirect_stdout
@@ -128,3 +128,5 @@ class TestCascadeMode(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

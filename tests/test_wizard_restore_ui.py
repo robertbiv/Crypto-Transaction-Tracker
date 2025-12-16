@@ -38,3 +38,5 @@ def test_setup_wizard_contains_restore_controls(client_logged_in):
     assert 'Upload & Restore Backup' in html
     assert 'wizBackupFile' in html
     assert 'wizBackupPassword' in html
+
+

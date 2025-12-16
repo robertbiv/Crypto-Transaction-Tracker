@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import Crypto_Tax_Engine as cte
-from Crypto_Tax_Engine import DatabaseEncryption
+import src.core.engine as cte
+from src.core.engine import DatabaseEncryption
 
 
 class TestPortableBackups(unittest.TestCase):
@@ -145,3 +145,5 @@ class TestPortableBackups(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

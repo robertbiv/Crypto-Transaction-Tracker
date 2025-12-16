@@ -865,7 +865,7 @@ class TestInteractiveReviewFixer(unittest.TestCase):
 
     def test_rename_coin_function(self):
         """Test that _rename_coin updates the database correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Add test data
         self.db.save_trade({
@@ -890,7 +890,7 @@ class TestInteractiveReviewFixer(unittest.TestCase):
 
     def test_update_price_function(self):
         """Test that _update_price updates the database correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Add test data with missing price
         self.db.save_trade({
@@ -915,7 +915,7 @@ class TestInteractiveReviewFixer(unittest.TestCase):
 
     def test_delete_transaction_function(self):
         """Test that _delete_transaction removes from database"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Add test data
         self.db.save_trade({
@@ -949,7 +949,7 @@ class TestInteractiveReviewFixer(unittest.TestCase):
 
     def test_backup_creation(self):
         """Test that backup file is created before fixes"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         backup_path = fixer.create_backup()
@@ -1371,7 +1371,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_get_transaction(self):
         """Test: _get_transaction retrieves complete transaction details"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         self.db.save_trade({
             'id': 'test_tx_1',
@@ -1397,7 +1397,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_get_transaction_not_found(self):
         """Test: _get_transaction returns empty dict for missing ID"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         tx = fixer._get_transaction('nonexistent_id')
@@ -1406,7 +1406,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_price_anomaly_fix_total_as_unit(self):
         """Test: _guided_fix_price_anomalies detects and suggests fix for 'total as unit' error"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Create a price anomaly: entered total value instead of per-unit price
         warning = {
@@ -1432,7 +1432,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_high_fees_detection_message(self):
         """Test: High fees warning displays correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         warning = {
             'category': 'HIGH_FEES',
@@ -1457,7 +1457,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_duplicate_suspects_warning(self):
         """Test: Duplicate transaction warning structure"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Add potential duplicates
         self.db.save_trade({
@@ -1492,7 +1492,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_nft_renaming_flow(self):
         """Test: NFT renaming preserves transaction integrity"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         self.db.save_trade({
             'id': 'nft_bayc',
@@ -1523,7 +1523,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_wash_sale_coin_rename(self):
         """Test: Wash sale coins can be renamed to distinguish exchanges"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # BTC purchase
         self.db.save_trade({
@@ -1563,7 +1563,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_missing_price_update_with_decimal(self):
         """Test: Missing prices can be updated with precise decimal values"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         self.db.save_trade({
             'id': 'missing_price_tx',
@@ -1593,7 +1593,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_delete_duplicate_transaction(self):
         """Test: Duplicate transactions can be safely deleted"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Add duplicate from API and CSV
         self.db.save_trade({
@@ -1639,7 +1639,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_fixes_tracking_multiple_operations(self):
         """Test: Multiple fixes are tracked correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Setup multiple issues
         self.db.save_trade({
@@ -1692,7 +1692,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_load_review_report_missing_directory(self):
         """Test: Graceful handling when review directory doesn't exist"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2025)
         
@@ -1704,7 +1704,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_backup_file_naming(self):
         """Test: Backup file has correct naming convention"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         backup_path = fixer.create_backup()
@@ -1716,7 +1716,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_token_cache_initialization(self):
         """Test: Token cache initializes correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -1725,7 +1725,7 @@ class TestInteractiveReviewFixerComprehensive(unittest.TestCase):
     
     def test_fixes_summary_empty_state(self):
         """Test: Summary handles zero fixes correctly"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         fixer = InteractiveReviewFixer(self.db, 2024)
         
@@ -1757,7 +1757,7 @@ class TestInteractiveFixerUIFlow(unittest.TestCase):
     
     def test_fixer_reports_all_issues_in_order(self):
         """Test that fixer loads and reports all issues in proper order"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Create multiple types of issues
         # NFT issue
@@ -1809,7 +1809,7 @@ class TestInteractiveFixerUIFlow(unittest.TestCase):
     
     def test_fixer_skip_and_reappear_next_session(self):
         """Test that skipped items reappear on next session"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         self.db.save_trade({
             'id': 'skip_test',
@@ -1861,7 +1861,7 @@ class TestInteractiveFixerImports(unittest.TestCase):
     
     def test_fixer_uses_app_module_constants(self):
         """Test: Interactive_Review_Fixer uses app.WALLETS_FILE not direct import"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Override app.WALLETS_FILE for test
         custom_wallets_file = self.test_path / 'custom_wallets.json'
@@ -1880,7 +1880,7 @@ class TestInteractiveFixerImports(unittest.TestCase):
     
     def test_fixer_can_save_api_keys_with_mock_path(self):
         """Test: Interactive_Review_Fixer can save API keys with mocked paths"""
-        from Interactive_Review_Fixer import InteractiveReviewFixer
+        from src.tools.review_fixer import InteractiveReviewFixer
         
         # Override app.KEYS_FILE for test
         custom_keys_file = self.test_path / 'subdir' / 'custom_keys.json'
@@ -1905,3 +1905,5 @@ class TestInteractiveFixerImports(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

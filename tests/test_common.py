@@ -23,10 +23,10 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Import application logic
-import Crypto_Tax_Engine as app
-import Setup as setup_script
-import Auto_Runner
-from Interactive_Review_Fixer import InteractiveReviewFixer
+import src.core.engine as app
+import src.tools.setup as setup_script
+import auto_runner
+from src.tools.review_fixer import InteractiveReviewFixer
 from contextlib import redirect_stdout
 
 # Keep a reference to the real price fetcher for test resets
@@ -78,3 +78,5 @@ class ShadowFIFO:
             'gain': gain, 
             'date': date
         })
+
+

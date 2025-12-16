@@ -26,7 +26,7 @@ import filelock
 # Import modules to test
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from Crypto_Tax_Engine import TaxEngine, round_decimal, to_decimal, DatabaseManager
+from src.core.engine import TaxEngine, round_decimal, to_decimal, DatabaseManager
 
 
 class TestFileLocking:
@@ -562,3 +562,5 @@ class TestDatabaseConnectionManagement:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+

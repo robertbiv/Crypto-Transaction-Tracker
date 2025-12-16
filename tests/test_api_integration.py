@@ -11,8 +11,8 @@ import os
 from pathlib import Path
 
 # Import your application modules
-import Crypto_Tax_Engine as app
-from Interactive_Review_Fixer import InteractiveReviewFixer
+import src.core.engine as app
+from src.tools.review_fixer import InteractiveReviewFixer
 
 class TestCCXTIntegration(unittest.TestCase):
     """Simulate CCXT Exchange Interactions based on official docs"""
@@ -286,3 +286,4 @@ class TestEtherscanIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

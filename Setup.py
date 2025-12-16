@@ -9,7 +9,7 @@ BASE_DIR = Path.cwd()
 REQUIRED_DIRS = [BASE_DIR/'inputs', BASE_DIR/'processed_archive', BASE_DIR/'outputs', BASE_DIR/'outputs'/'logs']
 KEYS_FILE = BASE_DIR/'api_keys.json'
 WALLETS_FILE = BASE_DIR/'wallets.json'
-CONFIG_FILE = BASE_DIR/'config.json'
+CONFIG_FILE = BASE_DIR / 'configs' / 'config.json'
 REQUIRED_SCRIPTS = ["Crypto_Tax_Engine.py", "Auto_Runner.py"] 
 REQUIRED_PACKAGES = {"pandas":"pandas", "ccxt":"ccxt", "yfinance":"yfinance", "requests":"requests"}
 
@@ -78,15 +78,17 @@ def main():
     check_dependencies()
     check_folders()
     
-    # --- 1. API Keys ---
+    # ====================================================================================
+    # 1. API KEYS
+    # ====================================================================================
     api_data = {
         "_INSTRUCTIONS": "Enter Read-Only keys. Moralis is REQUIRED for EVM/Solana audit. Blockchair is OPTIONAL (BTC/UTXO). If you don't have a key, leave as is.",
         
-        # --- AUDIT PROVIDERS ---
+        # Audit Providers
         "moralis": {"apiKey": "PASTE_MORALIS_KEY_HERE"},
         "blockchair": {"apiKey": "PASTE_KEY_OPTIONAL_BUT_RECOMMENDED"},
 
-        # --- CERTIFIED EXCHANGES (Pro Tier) ---
+        # Certified Exchanges (Pro Tier)
         "binance": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "binanceus": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "bybit": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
@@ -115,7 +117,7 @@ def main():
         "paradex": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "oxfun": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
 
-        # --- SUPPORTED EXCHANGES (Standard Tier) ---
+        # Supported Exchanges (Standard Tier)
         "alpaca": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "apex": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
         "ascendex": {"apiKey": "PASTE_KEY", "secret": "PASTE_SECRET"},
@@ -155,11 +157,13 @@ def main():
     }
     validate_json(KEYS_FILE, api_data)
 
-    # --- 2. Wallets (All Chains) ---
+    # ====================================================================================
+    # 2. WALLETS (ALL CHAINS)
+    # ====================================================================================
     wallet_data = {
         "_INSTRUCTIONS": "Paste PUBLIC addresses to audit. Use checksummed EVM addresses (0x...) for EVM chains and standard address formats for UTXO chains. To add multiple wallets for the same blockchain, provide a JSON array of addresses. Do NOT paste private keys.",
         
-        # --- UTXO CHAINS (Blockchair) ---
+        # UTXO Chains (Blockchair)
         "bitcoin": {"addresses": ["PASTE_BTC_ADDRESS"]},
         "litecoin": {"addresses": ["PASTE_LTC_ADDRESS"]},
         "dogecoin": {"addresses": ["PASTE_DOGE_ADDRESS"]},
@@ -173,7 +177,7 @@ def main():
         "eos": {"addresses": ["PASTE_EOS_ADDRESS"]},
         "tron": {"addresses": ["PASTE_TRX_ADDRESS"]},
 
-        # --- EVM CHAINS (Moralis) ---
+        # EVM Chains (Moralis)
         "ethereum": {"addresses": ["PASTE_ETH_ADDRESS"]},
         "polygon": {"addresses": ["PASTE_MATIC_ADDRESS"]},
         "binance": {"addresses": ["PASTE_BSC_ADDRESS"]},
@@ -188,12 +192,14 @@ def main():
         "linea": {"addresses": ["PASTE_LINEA_ADDRESS"]},
         "moonbeam": {"addresses": ["PASTE_MOONBEAM_ADDRESS"]},
 
-        # --- SOLANA (Moralis) ---
+        # Solana (Moralis)
         "solana": {"addresses": ["PASTE_SOL_ADDRESS"]}
     }
     validate_json(WALLETS_FILE, wallet_data)
 
-    # --- 3. User Config (Updated for V30) ---
+    # ====================================================================================
+    # 3. USER CONFIG (UPDATED FOR V30)
+    # ====================================================================================
     config_data = {
         "_INSTRUCTIONS": "General runtime options. 'accounting.method': 'FIFO' (Default) or 'HIFO' (Not Recommended: may cause audit friction). 'general.run_audit using the public wallet keys (Enter in wallets.json)': True/False.",
         "general": {

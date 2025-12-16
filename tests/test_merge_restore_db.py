@@ -121,3 +121,5 @@ def test_replace_mode_overwrites_db(client_tmp):
     ids = [r[0] for r in cur.execute('SELECT id FROM trades').fetchall()]
     conn.close()
     assert ids == ['B']
+
+

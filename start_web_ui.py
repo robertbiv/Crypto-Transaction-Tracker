@@ -9,7 +9,7 @@ from pathlib import Path
 
 def main():
     """Start the web server"""
-    web_server = Path(__file__).parent / 'web_server.py'
+    web_server = Path(__file__).parent / 'src' / 'web' / 'server.py'
     
     print("Starting Crypto Tax Generator Web UI...")
     print("=" * 60)

@@ -16,8 +16,8 @@ import pandas as pd
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import Crypto_Tax_Engine as app
-from Crypto_Tax_Engine import DatabaseManager, Ingestor, to_decimal, round_decimal
+import src.core.engine as app
+from src.core.engine import DatabaseManager, Ingestor, to_decimal, round_decimal
 
 
 class TestDivisionByZeroHandling:
@@ -427,3 +427,5 @@ class TestDatabaseDecimalStorage:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
