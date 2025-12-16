@@ -25,7 +25,7 @@ if parent_dir not in sys.path:
 # Import application logic
 import src.core.engine as app
 import src.tools.setup as setup_script
-import auto_runner
+import Auto_Runner as auto_runner
 from src.tools.review_fixer import InteractiveReviewFixer
 from contextlib import redirect_stdout
 
