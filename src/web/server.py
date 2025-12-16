@@ -208,6 +208,9 @@ def get_or_create_encryption_key():
         with open(ENCRYPTION_KEY_FILE, 'rb') as f:
             return f.read()
     
+    # Create keys directory if it doesn't exist
+    ENCRYPTION_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    
     # Generate new encryption key
     key = Fernet.generate_key()
     with open(ENCRYPTION_KEY_FILE, 'wb') as f:

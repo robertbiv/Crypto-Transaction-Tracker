@@ -1,6 +1,6 @@
 """Tests for Cascade Mode Recalculation"""
 from test_common import *
-import auto_runner
+import Auto_Runner as auto_runner
 import sys
 from io import StringIO
 from contextlib import redirect_stdout
