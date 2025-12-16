@@ -45,7 +45,7 @@ def run_python_script(script_name, *args):
     # Map script names to their new locations
     script_map = {
         'setup.py': 'src/tools/setup.py',
-        'auto_runner.py': 'auto_runner.py',
+        'auto_runner.py': 'Auto_Runner.py',
         'review_fixer.py': 'src/tools/review_fixer.py',
         'start_web_ui.py': 'start_web_ui.py'
     }

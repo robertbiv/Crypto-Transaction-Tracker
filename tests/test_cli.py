@@ -26,7 +26,7 @@ def test_cmd_run_adds_cascade_flag(monkeypatch):
     assert calls, "subprocess.run was not called"
     run_args = calls[0]
     assert '--cascade' in run_args
-    assert Path(run_args[1]).name == 'auto_runner.py'
+    assert Path(run_args[1]).name == 'Auto_Runner.py'
 
 
 def test_cmd_run_defaults_to_current_year(monkeypatch):
@@ -40,7 +40,7 @@ def test_cmd_run_defaults_to_current_year(monkeypatch):
     assert calls, "subprocess.run was not called"
     run_args = calls[0]
     assert '--cascade' not in run_args
-    assert Path(run_args[1]).name == 'auto_runner.py'
+    assert Path(run_args[1]).name == 'Auto_Runner.py'
 
 
 def test_cmd_test_specific_file_missing_returns_false():
