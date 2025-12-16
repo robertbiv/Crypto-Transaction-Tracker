@@ -66,11 +66,189 @@
         background: white;
         border-radius: 8px;
     }
+    
+    /* Download Warning Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        cursor: pointer;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-header {
+        padding: 20px;
+        border-bottom: 2px solid #f0f0f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        color: #d9534f;
+        font-size: 20px;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 28px;
+        cursor: pointer;
+        color: #999;
+    }
+
+    .modal-close:hover {
+        color: #333;
+    }
+
+    .modal-body {
+        padding: 20px;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .warning-box {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+
+    .warning-box p {
+        margin: 0 0 12px 0;
+        font-weight: bold;
+        color: #856404;
+    }
+
+    .warning-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #856404;
+    }
+
+    .warning-box li {
+        margin-bottom: 8px;
+        line-height: 1.5;
+    }
+
+    .warning-box ul ul {
+        margin-top: 6px;
+        font-size: 0.95em;
+    }
+
+    .confirmation-section {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 16px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .checkbox-label:last-child {
+        margin-bottom: 0;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+        margin-right: 10px;
+        margin-top: 4px;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+    }
+
+    .checkbox-label span {
+        color: #333;
+        line-height: 1.5;
+    }
+
+    .modal-footer {
+        padding: 16px 20px;
+        border-top: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    .modal-footer .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+
+    .modal-footer .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .modal-footer .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .modal-footer .btn-primary {
+        background: #007bff;
+        color: white;
+    }
+
+    .modal-footer .btn-primary:hover:not(:disabled) {
+        background: #0056b3;
+    }
+
+    .modal-footer .btn-primary:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1 style="margin-bottom: 24px;">Tax Reports & Downloads</h1>
+
+<div id="warningsDisabledNotice" class="alert alert-danger" style="display: none; margin-bottom: 24px; border: 2px solid #d9534f;">
+    <span class="material-icons" style="margin-right: 12px; vertical-align: middle;">warning</span>
+    <span><strong>⚠️ CRITICAL REMINDER:</strong> Download warnings are currently DISABLED in your settings. You are STILL required to review every number in these CSV outputs with a qualified tax professional (CPA, tax attorney, or enrolled agent) before filing your taxes. Failure to do so could result in tax penalties. The tool author takes no liability for errors or omissions.</span>
+</div>
 
 <div id="updateNotice" class="alert alert-warning" style="display: none; margin-bottom: 24px;">
     <span class="material-icons" style="margin-right: 12px;">info</span>
@@ -112,6 +290,58 @@
 
 <!-- File upload modal -->
 <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+
+<!-- Download Warning Modal -->
+<div id="downloadWarningModal" class="modal" style="display: none;">
+  <div class="modal-overlay" onclick="closeDownloadWarning()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>⚠️ Important: Review Before Downloading</h2>
+      <button type="button" class="modal-close" onclick="closeDownloadWarning()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="warning-box">
+        <p><strong>IMPORTANT DISCLAIMER:</strong></p>
+        <ul>
+          <li><strong>Do NOT file taxes based solely on these outputs.</strong> They may contain errors.</li>
+          <li><strong>You must review every number</strong> in the generated files with a qualified tax professional (CPA, tax attorney, or IRS-enrolled agent).</li>
+          <li><strong>Consult a tax professional about:</strong>
+            <ul>
+              <li>Your specific tax situation and any edge cases</li>
+              <li>Whether all transactions were captured</li>
+              <li>Cost basis calculations and accuracy</li>
+              <li>Wash sale detection and classification</li>
+              <li>Income recognition and timing</li>
+              <li>Any missing or suspicious data</li>
+            </ul>
+          </li>
+          <li><strong>The author takes no liability</strong> for errors, omissions, or tax penalties resulting from using this tool.</li>
+        </ul>
+      </div>
+      
+      <div class="confirmation-section">
+        <label class="checkbox-label">
+          <input type="checkbox" id="confirmCheckbox" onchange="updateDownloadButton()">
+          <span>I understand and will review this with a qualified tax professional before filing</span>
+        </label>
+        
+        <label class="checkbox-label">
+          <input type="checkbox" id="consultCheckbox" onchange="updateDownloadButton()">
+          <span>I will consult a tax professional for any questions about these results</span>
+        </label>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeDownloadWarning()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="proceedDownloadBtn" onclick="proceedDownload()" disabled>
+        I Understand - Proceed with Download
+      </button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -230,9 +460,118 @@
         }
     }
     
+    let pendingReportPath = null;
+    let downloadWarningsEnabled = true;
+
+    function showDownloadWarning(reportPath) {
+        pendingReportPath = reportPath;
+        
+        // If warnings disabled, proceed directly to API call
+        if (!downloadWarningsEnabled) {
+            proceedDownload();
+            return;
+        }
+        
+        // Otherwise show modal
+        document.getElementById('downloadWarningModal').style.display = 'flex';
+        document.getElementById('confirmCheckbox').checked = false;
+        document.getElementById('consultCheckbox').checked = false;
+        updateDownloadButton();
+    }
+
+    function closeDownloadWarning() {
+        document.getElementById('downloadWarningModal').style.display = 'none';
+        pendingReportPath = null;
+    }
+
+    function updateDownloadButton() {
+        const confirmCheckbox = document.getElementById('confirmCheckbox');
+        const consultCheckbox = document.getElementById('consultCheckbox');
+        const proceedBtn = document.getElementById('proceedDownloadBtn');
+        
+        proceedBtn.disabled = !(confirmCheckbox.checked && consultCheckbox.checked);
+    }
+
+    function proceedDownload() {
+        if (!pendingReportPath) {
+            showAlert('Error: No report path specified', 'error');
+            return;
+        }
+        
+        // If warnings enabled, check checkboxes
+        if (downloadWarningsEnabled) {
+            const confirmCheckbox = document.getElementById('confirmCheckbox');
+            const consultCheckbox = document.getElementById('consultCheckbox');
+            
+            if (!confirmCheckbox.checked || !consultCheckbox.checked) {
+                showAlert('Please confirm both checkboxes before proceeding', 'error');
+                return;
+            }
+        }
+        
+        // Send confirmation to backend
+        fetch('/api/download-warning-acknowledged', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                confirmed: true,
+                report_path: pendingReportPath
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Failed to acknowledge warning');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            closeDownloadWarning();
+            // Trigger the actual download
+            window.location.href = data.download_url;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Error processing download: ' + error.message, 'error');
+        });
+    }
+
+    // Close modal when pressing Escape
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const modal = document.getElementById('downloadWarningModal');
+            if (modal && modal.style.display === 'flex') {
+                closeDownloadWarning();
+            }
+        }
+    });
+
+    async function checkDownloadWarningsConfig() {
+        try {
+            const response = await api.get('/api/download-warnings-config');
+            const config = JSON.parse(response.data);
+            downloadWarningsEnabled = config.enabled;
+            
+            // Show/hide persistent warning
+            const warningNotice = document.getElementById('warningsDisabledNotice');
+            if (!downloadWarningsEnabled) {
+                warningNotice.style.display = 'block';
+            } else {
+                warningNotice.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error checking download warnings config:', error);
+            // Default to enabled if error
+            downloadWarningsEnabled = true;
+        }
+    }
+    
     async function downloadReport(path, filename) {
         try {
-            window.location.href = `/api/reports/download/${encodeURIComponent(path)}`;
+            showDownloadWarning(path);
         } catch (error) {
             showAlert('Failed to download report: ' + error.message, 'error');
         }
@@ -374,8 +713,11 @@
         const fileInput = document.getElementById('csvFileInput');
         if (fileInput) fileInput.addEventListener('change', handleFileUpload);
 
+        checkDownloadWarningsConfig();
         loadReports();
         loadGainsLossesChart();
-        checkStatus();        _bindReportDownloads();    });
+        checkStatus();
+        _bindReportDownloads();
+    });
 </script>
 {% endblock %}

@@ -55,6 +55,10 @@ def test_setup_wizard_route_exists(client):
 
 def test_first_time_setup_json_post_redirects_to_wizard(client):
     """Posting valid JSON to /first-time-setup returns redirect to setup wizard."""
+    # First ensure ToS is accepted
+    from src.utils.tos_checker import mark_tos_accepted
+    mark_tos_accepted()
+    
     payload = {
         'username': 'adminuser',
         'password': 'StrongPass123!',
@@ -95,6 +99,10 @@ def test_setup_page_access_only_when_needed(client):
 
 def test_first_time_setup_get_renders_template(client):
     """GET /first-time-setup should render the template when no users exist."""
+    # First ensure ToS is accepted
+    from src.utils.tos_checker import mark_tos_accepted
+    mark_tos_accepted()
+    
     resp = client.get('/first-time-setup')
     assert resp.status_code == 200
 

@@ -32,6 +32,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# Check ToS acceptance
+from src.utils.tos_checker import check_and_prompt_tos
+check_and_prompt_tos()
+
 # ANSI color codes
 class Colors:
     HEADER = '\033[95m'

@@ -34,8 +34,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Check ToS acceptance
+from src.utils.tos_checker import check_and_prompt_tos
+
 def main():
     """Start the web server"""
+    check_and_prompt_tos()
     web_server = Path(__file__).parent / 'src' / 'web' / 'server.py'
     
     print("Starting Crypto Tax Generator Web UI...")

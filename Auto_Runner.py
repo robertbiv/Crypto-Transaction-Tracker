@@ -34,6 +34,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+# Check ToS acceptance
+from src.utils.tos_checker import check_and_prompt_tos
+check_and_prompt_tos()
+
 # Import the main engine module
 try:
     import src.core.engine as tax_app
