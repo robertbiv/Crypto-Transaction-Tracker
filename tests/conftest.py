@@ -17,4 +17,15 @@ def set_test_mode():
     if 'TEST_MODE' in os.environ:
         del os.environ['TEST_MODE']
 
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_global_database():
+    """Remove global database before test session starts to prevent test pollution."""
+    global_db = PROJECT_ROOT / 'crypto_master.db'
+    if global_db.exists():
+        global_db.unlink()
+    yield
+    # Optionally clean up after tests too
+    if global_db.exists():
+        global_db.unlink()
+
 
