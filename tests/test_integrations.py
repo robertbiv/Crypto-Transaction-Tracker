@@ -833,8 +833,19 @@ class TestTokenAddressCaching(unittest.TestCase):
         app.BASE_DIR = self.test_path
         app.initialize_folders()
         self.db = app.DatabaseManager()
+        
+        # Mock network API calls to prevent hanging
+        self.patcher_get = patch('src.tools.review_fixer.requests.get')
+        self.patcher_post = patch('src.tools.review_fixer.requests.post')
+        self.mock_get = self.patcher_get.start()
+        self.mock_post = self.patcher_post.start()
+        # Mock empty response to simulate cached/empty state
+        self.mock_get.return_value = MagicMock(status_code=200, json=lambda: [])
+        self.mock_post.return_value = MagicMock(status_code=200)
     
     def tearDown(self):
+        self.patcher_get.stop()
+        self.patcher_post.stop()
         self.db.close()
         shutil.rmtree(self.test_dir, ignore_errors=True)
         app.BASE_DIR = self.orig_base
