@@ -1,7 +1,29 @@
 #!/usr/bin/env python3
 """
-Crypto Tax Generator - Unified Command Line Interface
-Modern CLI with rich formatting and comprehensive feature access
+================================================================================
+CLI - Command Line Interface
+================================================================================
+
+Provides unified command-line access to all tax engine features:
+    - Tax calculation and report generation
+    - Setup and configuration management
+    - Database backup/restore operations
+    - Web UI launcher
+    - Review and fix workflows
+
+Features:
+    - Rich text formatting with ANSI colors
+    - Argument parsing for all major operations
+    - Progress indicators and status updates
+    - Error handling with user-friendly messages
+
+Usage:
+    python cli.py [command] [options]
+    python cli.py --help
+
+Author: Crypto Tax Generator Team
+Last Modified: December 2025
+================================================================================
 """
 
 import sys

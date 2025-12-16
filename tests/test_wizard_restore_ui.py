@@ -1,3 +1,20 @@
+"""
+================================================================================
+TEST: Wizard Restore UI
+================================================================================
+
+Validates restore wizard user interface and navigation.
+
+Test Coverage:
+    - Restore wizard page rendering
+    - UI element presence
+    - Navigation flow
+    - Session state management
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import tempfile
 from pathlib import Path

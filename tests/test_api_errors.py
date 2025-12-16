@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: API Error Handling
+================================================================================
+
+Validates graceful handling of external API failures and errors.
+
+Test Coverage:
+    - Exchange API connection failures
+    - Rate limiting responses
+    - Invalid API credentials
+    - Malformed API responses
+    - Network timeouts
+    - Retry logic validation
+
+Author: robertbiv
+================================================================================
+"""
+
 import unittest
 from unittest.mock import patch, MagicMock
 import requests

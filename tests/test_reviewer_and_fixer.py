@@ -1,4 +1,23 @@
-"""Tax Reviewer and Interactive Fixer Tests"""
+"""
+================================================================================
+TEST: Tax Reviewer and Interactive Fixer
+================================================================================
+
+Validates audit risk detection and issue remediation workflows.
+
+Test Coverage:
+    - NFT collectible detection
+    - Wash sale identification
+    - Constructive sale detection
+    - DeFi complexity flagging
+    - Missing price detection
+    - Spam token identification
+    - Interactive fix workflows
+    - Batch operations
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestTaxReviewerHeuristics(unittest.TestCase):

@@ -1,3 +1,22 @@
+"""
+================================================================================
+TEST: Command Line Interface
+================================================================================
+
+Validates CLI argument parsing and command execution.
+
+Test Coverage:
+    - Command argument parsing
+    - Help text generation
+    - Error message formatting
+    - Script invocation
+    - Exit codes
+    - Input validation
+
+Author: robertbiv
+================================================================================
+"""
+
 import sys
 import subprocess
 from pathlib import Path

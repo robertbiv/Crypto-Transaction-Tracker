@@ -1,4 +1,20 @@
-"""External Integration Tests"""
+"""
+================================================================================
+TEST: External Service Integrations
+================================================================================
+
+Validates integration with external services and data sources.
+
+Test Coverage:
+    - StakeTax.io CSV integration
+    - Blockchain explorer APIs
+    - Price feed integrations
+    - Wallet audit services
+    - Third-party data imports
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestStakeTaxCSVIntegration(unittest.TestCase):

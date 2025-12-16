@@ -1,6 +1,56 @@
 """
-Interactive Review Fixer - Fix issues detected by Tax Reviewer
-Provides guided, interactive fixing of audit risk warnings.
+================================================================================
+REVIEW FIXER - Interactive Issue Remediation Tool
+================================================================================
+
+Guided workflow tool for fixing audit risks and compliance issues
+identified by the Tax Reviewer.
+
+Fixable Issue Types:
+    1. Missing Prices - Fetch from CoinGecko/CoinMarketCap APIs
+    2. Spam Tokens - Bulk mark as spam (zero value airdrops)
+    3. NFT Collectibles - Apply collectible prefix for 28% rate
+    4. Duplicate Transactions - Merge or delete duplicates
+    5. Price Anomalies - Correct unit price vs total value errors
+    6. High Fees - Flag or correct excessive fee entries
+    7. Missing Basis - Add acquisition records for unmatched sells
+
+Interactive Features:
+    - Step-by-step guided prompts
+    - Batch operations for similar issues
+    - Preview before commit
+    - Automatic backup before changes
+    - Undo/rollback capability
+    - Progress tracking for large batches
+
+Price Fetching:
+    - CoinGecko Free API integration
+    - CoinMarketCap API support
+    - Historical price lookups with date matching
+    - Rate limit compliance (10 calls/min free tier)
+    - Token ID caching for performance
+    - Fallback to multiple sources
+
+Safety Features:
+    - Database backup before any modifications
+    - Transaction-based changes (atomic commits)
+    - Dry-run mode for testing
+    - Detailed change logging
+    - Restoration from backup on errors
+
+Usage:
+    python src/tools/review_fixer.py
+    python cli.py fix-review
+
+Workflow:
+    1. Run tax calculations (generates warnings)
+    2. Run Tax Reviewer (identifies issues)
+    3. Run Review Fixer (guided remediation)
+    4. Re-run tax calculations (verify fixes)
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import json

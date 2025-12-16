@@ -1,14 +1,21 @@
 """
-Unit tests for remaining security and accuracy fixes from DEEP_SECURITY_ANALYSIS.md
+================================================================================
+TEST: Remaining Security and Accuracy Fixes
+================================================================================
 
-Tests cover:
-- Issue #3: Race condition in file writes (file locking)
-- Issue #4: Cost basis calculation edge case
-- Issue #6: Decimal precision loss in wash sale
-- Issue #7: Unvalidated JSON parsing
-- Issue #8: Unmatched sell fallback logic
-- Issue #10: HIFO re-sorting
-- Issue #12: Fee handling in transfers
+Validates fixes for identified security and accuracy issues.
+
+Issues Tested:
+    - Issue #3: Race condition in file writes (file locking)
+    - Issue #4: Cost basis calculation edge cases
+    - Issue #6: Decimal precision loss in wash sale
+    - Issue #7: Unvalidated JSON parsing
+    - Issue #8: Unmatched sell fallback logic
+    - Issue #10: HIFO re-sorting
+    - Issue #12: Fee handling in transfers
+
+Author: robertbiv
+================================================================================
 """
 
 import pytest

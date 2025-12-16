@@ -1,4 +1,22 @@
-"""Report Generation and Export Tests"""
+"""
+================================================================================
+TEST: Report Generation and Export
+================================================================================
+
+Validates tax report generation and file export functionality.
+
+Test Coverage:
+    - Export CSV format (Form 8949)
+    - Income report generation
+    - 1099-DA reconciliation format
+    - Wash sale reports
+    - Holdings snapshots (EOY)
+    - Tax loss carryover analysis
+    - Report accuracy validation
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestReportVerification(unittest.TestCase):

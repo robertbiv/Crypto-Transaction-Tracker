@@ -1,3 +1,55 @@
+"""
+================================================================================
+TAX ENGINE - Core Tax Calculation Engine (2025 US Compliance Edition)
+================================================================================
+
+The main tax calculation engine that processes cryptocurrency transactions
+and generates IRS-compliant tax reports.
+
+Key Components:
+    1. Ingestor - Imports data from CSV files and exchange APIs
+    2. StakeTaxCSVManager - Processes staking rewards
+    3. PriceFetcher - Retrieves historical USD prices
+    4. WalletAuditor - Validates on-chain balances
+    5. TaxEngine - Calculates capital gains/losses and income
+
+Tax Calculation Features:
+    - FIFO/HIFO/LIFO accounting methods
+    - Short-term vs long-term capital gains classification
+    - Wash sale detection and disallowance (2025 compliance)
+    - Strict broker mode for 1099-DA reconciliation
+    - Staking rewards as ordinary income
+    - DeFi LP token handling (conservative/aggressive modes)
+    - NFT collectibles tracking (28% tax rate)
+    - Cross-wallet basis tracking with optional isolation
+
+2025 US Tax Compliance:
+    - IRS proposed wash sale rule support
+    - Broker reporting (1099-DA) alignment via strict mode
+    - Constructive receipt for staking (configurable)
+    - Digital asset broker regulations
+    - FBAR reporting hints for foreign exchanges
+
+Supported Data Sources:
+    - CSV imports (Coinbase, Binance, Kraken, etc.)
+    - Exchange APIs (ccxt library integration)
+    - Manual entry via web UI
+    - Blockchain explorers (Etherscan, etc.)
+
+Output Reports:
+    - Export-compatible capital gains CSV (Form 8949)
+    - Income report for staking/mining
+    - 1099-DA reconciliation report
+    - Wash sale detailed log
+    - Holdings snapshots (EOY)
+    - Tax loss carryover analysis
+
+Author: robertbiv
+Last Modified: December 2025
+Version: 30 (2025 Compliance Edition)
+================================================================================
+"""
+
 import sqlite3
 import pandas as pd
 import ccxt

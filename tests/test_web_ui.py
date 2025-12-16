@@ -1,6 +1,29 @@
 """
-CRYPTO TAX ENGINE - WEB UI UNIT TESTS
-Tests all web interface features including security, authentication, and API endpoints
+================================================================================
+TEST: Web UI - Security, Authentication, and API Endpoints
+================================================================================
+
+Comprehensive test suite for web interface functionality.
+
+Test Coverage:
+    - User authentication and session management
+    - CSRF protection
+    - Rate limiting
+    - File upload security
+    - API endpoint authorization
+    - Database backup/restore via web
+    - Configuration management
+    - Report generation and download
+
+Security Testing:
+    - Password hashing (bcrypt)
+    - Session token validation
+    - SQL injection prevention
+    - XSS attack prevention
+    - Path traversal prevention
+
+Author: robertbiv
+================================================================================
 """
 
 import unittest

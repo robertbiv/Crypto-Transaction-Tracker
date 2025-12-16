@@ -1,4 +1,21 @@
-"""Price Fetcher Integration Tests"""
+"""
+================================================================================
+TEST: Price Fetcher Integration
+================================================================================
+
+Validates external price API integration and data fetching.
+
+Test Coverage:
+    - CoinGecko API integration
+    - Yahoo Finance fallback
+    - Stablecoin price handling ($1.00)
+    - Historical price lookups
+    - Missing price detection
+    - Date range handling
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestPriceFetcherIntegration(unittest.TestCase):

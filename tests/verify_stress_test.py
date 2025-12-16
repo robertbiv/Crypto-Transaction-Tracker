@@ -1,3 +1,32 @@
+"""
+================================================================================
+TEST UTILITY: Stress Test Verification
+================================================================================
+
+Verification script for stress test data processing and accuracy.
+
+Runs the full tax engine against generated stress test data to validate:
+    - Correct processing of large transaction volumes (500+ transactions)
+    - FIFO basis tracking accuracy across multiple exchanges
+    - Income calculation correctness (staking, airdrops)
+    - Capital gains computation (short-term and long-term)
+    - Fee handling and deductions
+    - Strict broker mode isolation
+    - Expected warning generation
+
+Process:
+    1. Backs up existing database
+    2. Copies stress test CSV files to inputs/
+    3. Runs tax engine with strict_broker_mode enabled
+    4. Validates output against expected statistics
+    5. Checks for anomaly detection warnings
+
+Usage:
+    python tests/verify_stress_test.py
+
+Author: robertbiv
+================================================================================
+"""
 import sys
 import os
 import shutil

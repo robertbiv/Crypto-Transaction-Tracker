@@ -1,3 +1,27 @@
+"""
+================================================================================
+PYTEST CONFIGURATION
+================================================================================
+
+Pytest configuration and shared fixtures for the entire test suite.
+
+Global Fixtures:
+    - set_test_mode: Automatically sets TEST_MODE=1 for faster API retries
+                     during testing (reduces timeout delays)
+    - cleanup_global_database: Removes crypto_master.db before test session
+                               to prevent test pollution and ensure clean state
+
+Path Configuration:
+    - Adds project root to sys.path for legacy module imports
+    - Ensures all tests can import from src/ without relative imports
+
+Scope:
+    Session-scoped fixtures run once per entire pytest invocation,
+    shared across all test modules for efficiency.
+
+Author: robertbiv
+================================================================================
+"""
 import os
 import sys
 import pytest

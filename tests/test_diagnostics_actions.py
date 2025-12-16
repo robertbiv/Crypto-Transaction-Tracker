@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Diagnostics Actions
+================================================================================
+
+Validates web UI diagnostic action endpoints.
+
+Test Coverage:
+    - Health check endpoint
+    - System info retrieval
+    - Log download functionality
+    - Database integrity checks
+    - Configuration validation
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import unittest
 from unittest.mock import patch

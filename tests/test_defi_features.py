@@ -1,4 +1,21 @@
-"""DeFi and Advanced Transaction Tests"""
+"""
+================================================================================
+TEST: DeFi Features and Complex Protocol Interactions
+================================================================================
+
+Tests decentralized finance protocol integrations and advanced transactions.
+
+Features Tested:
+    - Liquidity pool token deposits/withdrawals
+    - Yield farming rewards
+    - Flash loan interactions
+    - Wrapped token conversions (WBTC, WETH)
+    - Multi-hop swaps
+    - Protocol-specific token mechanics
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestDeFiInteractions(unittest.TestCase):

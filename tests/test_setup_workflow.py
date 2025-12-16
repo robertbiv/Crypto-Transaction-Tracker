@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Setup Workflow
+================================================================================
+
+Validates first-time setup wizard workflow through web UI.
+
+Test Coverage:
+    - Multi-step wizard navigation
+    - Form validation
+    - User account creation
+    - Initial configuration
+    - Setup completion status
+
+Author: robertbiv
+================================================================================
+"""
+
 import json
 import tempfile
 from pathlib import Path

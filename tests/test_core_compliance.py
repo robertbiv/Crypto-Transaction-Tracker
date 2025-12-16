@@ -1,4 +1,21 @@
-"""Core US Tax Compliance Tests"""
+"""
+================================================================================
+TEST: Core US Tax Compliance
+================================================================================
+
+Validates fundamental US tax law compliance for cryptocurrency transactions.
+
+Compliance Areas:
+    - FIFO/HIFO/LIFO accounting methods
+    - Short-term vs long-term capital gains
+    - Constructive receipt of income
+    - Like-kind exchange prohibition (post-2017)
+    - Specific identification methods
+    - Gift and inheritance basis rules
+
+Author: robertbiv
+================================================================================
+"""
 from test_common import *
 
 class TestAdvancedUSCompliance(unittest.TestCase):

@@ -1,8 +1,94 @@
 #!/usr/bin/env python3
 """
-Crypto Tax Generator Web UI Server
-Self-hosted web interface with HTTPS, authentication, and full feature set
-Encrypted API with CSRF protection - only accessible through web UI
+================================================================================
+WEB SERVER - Self-Hosted Web UI with Authentication
+================================================================================
+
+Flask-based web interface providing browser access to all tax engine features.
+
+Key Features:
+    - HTTPS/SSL with self-signed certificates
+    - Multi-user authentication with bcrypt password hashing
+    - Session management with secure cookies
+    - CSRF protection for all state-changing operations
+    - Rate limiting to prevent abuse
+    - File upload for CSV imports
+    - Real-time calculation progress tracking
+    - Report viewing and download
+    - Configuration management UI
+    - Audit logging for compliance
+
+Security Features:
+    - Password-based authentication
+    - Session timeout after inactivity
+    - CSRF tokens rotated hourly
+    - Rate limiting (5 login attempts per 15 min)
+    - File upload validation and sanitization
+    - SQL injection prevention (parameterized queries)
+    - XSS prevention (template escaping)
+    - Secure headers (HSTS, CSP)
+    - Encrypted data at rest
+
+API Endpoints:
+    Authentication:
+        POST /login - User login
+        POST /logout - Session termination
+        POST /change-password - Password update
+    
+    Data Management:
+        GET /api/transactions - List all transactions
+        POST /api/upload - CSV file upload
+        POST /api/delete-transaction - Remove transaction
+        POST /api/sync-api - Trigger exchange API sync
+    
+    Tax Operations:
+        POST /api/calculate - Run tax calculation
+        GET /api/reports - List available reports
+        GET /api/download/<file> - Download report
+        GET /api/status - Calculation progress
+    
+    Configuration:
+        GET /api/config - Load configuration
+        POST /api/config - Save configuration
+        GET /api/wallets - Load wallet addresses
+        POST /api/wallets - Save wallet addresses
+        GET /api/api-keys - Load API keys
+        POST /api/api-keys - Save API keys
+    
+    Admin:
+        POST /api/backup-db - Create database backup
+        POST /api/restore-db - Restore from backup
+        GET /api/logs - View application logs
+        POST /api/factory-reset - Reset to defaults
+
+File Structure:
+    web_templates/ - Jinja2 HTML templates
+    web_static/ - CSS, JavaScript, images
+    keys/web_users.json - User credentials (bcrypt hashed)
+    certs/ - SSL certificate and private key
+
+Default Credentials:
+    Set during first-time setup wizard
+    Default admin user created if none exists
+    Password must be changed on first login
+
+Usage:
+    python src/web/server.py
+    python start_web_ui.py
+    
+    Access at: https://localhost:5000
+
+Production Deployment:
+    For production use, consider:
+    - Nginx reverse proxy
+    - Real SSL certificate (Let's Encrypt)
+    - PostgreSQL instead of SQLite
+    - Redis session storage
+    - Gunicorn or uWSGI
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import os

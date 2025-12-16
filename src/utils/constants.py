@@ -1,12 +1,75 @@
 """
-Constants - Centralized configuration constants for tax calculations and system settings
+================================================================================
+CONSTANTS - System-Wide Configuration Values
+================================================================================
 
-This module contains all constants used throughout the tax engine, organized by category:
-- Tax Calculation Constants
-- Database Constants
-- API Constants
-- Compliance Constants
-- File Paths
+Centralized repository for all hardcoded constants used throughout the
+tax calculation engine. Organized by functional category.
+
+Constant Categories:
+    1. File Paths - Directory and file locations
+    2. Tax Calculation - IRS rules and precision settings
+    3. Database - SQLite configuration and safety limits
+    4. API - External service rate limits and timeouts
+    5. Compliance - Regulatory constants
+    6. DeFi Patterns - Protocol identification strings
+
+Key Constants:
+    
+    Tax Calculation:
+        WASH_SALE_WINDOW_DAYS = 30
+            IRS wash sale rule: 30 days before AND after (61-day total)
+        
+        LONG_TERM_HOLDING_DAYS = 365
+            Minimum days for long-term capital gains treatment
+        
+        DECIMAL_PRECISION = 8
+            Cryptocurrency decimal places (satoshi/wei level)
+        
+        USD_PRECISION = 2
+            US Dollar rounding precision
+    
+    Database:
+        DB_ENCRYPTION_ITERATIONS = 480000
+            PBKDF2 iterations (OWASP 2023 recommendation)
+        
+        DB_RETRY_ATTEMPTS = 3
+            Retries for failed database operations
+    
+    API:
+        API_TIMEOUT_SECONDS = 10
+            HTTP request timeout
+        
+        API_RETRY_MAX_ATTEMPTS = 3
+            Maximum retries for failed API calls
+
+File Path Constants:
+    All paths are relative to BASE_DIR (project root)
+    Supports monkeypatching for test isolation
+    
+    Example:
+        DB_FILE = BASE_DIR / 'crypto_master.db'
+        INPUT_DIR = BASE_DIR / 'inputs'
+        OUTPUT_DIR = BASE_DIR / 'outputs'
+
+DeFi Protocol Patterns:
+    Used to identify liquidity pool tokens and wrapped assets:
+        ['UNI-V2', 'UNI-V3', 'SUSHI', 'CURVE', 'BALANCER', 
+         'AAVE', 'COMPOUND', '-LP', '_LP', 'POOL']
+
+Usage:
+    from src.utils.constants import WASH_SALE_WINDOW_DAYS, DB_FILE
+    
+    window_start = sale_date - timedelta(days=WASH_SALE_WINDOW_DAYS)
+    conn = sqlite3.connect(str(DB_FILE))
+
+Note:
+    Values in this file are STATIC. For runtime-configurable settings,
+    use config.json via src.utils.config module.
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 
 import os

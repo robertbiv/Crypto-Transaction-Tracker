@@ -1,3 +1,21 @@
+"""
+================================================================================
+TEST: Database Merge and Restore
+================================================================================
+
+Validates database merging during backup restoration.
+
+Test Coverage:
+    - Transaction deduplication
+    - Conflict resolution
+    - Merge strategies
+    - Data integrity post-merge
+    - Rollback on errors
+
+Author: robertbiv
+================================================================================
+"""
+
 import io
 import json
 import sqlite3

@@ -1,6 +1,19 @@
 """
-CRYPTO TAX ENGINE - PROGRESS TRACKING UNIT TESTS
-Tests progress tracking functionality for long-running operations
+================================================================================
+TEST: Progress Tracking
+================================================================================
+
+Validates progress reporting for long-running operations.
+
+Test Coverage:
+    - Progress percentage calculation
+    - Status message updates
+    - Thread-safe progress tracking
+    - Cancellation handling
+    - Progress persistence
+
+Author: robertbiv
+================================================================================
 """
 
 import unittest

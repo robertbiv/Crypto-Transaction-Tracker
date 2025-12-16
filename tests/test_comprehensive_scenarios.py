@@ -1,11 +1,45 @@
 """
-Comprehensive Scenarios Test Suite
-Covers complex edge cases including:
-1. Liquidity Pools (LPs) & Impermanent Loss
-2. Staking (Liquid vs Locked)
-3. Transfers (Cross-Wallet Basis Tracking)
-4. Buying/Selling (Fiat/Crypto/Stablecoins)
-5. Edge Cases (Dust, Airdrops, Forks)
+================================================================================
+TEST: Comprehensive Edge Case Scenarios
+================================================================================
+
+Validates complex cryptocurrency transaction scenarios and edge cases.
+
+Test Coverage:
+    1. Liquidity Pools (LPs)
+        - Impermanent loss realization
+        - Entry/exit taxable events
+        - Cost basis tracking through swaps
+    
+    2. Staking
+        - Liquid staking (ETH -> stETH)
+        - Staking rewards as income
+        - Taxable events vs non-taxable deposits
+    
+    3. Cross-Wallet Transfers
+        - Basis preservation across sources
+        - Fee handling on transfers
+        - Destination wallet tracking
+    
+    4. Trading Scenarios
+        - Stablecoin swaps (USDC -> USDT)
+        - Fiat on/off ramps
+        - Crypto-to-crypto exchanges
+    
+    5. Edge Cases
+        - Dust cleanup (tiny amounts)
+        - Airdrop handling
+        - Fork distributions
+
+Test Methodology:
+    - Isolated test database per test
+    - Monkeypatched paths for isolation
+    - Real TaxEngine calculations (integration tests)
+    - Assertion of expected tax treatment
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 from test_common import *
 

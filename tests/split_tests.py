@@ -1,4 +1,34 @@
-"""Script to split unit_test.py into organized test files"""
+"""
+================================================================================
+TEST UTILITY: Test File Splitter
+================================================================================
+
+Utility script to organize and split monolithic test files into logical modules.
+
+Original monolithic test file (unit_test.py) was split into organized categories:
+    - test_core_compliance.py: US tax law compliance tests
+    - test_data_processing.py: CSV ingestion and normalization
+    - test_integrations.py: External API and blockchain integration
+    - test_defi_features.py: DeFi protocol support
+    - test_comprehensive_scenarios.py: Complex multi-step workflows
+    - test_web_ui.py: Web interface and API endpoints
+    - test_api_errors.py: Error handling and edge cases
+    - test_encryption_security.py: Security and encryption
+    - test_edge_cases.py: Boundary conditions and stress tests
+    - test_reporting_and_export.py: Output formats and reports
+
+Features:
+    - Automatically groups test classes by functionality
+    - Preserves imports and fixtures
+    - Generates proper file headers
+    - Maintains test isolation
+
+Usage:
+    python tests/split_tests.py
+
+Author: robertbiv
+================================================================================
+"""
 import re
 
 # Read the original file

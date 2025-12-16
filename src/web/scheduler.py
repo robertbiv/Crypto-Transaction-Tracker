@@ -1,5 +1,85 @@
 """
-Scheduling Manager - Handles automated tax calculation scheduling
+================================================================================
+SCHEDULER - Automated Tax Calculation Scheduling
+================================================================================
+
+Background task scheduler for automated, unattended tax processing.
+
+Scheduling Features:
+    - Daily calculations at specified time
+    - Weekly calculations on chosen day
+    - Monthly calculations on specified day of month
+    - Interval-based (every N hours)
+    - Cascade mode (calculate multiple years in sequence)
+
+Schedule Storage:
+    configs/schedule_config.json
+    
+    Format:
+    {
+        "enabled": true,
+        "schedules": [
+            {
+                "id": "daily_calc",
+                "frequency": "daily",
+                "time": "03:00",
+                "cascade": true
+            }
+        ]
+    }
+
+Schedule Types:
+    daily:
+        Runs every day at specified time
+        Example: "03:00" (3 AM)
+    
+    weekly:
+        Runs on specific day of week at specified time
+        Example: day_of_week="sunday", time="02:00"
+    
+    monthly:
+        Runs on specific day of month at specified time
+        Example: day_of_month=1, time="00:00" (midnight on 1st)
+    
+    interval:
+        Runs every N hours
+        Example: interval_hours=6 (every 6 hours)
+
+Cascade Mode:
+    When enabled, calculates all years from earliest transaction
+    to current year in sequence. Useful for keeping multi-year
+    data synchronized.
+
+Integration:
+    - Used by Web UI for schedule management
+    - Calls auto_runner.py for actual processing
+    - Background scheduler (APScheduler library)
+    - Survives web server restarts (persistent config)
+
+Logging:
+    Scheduled job execution logged to:
+    outputs/logs/{timestamp}.scheduler.log
+
+Usage:
+    from src.web.scheduler import ScheduleManager
+    
+    scheduler = ScheduleManager(base_dir, auto_runner_path)
+    scheduler.add_schedule(
+        'daily_calc',
+        frequency='daily',
+        time_str='03:00',
+        cascade=True
+    )
+
+Safety:
+    - Only one calculation runs at a time (job queuing)
+    - Errors don't crash scheduler (exception handling)
+    - Failed jobs logged for manual review
+    - Can be disabled via Web UI
+
+Author: robertbiv
+Last Modified: December 2025
+================================================================================
 """
 import json
 from pathlib import Path
