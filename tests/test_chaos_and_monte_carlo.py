@@ -290,13 +290,16 @@ class TestComplexCombinationScenarios(unittest.TestCase):
     
     def test_wash_sale_proportionality_critical(self):
         """CRITICAL TEST: Verify wash sale loss disallowance is proportional, not absolute
-        
+
         Scenario: User sells 10 BTC at loss, buys back 0.0001 BTC within 30 days.
         IRS Rule: Only 0.0001/10 = 0.001% of loss should be disallowed.
-        
+
         Bug: Old code disallowed 100% of loss if ANY repurchase occurred.
         Fix: New code calculates proportion = replacement_qty / sold_qty
         """
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
+
         # Setup: Buy 10 BTC at $20,000 (cost basis = $200,000)
         self.db.save_trade({
             'id':'buy1', 'date':'2023-01-01', 'source':'Exchange', 
@@ -371,9 +374,12 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         replacement_qty = float(wash_log.get('Replacement Qty', 0))
         self.assertAlmostEqual(replacement_qty, 0.0001, places=6,
                               msg="Replacement quantity should be 0.0001 BTC")
-    
+
     def test_wash_sale_proportionality_full_replacement(self):
         """Test: When full replacement occurs (100%), full loss should be disallowed"""
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
+
         # Buy 5 ETH at $2,000 (cost = $10,000)
         self.db.save_trade({
             'id':'buy1', 'date':'2023-01-01', 'source':'Exchange', 
@@ -698,6 +704,9 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         Old code: Would miss the Jan 1 buy (pre-buy).
         New code: Catches both pre-buy and post-buy.
         """
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
+
         # Setup: Jan 1 BUY (pre-buy), Jan 15 SELL (loss), Jan 25 BUY (post-buy)
         trades = [
             {'symbol': 'BTC', 'coin': 'BTC', 'action': 'BUY', 'amount': 1.0, 'price_usd': 50000, 'fee': 0, 'source': 'EXCHANGE', 'date': '2023-01-01'},
@@ -732,14 +741,17 @@ class TestComplexCombinationScenarios(unittest.TestCase):
     def test_wash_sale_prebuy_partial_replacement(self):
         """
         Verify wash sale with post-buy partial replacement.
-        
+
         Scenario (updated to avoid pre-buy confusion):
         - Dec 1 2022: Buy 2 BTC @ $50k (old purchase, >30 days before sale)
         - Jan 15 2023: Sell 2 BTC @ $40k (loss of $20k)
         - Jan 25 2023: Buy 1 BTC @ $45k (post-buy, 50% replacement)
-        
+
         Expected: Loss disallowed = $20k * 50% = $10k
         """
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
+
         trades = [
             {'symbol': 'BTC', 'coin': 'BTC', 'action': 'BUY', 'amount': 2.0, 'price_usd': 50000, 'fee': 0, 'source': 'EXCHANGE', 'date': '2022-12-01'},
             {'symbol': 'BTC', 'coin': 'BTC', 'action': 'SELL', 'amount': 2.0, 'price_usd': 40000, 'fee': 0, 'source': 'EXCHANGE', 'date': '2023-01-15'},

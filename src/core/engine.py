@@ -849,6 +849,8 @@ class TaxEngine:
             logger.warning(COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'])
         if not bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True)):
             logger.warning(COMPLIANCE_WARNINGS['DEFI_LP_AGGRESSIVE'])
+        if bool(GLOBAL_CONFIG.get('compliance', {}).get('wash_sale_rule', False)):
+            logger.info("Compliance: Wash Sale Rule ENABLED (Future Law / Conservative)")
 
     def _load_prior_year_data(self):
         prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
@@ -868,6 +870,7 @@ class TaxEngine:
         # Read dynamic config flags at run time
         strict_mode = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
         staking_on_receipt = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+        wash_sale_enabled = bool(GLOBAL_CONFIG.get('compliance', {}).get('wash_sale_rule', False))
         acct_method = str(GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')).upper()
         migration_loaded = False
         
@@ -899,7 +902,7 @@ class TaxEngine:
             cutoff_date = pd.Timestamp(datetime(2025, 1, 1), tz='UTC')
             df = df[df['temp_date'] >= cutoff_date]
 
-        all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN'])]
+        all_buys = df[df['action'].isin(['BUY', 'INCOME', 'GIFT_IN', 'SWAP'])]
         all_buys_dict = {}
         for _, r in all_buys.iterrows():
             c = r['coin']
@@ -913,7 +916,7 @@ class TaxEngine:
             src = t['source'] if pd.notna(t['source']) else 'DEFAULT'
             dst = t['destination'] if pd.notna(t['destination']) else None
             
-            if t['action'] in ['BUY','INCOME','GIFT_IN']:
+            if t['action'] in ['BUY','INCOME','GIFT_IN','SWAP']:
                 amt = to_decimal(t['amount'])
                 price = to_decimal(t['price_usd'])
                 fee = to_decimal(t['fee'])
@@ -931,7 +934,15 @@ class TaxEngine:
                         self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(amt*price, 2))})
 
             elif t['action'] == 'DEPOSIT':
-                self._add(t['coin'], to_decimal(t['amount']), Decimal('0'), d, src) 
+                # Deposits are non-taxable transfers from unknown source (or fiat)
+                # Cost basis is generally 0 unless specified, but we track it as a lot
+                # If price_usd is provided, we use it as basis (assuming it was bought elsewhere)
+                # Otherwise 0.
+                amt = to_decimal(t['amount'])
+                price = to_decimal(t['price_usd'])
+                # If price is 0, it might be a self-transfer where we lost history.
+                # If price > 0, user is asserting basis.
+                self._add(t['coin'], amt, price, d, src) 
 
             elif t['action'] in ['SELL','SPEND','LOSS']:
                 amt, price, fee = to_decimal(t['amount']), to_decimal(t['price_usd']), to_decimal(t['fee'])
@@ -944,14 +955,14 @@ class TaxEngine:
                 gain = net - b
                 wash_disallowed = Decimal('0')
                 
-                if gain < 0 and t['coin'] in all_buys_dict:
+                if wash_sale_enabled and gain < 0 and t['coin'] in all_buys_dict:
                     # Wash Sale: Check WASH_SALE_WINDOW_DAYS BEFORE and AFTER
                     w_start, w_end = d - timedelta(days=WASH_SALE_WINDOW_DAYS), d + timedelta(days=WASH_SALE_WINDOW_DAYS)
                     nearby = [bd for bd in all_buys_dict[t['coin']] if w_start <= bd < d or d < bd <= w_end]
                     if nearby:
                         rep_qty = Decimal('0')
                         for bd in nearby:
-                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], format='mixed', utc=True)==bd) & (df['action'].isin(['BUY','INCOME']))]
+                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], format='mixed', utc=True)==bd) & (df['action'].isin(['BUY','INCOME','GIFT_IN','SWAP']))]
                             rep_qty += to_decimal(recs['amount'].sum())
                         if rep_qty > 0:
                             # Proportion should be min(replacement_qty, sold_amt) / sold_amt
@@ -1071,6 +1082,16 @@ class TaxEngine:
                     b += take * l['p']
                     l['a'] -= take
                     rem -= take
+                    # Also update the original bucket to reflect the consumption
+                    # This is tricky because 'l' is a reference to the dict in the list
+                    # but we need to ensure the source bucket is cleaned up if empty
+                    # However, since we are iterating a copy/list of references, the modification to 'l' persists.
+                    # We just need to clean up empty lots from the source buckets later or lazily.
+                    
+        # Cleanup empty lots from all buckets (lazy cleanup)
+        for c_key in self.holdings_by_source:
+            for s_key in self.holdings_by_source[c_key]:
+                self.holdings_by_source[c_key][s_key] = [l for l in self.holdings_by_source[c_key][s_key] if l['a'] > 0]
 
         term = 'Short'
         acq = 'N/A'

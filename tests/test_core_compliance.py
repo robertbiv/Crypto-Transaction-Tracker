@@ -247,6 +247,8 @@ class TestUSLosses(unittest.TestCase):
         total_net = float(df[df['Item'] == 'Total Net Capital Gain/Loss']['Value'].iloc[0])
         self.assertEqual(total_net, 3000.0)
     def test_wash_sale_report_creation(self):
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-01-10', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2023-01-15', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
@@ -257,6 +259,8 @@ class TestUSLosses(unittest.TestCase):
         ws_report = app.OUTPUT_DIR / "Year_2023" / "WASH_SALE_REPORT.csv"
         self.assertTrue(ws_report.exists())
     def test_wash_sale_across_years(self):
+        # Enable Wash Sale Rule for this test
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
         self.db.save_trade({'id':'1', 'date':'2023-12-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-12-25', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2024-01-05', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
@@ -497,11 +501,16 @@ class TestWashSalePreBuyWindow(unittest.TestCase):
         app.DB_FILE = self.test_path / 'wash_prebuy_test.db'
         app.initialize_folders()
         self.db = app.DatabaseManager()
+        # Enable Wash Sale Rule for all tests in this class
+        app.GLOBAL_CONFIG['compliance'] = {'wash_sale_rule': True}
 
     def tearDown(self):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
+        # Reset global config
+        if 'compliance' in app.GLOBAL_CONFIG:
+            del app.GLOBAL_CONFIG['compliance']
 
     def test_wash_sale_triggered_by_pre_buy(self):
         """Test: Purchase 30 days BEFORE loss sale triggers wash sale"""
