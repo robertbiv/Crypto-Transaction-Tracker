@@ -585,7 +585,7 @@ class Ingestor:
                 # Force UTC timezone for all datetime parsing to avoid wash sale window errors
                 # FIX: Check all supported date column names
                 raw_date = r.get('date', r.get('timestamp', r.get('time', r.get('datetime', datetime.now()))))
-                d = pd.to_datetime(raw_date, utc=True)
+                d = pd.to_datetime(raw_date, format='mixed', utc=True)
                 tx_type = str(r.get('type', r.get('kind', 'trade'))).lower()
                 sent_c = r.get('sent_coin', r.get('sent_asset', r.get('coin', None)))
                 sent_a = to_decimal(r.get('sent_amount', r.get('amount', 0)))
@@ -873,7 +873,7 @@ class TaxEngine:
                             if source not in self.holdings_by_source[coin]: self.holdings_by_source[coin][source] = []
                             for lot in lots:
                                 self.holdings_by_source[coin][source].append({
-                                    'a': to_decimal(lot['a']), 'p': to_decimal(lot['p']), 'd': pd.to_datetime(lot['d'], utc=True)
+                                    'a': to_decimal(lot['a']), 'p': to_decimal(lot['p']), 'd': pd.to_datetime(lot['d'], format='mixed', utc=True)
                                 })
                     migration_loaded = True
                 except Exception as e: logger.warning(f"Failed to load migration: {e}")
@@ -883,7 +883,7 @@ class TaxEngine:
         # FIX: Avoid double-counting history if migration loaded
         if migration_loaded:
             logger.info("Skipping pre-2025 history (Migration Inventory loaded).")
-            df['temp_date'] = pd.to_datetime(df['date'], utc=True)
+            df['temp_date'] = pd.to_datetime(df['date'], format='mixed', utc=True)
             # Use timezone-aware datetime for comparison
             cutoff_date = pd.Timestamp(datetime(2025, 1, 1), tz='UTC')
             df = df[df['temp_date'] >= cutoff_date]
@@ -893,10 +893,10 @@ class TaxEngine:
         for _, r in all_buys.iterrows():
             c = r['coin']
             if c not in all_buys_dict: all_buys_dict[c] = []
-            all_buys_dict[c].append(pd.to_datetime(r['date'], utc=True))
+            all_buys_dict[c].append(pd.to_datetime(r['date'], format='mixed', utc=True))
 
         for _, t in df.iterrows():
-            d = pd.to_datetime(t['date'], utc=True)
+            d = pd.to_datetime(t['date'], format='mixed', utc=True)
             if d.year > self.year: continue
             is_yr = (d.year == self.year)
             src = t['source'] if pd.notna(t['source']) else 'DEFAULT'
@@ -940,7 +940,7 @@ class TaxEngine:
                     if nearby:
                         rep_qty = Decimal('0')
                         for bd in nearby:
-                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], utc=True)==bd) & (df['action'].isin(['BUY','INCOME']))]
+                            recs = df[(df['coin']==t['coin']) & (pd.to_datetime(df['date'], format='mixed', utc=True)==bd) & (df['action'].isin(['BUY','INCOME']))]
                             rep_qty += to_decimal(recs['amount'].sum())
                         if rep_qty > 0:
                             # Proportion should be min(replacement_qty, sold_amt) / sold_amt
@@ -1177,7 +1177,7 @@ if __name__ == "__main__":
         StakeTaxCSVManager(db).run()
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():
-            p = bf.get_price(r['coin'], pd.to_datetime(r['date'], utc=True))
+            p = bf.get_price(r['coin'], pd.to_datetime(r['date'], format='mixed', utc=True))
             if p: db.update_price(r['id'], p)
         db.commit()
         y = input("\nEnter Tax Year: ")
