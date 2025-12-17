@@ -584,9 +584,14 @@ class TaxReviewer:
                 # This would show as price=$5,000, amount=0.1, implied_total=$500
                 # versus expected: price=$50,000, amount=0.1
                 
-                # Heuristic: If price > $100 AND amount is tiny (< 0.01) 
-                # AND the price doesn't match typical crypto prices
-                if amount < 0.01 and price >= 100 and price <= 100000:
+                # Heuristic A: Tiny amount (< 0.01) with price >= $100 (likely total value entered)
+                tiny_amount_case = amount < 0.01 and 100 <= price <= 100000
+
+                # Heuristic B: Small amount (<= 0.1 BTC/ETH-like) with mid-range price
+                # e.g., price $5,000 for 0.1 BTC is suspicious compared to typical per-unit price.
+                small_amount_case = amount <= 0.1 and 1000 <= price <= 10000
+
+                if tiny_amount_case or small_amount_case:
                     # This might be a total value entered as per-unit price
                     # For example: 0.001 BTC at "price" of $50 means user entered $50 
                     # but probably meant $50,000

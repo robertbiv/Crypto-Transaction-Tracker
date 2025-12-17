@@ -290,6 +290,10 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 
 def get_or_create_encryption_key():
     """Get or create encryption key for database operations"""
+    # In test environment, generate ephemeral key without filesystem writes
+    if os.environ.get('PYTEST_RUNNING'):
+        return Fernet.generate_key()
+    
     if ENCRYPTION_KEY_FILE.exists():
         with open(ENCRYPTION_KEY_FILE, 'rb') as f:
             return f.read()
@@ -310,12 +314,26 @@ def get_or_create_encryption_key():
     
     return key
 
-# Initialize encryption
-ENCRYPTION_KEY = get_or_create_encryption_key()
-cipher_suite = Fernet(ENCRYPTION_KEY)
+# Lazy initialization - don't create key at import time to allow test monkeypatching
+# Check if we're in a test environment before initializing
+if os.environ.get('PYTEST_RUNNING'):
+    ENCRYPTION_KEY = None
+    cipher_suite = None
+else:
+    ENCRYPTION_KEY = get_or_create_encryption_key()
+    cipher_suite = Fernet(ENCRYPTION_KEY)
+
+def _ensure_encryption_key():
+    """Ensure encryption key is initialized (lazy init pattern for test isolation)"""
+    global ENCRYPTION_KEY, cipher_suite
+    if ENCRYPTION_KEY is None:
+        ENCRYPTION_KEY = get_or_create_encryption_key()
+        cipher_suite = Fernet(ENCRYPTION_KEY)
+    return ENCRYPTION_KEY
 
 def encrypt_data(data):
     """Encrypt data for secure transmission"""
+    _ensure_encryption_key()
     if isinstance(data, dict) or isinstance(data, list):
         data = json.dumps(data)
     if isinstance(data, str):
@@ -324,6 +342,7 @@ def encrypt_data(data):
 
 def decrypt_data(encrypted_data):
     """Decrypt data from secure transmission"""
+    _ensure_encryption_key()
     if isinstance(encrypted_data, str):
         encrypted_data = encrypted_data.encode('utf-8')
     decrypted = cipher_suite.decrypt(encrypted_data)

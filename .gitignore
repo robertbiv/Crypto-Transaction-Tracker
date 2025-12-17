@@ -13,6 +13,7 @@ testcreds/
 .db_salt
 *.key
 .vscode/
+.pytest_cache/
 
 # Data: Local databases and caches
 crypto_master.db
