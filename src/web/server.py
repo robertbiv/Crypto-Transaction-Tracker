@@ -1632,6 +1632,131 @@ def api_delete_transaction(transaction_id):
         conn.close()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/transactions/reprocess-all', methods=['POST'])
+@login_required
+@web_security_required
+def api_reprocess_all_transactions():
+    """Reprocess all transactions through ML model if enabled"""
+    try:
+        from src.ml_service import MLService
+        from src.rules_model_bridge import classify_rules_ml
+        from pathlib import Path
+        import logging
+        
+        # Load config to check if ML is enabled
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        
+        ml_config = config.get('ml_fallback', {})
+        if not ml_config.get('enabled', False):
+            return jsonify({
+                'success': False,
+                'message': 'ML fallback is not enabled. Enable it in settings first.'
+            }), 400
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        if not transactions:
+            return jsonify({
+                'success': True,
+                'message': 'No transactions to reprocess',
+                'count': 0
+            })
+        
+        # Initialize ML service
+        ml_service = MLService(mode=ml_config.get('model_name', 'shim'))
+        
+        # Setup logging for suggestions
+        log_dir = OUTPUT_DIR / 'logs'
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / 'model_suggestions.log'
+        
+        # Process transactions
+        processed_count = 0
+        updated_count = 0
+        
+        for tx in transactions:
+            try:
+                # Convert database row to dict with proper keys
+                row = {
+                    'description': f"{tx.get('action', '')} {tx.get('coin', '')}",
+                    'amount': tx.get('amount', 0),
+                    'price_usd': tx.get('price_usd', 0),
+                    'coin': tx.get('coin', ''),
+                    'action': tx.get('action', ''),
+                    'source': tx.get('source', ''),
+                    'date': tx.get('date', '')
+                }
+                
+                # Run through ML classification bridge (tries rules first, then ML)
+                result = classify_rules_ml(row, ml_service)
+                
+                processed_count += 1
+                
+                # If ML provided a classification different from current, update it
+                if result.get('source') == 'ml' and result.get('label'):
+                    current_action = tx.get('action', '')
+                    new_action = result['label']
+                    
+                    if current_action != new_action:
+                        conn = get_db_connection()
+                        conn.execute(
+                            "UPDATE trades SET action = ? WHERE id = ?",
+                            (new_action, tx['id'])
+                        )
+                        conn.commit()
+                        conn.close()
+                        updated_count += 1
+                
+                # Log the suggestion
+                if result.get('source') == 'ml':
+                    log_entry = {
+                        'timestamp': datetime.now().isoformat(),
+                        'transaction_id': tx['id'],
+                        'date': tx.get('date', ''),
+                        'coin': tx.get('coin', ''),
+                        'original_action': tx.get('action', ''),
+                        'suggested_action': result.get('label'),
+                        'confidence': result.get('confidence', 0),
+                        'explanation': result.get('explanation', '')
+                    }
+                    with open(log_file, 'a') as f:
+                        f.write(json.dumps(log_entry) + '\n')
+                
+            except Exception as tx_error:
+                print(f"Error processing transaction {tx.get('id')}: {tx_error}")
+                continue
+        
+        # Shutdown ML service if configured
+        if ml_config.get('auto_shutdown_after_batch', True):
+            try:
+                ml_service.shutdown()
+            except:
+                pass
+        
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Reprocessing complete. Analyzed {processed_count} transactions, updated {updated_count}.',
+            'processed': processed_count,
+            'updated': updated_count
+        })
+        
+    except Exception as e:
+        print(f"Error in reprocess endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # ==========================================
 # API ROUTES - CONFIGURATION
 # ==========================================

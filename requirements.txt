@@ -53,6 +53,11 @@ yarl==1.22.0                           # URL manipulation | https://github.com/a
 # Data Science
 numpy==2.2.6                           # Numerical computing | https://numpy.org
 
+# Machine Learning & NLP (Optional - for ML fallback with Gemma)
+torch==2.1.2                           # Deep learning framework | https://pytorch.org
+transformers==4.36.2                   # Hugging Face transformers | https://huggingface.co/transformers
+bitsandbytes==0.41.3                   # Quantization library | https://github.com/TimDettmers/bitsandbytes
+
 # Web Server & UI
 Flask==3.1.2                           # Web framework | https://flask.palletsprojects.com
 Flask-CORS==6.0.1                      # Cross-origin resource sharing | https://flask-cors.readthedocs.io
