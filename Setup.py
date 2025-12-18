@@ -253,6 +253,13 @@ def main():
         "ui": {
             "download_warnings_enabled": True,
             "_INSTRUCTIONS": "download_warnings_enabled: Set to True to require users to acknowledge a warning before downloading tax reports. Recommended: True. If set to False, a persistent banner will remind users to always double-check all outputs and consult a tax professional."
+        },
+        "ml_fallback": {
+            "_INSTRUCTIONS": "Optional ML fallback for ambiguous/unclassified transactions. enabled=True activates ML suggestions. model_name: 'shim' (keywords) or 'gemma' (real model). confidence_threshold (0.0-1.0): min score to log. auto_shutdown_after_batch: free model memory after processing each batch.",
+            "enabled": True,
+            "model_name": "gemma",
+            "confidence_threshold": 0.85,
+            "auto_shutdown_after_batch": True
         }
     }
     validate_json(CONFIG_FILE, config_data)

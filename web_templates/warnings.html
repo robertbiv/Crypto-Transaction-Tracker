@@ -128,11 +128,22 @@
 
 <div class="card">
     <h2 class="card-title">Actions</h2>
-    <p style="margin-bottom: 16px;">Use the Interactive Review Fixer to address warnings automatically.</p>
-    <button id="runFixerBtn" class="btn btn-primary">
-        <span class="material-icons" style="vertical-align: middle;">build</span>
-        Run Interactive Fixer
-    </button>
+    <p style="margin-bottom: 16px;">Use the Interactive Review Fixer to address warnings automatically, or reprocess transactions through the ML model.</p>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <button id="runFixerBtn" class="btn btn-primary">
+            <span class="material-icons" style="vertical-align: middle;">build</span>
+            Run Interactive Fixer
+        </button>
+        <button id="reprocessAllBtn" class="btn btn-secondary">
+            <span class="material-icons" style="vertical-align: middle;">psychology</span>
+            Reprocess All with ML
+        </button>
+    </div>
+    <div id="reprocessStatus" style="margin-top: 16px; display: none;">
+        <div style="padding: 12px; border-radius: 4px; background: #E3F2FD; color: #1976D2;">
+            <p id="reprocessMessage" style="margin: 0;"></p>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -210,10 +221,62 @@
         showAlert('Interactive fixer must be run from the command line. Run: python Interactive_Review_Fixer.py [year]', 'info');
     }
     
+    async function reprocessAll() {
+        // Show confirmation
+        if (!confirm('This will reprocess all transactions through the ML model. Continue?')) {
+            return;
+        }
+        
+        const statusDiv = document.getElementById('reprocessStatus');
+        const messageDiv = document.getElementById('reprocessMessage');
+        const btn = document.getElementById('reprocessAllBtn');
+        
+        try {
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            statusDiv.style.display = 'block';
+            messageDiv.textContent = 'Reprocessing transactions...';
+            messageDiv.parentElement.style.background = '#E3F2FD';
+            messageDiv.parentElement.style.color = '#1976D2';
+            
+            const response = await api.post('/api/transactions/reprocess-all', {});
+            const result = JSON.parse(response.data);
+            
+            if (result.success) {
+                messageDiv.textContent = `✓ ${result.message}`;
+                messageDiv.parentElement.style.background = '#E8F5E9';
+                messageDiv.parentElement.style.color = '#2E7D32';
+                showAlert(result.message, 'success');
+                // Reload warnings after a short delay
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                messageDiv.textContent = `✗ ${result.message}`;
+                messageDiv.parentElement.style.background = '#FFEBEE';
+                messageDiv.parentElement.style.color = '#C62828';
+                showAlert(result.message, 'error');
+            }
+        } catch (error) {
+            messageDiv.textContent = `✗ Error: ${error.message}`;
+            messageDiv.parentElement.style.background = '#FFEBEE';
+            messageDiv.parentElement.style.color = '#C62828';
+            console.error('Reprocess error:', error);
+            showAlert('Failed to reprocess transactions: ' + error.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Reprocess All with ML';
+        }
+    }
+    
     // Bind events and load warnings on page load
     document.addEventListener('DOMContentLoaded', () => {
         const fixerBtn = document.getElementById('runFixerBtn');
         if (fixerBtn) fixerBtn.addEventListener('click', runFixer);
+        
+        const reprocessBtn = document.getElementById('reprocessAllBtn');
+        if (reprocessBtn) reprocessBtn.addEventListener('click', reprocessAll);
+        
         loadWarnings();
     });
 </script>
