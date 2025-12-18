@@ -94,6 +94,144 @@
         font-size: 24px;
         color: var(--md-sys-color-on-surface-variant);
     }
+    
+    @keyframes loading {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
+    }
+    
+    /* Enhanced Transaction Table Styling */
+    #transactionsTable {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+    
+    #transactionsTable thead {
+        background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, var(--md-sys-color-primary-container) 100%);
+        color: white;
+    }
+    
+    #transactionsTable th {
+        padding: 16px 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+    }
+    
+    #transactionsTable tbody tr {
+        border-bottom: 1px solid var(--md-sys-color-surface-variant);
+        transition: background-color 0.2s ease;
+    }
+    
+    #transactionsTable tbody tr:hover {
+        background-color: var(--md-sys-color-surface-variant);
+    }
+    
+    #transactionsTable td {
+        padding: 14px 12px;
+        font-size: 13px;
+    }
+    
+    .action-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 12px;
+    }
+    
+    .action-badge.buy {
+        background-color: #c8e6c9;
+        color: #1b5e20;
+    }
+    
+    .action-badge.sell {
+        background-color: #ffccbc;
+        color: #bf360c;
+    }
+    
+    .action-badge.trade {
+        background-color: #b3e5fc;
+        color: #01579b;
+    }
+    
+    .action-badge.transfer {
+        background-color: #f0f4c3;
+        color: #33691e;
+    }
+    
+    .action-badge.income {
+        background-color: #c8e6c9;
+        color: #1b5e20;
+    }
+    
+    .action-badge.deposit {
+        background-color: #c8e6c9;
+        color: #1b5e20;
+    }
+    
+    .action-badge.withdraw {
+        background-color: #ffccbc;
+        color: #bf360c;
+    }
+    
+    .action-badge.fee {
+        background-color: #eeeeee;
+        color: #424242;
+    }
+    
+    .transaction-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    
+    .transaction-actions .material-icons {
+        cursor: pointer;
+        font-size: 18px;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+    
+    .transaction-actions .edit-icon {
+        color: var(--md-sys-color-primary);
+    }
+    
+    .transaction-actions .edit-icon:hover {
+        background-color: #e3f2fd;
+    }
+    
+    .transaction-actions .delete-icon {
+        color: var(--md-sys-color-error);
+    }
+    
+    .transaction-actions .delete-icon:hover {
+        background-color: #ffebee;
+    }
+    
+    .wallet-label {
+        display: inline-block;
+        background: var(--md-sys-color-secondary-container);
+        color: var(--md-sys-color-on-secondary-container);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .coin-ticker {
+        font-weight: 600;
+        color: var(--md-sys-color-primary);
+    }
 </style>
 {% endblock %}
 
@@ -141,6 +279,10 @@
         </select>
         
         <button id="applyFiltersBtn" class="btn btn-primary">Apply Filters</button>
+        <button id="nlpSearchBtn" class="btn btn-secondary" title="Search with natural language (requires Accuracy Mode enabled)">
+            <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">smart_toy</span>
+            NLP Search
+        </button>
         <button id="addTransactionBtn" class="btn btn-success">
             <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">add</span>
             Add Transaction
@@ -173,6 +315,55 @@
         <button id="prevPage">Previous</button>
         <span id="pageInfo">Page 1 of 1</span>
         <button id="nextPage">Next</button>
+    </div>
+</div>
+
+<!-- Natural Language Search Modal -->
+<div id="nlpSearchModal" class="modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h2>🤖 Natural Language Search</h2>
+            <span class="modal-close material-icons" onclick="closeNLPSearchModal()">close</span>
+        </div>
+        
+        <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #2196F3;">
+            <p style="margin: 0; font-size: 12px; color: #1565c0;">
+                💡 <strong>Tip:</strong> Ask natural language questions like:
+                <br/>• "Show my largest BTC trades in 2024"
+                <br/>• "Which exchanges did I use most?"
+                <br/>• "Show my losses from April"
+                <br/>• "Find all staking income over $100"
+            </p>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">Your Query</label>
+            <textarea id="nlpQueryInput" class="form-input" placeholder="What would you like to search for?" 
+                      style="height: 80px; resize: vertical; font-family: inherit;"></textarea>
+            <small style="color: var(--md-sys-color-on-surface-variant);">
+                Requires Accuracy Mode to be enabled in Configuration
+            </small>
+        </div>
+        
+        <div id="nlpSearchStatus" style="display: none; margin-bottom: 16px; padding: 12px; border-radius: 8px; background: #f5f5f5;">
+            <div id="nlpStatusText"></div>
+            <div id="nlpProgressBar" style="width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 8px; display: none; overflow: hidden;">
+                <div style="height: 100%; background: #2196F3; animation: loading 1.5s infinite; width: 30%;"></div>
+            </div>
+        </div>
+        
+        <div id="nlpResultsContainer" style="max-height: 400px; overflow-y: auto; margin-bottom: 16px; display: none;">
+            <h4 style="margin: 0 0 12px 0;">Search Results</h4>
+            <div id="nlpResultsList" style="border: 1px solid #e0e0e0; border-radius: 8px; max-height: 350px; overflow-y: auto;"></div>
+        </div>
+        
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="closeNLPSearchModal()">Cancel</button>
+            <button type="button" id="executeNLPSearchBtn" class="btn btn-primary" onclick="executeNLPSearch()">
+                <span class="material-icons" style="vertical-align: middle; font-size: 18px; margin-right: 4px;">search</span>
+                Search
+            </button>
+        </div>
     </div>
 </div>
 
@@ -344,22 +535,66 @@
         const tbody = document.getElementById('transactionsBody');
         
         if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No transactions found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--md-sys-color-on-surface-variant);">No transactions found</td></tr>';
             return;
         }
+        
+        const getActionIcon = (action) => {
+            const actionMap = {
+                'BUY': 'trending_down',
+                'SELL': 'trending_up',
+                'TRADE': 'swap_horiz',
+                'TRANSFER': 'compare_arrows',
+                'INCOME': 'add_circle',
+                'DEPOSIT': 'cloud_download',
+                'WITHDRAW': 'cloud_upload',
+                'FEE': 'toll'
+            };
+            return actionMap[action] || 'swap_horiz';
+        };
+        
+        const getActionClass = (action) => {
+            return action.toLowerCase().replace(/_/g, '-');
+        };
+        
+        const getWalletLabel = (source, walletName, walletAddress) => {
+            // Show wallet name if available
+            if (walletName && walletName.trim() !== '') {
+                return `<div class="wallet-label" title="${walletName}">${walletName}</div>`;
+            }
+            // Show address if available (truncated)
+            if (walletAddress && walletAddress.trim() !== '') {
+                const truncated = walletAddress.length > 20 
+                    ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` 
+                    : walletAddress;
+                return `<div class="wallet-label" title="${walletAddress}">${truncated}</div>`;
+            }
+            // Fallback to source
+            return '';
+        };
         
         tbody.innerHTML = transactions.map(tx => `
             <tr>
                 <td>${tx.date}</td>
-                <td>${tx.action}</td>
-                <td>${tx.coin}</td>
-                <td>${parseFloat(tx.amount).toFixed(8)}</td>
-                <td>$${parseFloat(tx.price_usd).toFixed(2)}</td>
-                <td>${parseFloat(tx.fee).toFixed(8)} ${tx.fee_coin || tx.coin}</td>
-                <td>${tx.source}</td>
                 <td>
-                    <span class="material-icons edit-icon" data-tx-id="${tx.id}">edit</span>
-                    <span class="material-icons delete-icon" data-tx-id="${tx.id}">delete</span>
+                    <div class="action-badge ${getActionClass(tx.action)}">
+                        <span class="material-icons" style="font-size: 16px;">${getActionIcon(tx.action)}</span>
+                        ${tx.action}
+                    </div>
+                </td>
+                <td><span class="coin-ticker">${tx.coin}</span></td>
+                <td style="text-align: right;">${parseFloat(tx.amount).toFixed(8)}</td>
+                <td style="text-align: right;">$${parseFloat(tx.price_usd).toFixed(2)}</td>
+                <td style="text-align: right;">${parseFloat(tx.fee).toFixed(8)} ${tx.fee_coin || tx.coin}</td>
+                <td>
+                    ${getWalletLabel(tx.source, tx.wallet_name || '', tx.wallet_address || '')}
+                    <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">${tx.source}</div>
+                </td>
+                <td>
+                    <div class="transaction-actions">
+                        <span class="material-icons edit-icon" data-tx-id="${tx.id}" title="Edit">edit</span>
+                        <span class="material-icons delete-icon" data-tx-id="${tx.id}" title="Delete">delete</span>
+                    </div>
                 </td>
             </tr>
         `).join('');
@@ -467,6 +702,110 @@
         }
     }
     
+    // NLP Search Functions
+    function openNLPSearchModal() {
+        document.getElementById('nlpSearchModal').classList.add('active');
+    }
+    
+    function closeNLPSearchModal() {
+        document.getElementById('nlpSearchModal').classList.remove('active');
+        document.getElementById('nlpQueryInput').value = '';
+        document.getElementById('nlpResultsContainer').style.display = 'none';
+        document.getElementById('nlpSearchStatus').style.display = 'none';
+    }
+    
+    async function executeNLPSearch() {
+        const query = document.getElementById('nlpQueryInput').value.trim();
+        
+        if (!query) {
+            showAlert('Please enter a search query', 'warning');
+            return;
+        }
+        
+        const statusDiv = document.getElementById('nlpSearchStatus');
+        const statusText = document.getElementById('nlpStatusText');
+        const progressBar = document.getElementById('nlpProgressBar');
+        const resultsContainer = document.getElementById('nlpResultsContainer');
+        const resultsList = document.getElementById('nlpResultsList');
+        const searchBtn = document.getElementById('executeNLPSearchBtn');
+        
+        statusDiv.style.display = 'block';
+        statusText.innerHTML = '🔍 Searching...';
+        progressBar.style.display = 'block';
+        resultsContainer.style.display = 'none';
+        searchBtn.disabled = true;
+        
+        try {
+            const response = await api.post('/api/natural-language-search', { query: query });
+            
+            if (!response || !response.data) {
+                throw new Error('Invalid response from server');
+            }
+            
+            const data = JSON.parse(response.data) || response;
+            
+            progressBar.style.display = 'none';
+            
+            if (data.success) {
+                statusText.innerHTML = `✅ Found ${data.result_count} transaction(s)`;
+                
+                if (data.result_count === 0) {
+                    resultsList.innerHTML = '<p style="padding: 12px; color: var(--md-sys-color-on-surface-variant);">No transactions matched your query.</p>';
+                } else {
+                    // Format results as a table
+                    let resultsHTML = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">';
+                    resultsHTML += '<thead><tr style="background: #f5f5f5; border-bottom: 2px solid #e0e0e0;">';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Date</th>';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Action</th>';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Coin</th>';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Amount</th>';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Price</th>';
+                    resultsHTML += '<th style="padding: 8px; text-align: left; font-weight: 500;">Source</th>';
+                    resultsHTML += '</tr></thead><tbody>';
+                    
+                    (data.results || []).forEach(tx => {
+                        resultsHTML += '<tr style="border-bottom: 1px solid #e0e0e0;">';
+                        resultsHTML += `<td style="padding: 8px;">${tx.date || ''}</td>`;
+                        resultsHTML += `<td style="padding: 8px;">${tx.action || ''}</td>`;
+                        resultsHTML += `<td style="padding: 8px;">${tx.coin || ''}</td>`;
+                        resultsHTML += `<td style="padding: 8px;">${tx.amount ? parseFloat(tx.amount).toFixed(8) : ''}</td>`;
+                        resultsHTML += `<td style="padding: 8px;">$${tx.price_usd ? parseFloat(tx.price_usd).toFixed(2) : '0.00'}</td>`;
+                        resultsHTML += `<td style="padding: 8px;">${tx.source || ''}</td>`;
+                        resultsHTML += '</tr>';
+                    });
+                    
+                    resultsHTML += '</tbody></table></div>';
+                    resultsList.innerHTML = resultsHTML;
+                }
+                
+                resultsContainer.style.display = 'block';
+            } else {
+                statusText.innerHTML = `⚠️ ${data.error || 'Search failed'}`;
+                if (data.error && data.error.includes('accuracy_mode') || data.error && data.error.includes('disabled')) {
+                    statusText.innerHTML += '<div style="font-size: 12px; margin-top: 8px;">💡 Natural Language Search requires Accuracy Mode to be enabled in Configuration.</div>';
+                }
+            }
+        } catch (error) {
+            console.error('NLP Search error:', error);
+            statusText.innerHTML = `❌ Error: ${error.message}`;
+            
+            // Check if it's likely an auth error
+            if (error.message.includes('401') || error.message.includes('403')) {
+                statusText.innerHTML += '<div style="font-size: 12px; margin-top: 8px;">Please log in again.</div>';
+            }
+        } finally {
+            searchBtn.disabled = false;
+        }
+    }
+    
+    // Allow Enter key to search
+    document.addEventListener('keypress', (e) => {
+        const queryInput = document.getElementById('nlpQueryInput');
+        if (e.key === 'Enter' && e.target === queryInput && document.getElementById('nlpSearchModal').classList.contains('active')) {
+            executeNLPSearch();
+        }
+    });
+    
     // Search on Enter key
     document.getElementById('searchInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -478,6 +817,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         const applyBtn = document.getElementById('applyFiltersBtn');
         if (applyBtn) applyBtn.addEventListener('click', loadTransactions);
+
+        const nlpSearchBtn = document.getElementById('nlpSearchBtn');
+        if (nlpSearchBtn) nlpSearchBtn.addEventListener('click', openNLPSearchModal);
 
         const addBtn = document.getElementById('addTransactionBtn');
         if (addBtn) addBtn.addEventListener('click', openAddModal);
@@ -539,6 +881,45 @@
             if (typeof api.hideLoading === 'function') api.hideLoading();
             console.error('Upload error:', error);
             showAlert('CSV upload failed: ' + error.message, 'error');
+        }
+    }
+
+    async function getWalletsForLinking() {
+        // Get all available wallets for manual linking during CSV import
+        try {
+            const response = await api.get('/api/wallets/available-for-linking');
+            const data = JSON.parse(response.data);
+            if (data.success) {
+                return data.wallets || [];
+            }
+            return [];
+        } catch (error) {
+            console.error('Error getting wallets:', error);
+            return [];
+        }
+    }
+
+    async function matchWalletSource(source, address) {
+        // Match a CSV source to available wallets
+        try {
+            await api.initCSRF();
+            const response = await fetch('/api/wallets/match-source', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': api.csrfToken
+                },
+                body: JSON.stringify({ source, address }),
+                credentials: 'same-origin'
+            });
+            const result = await response.json();
+            if (response.ok && result.success) {
+                return result;
+            }
+            return { matched: false, possible_matches: [] };
+        } catch (error) {
+            console.error('Error matching wallet:', error);
+            return { matched: false, possible_matches: [] };
         }
     }
 

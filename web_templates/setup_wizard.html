@@ -596,6 +596,85 @@
                 </div>
             </div>
             
+            <!-- Step 6: AI/ML Settings -->
+            <div class="step-content" data-step="6">
+                <h2 class="step-title">🤖 AI/ML Settings (Optional)</h2>
+                <p class="step-description">Choose how you want the system to handle transaction classification. You can change this later in Settings.</p>
+                
+                <div style="background-color: var(--md-sys-color-surface-dim); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid var(--md-sys-color-primary);">
+                    <p style="margin: 0; font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                        Choose ONE strategy for transaction classification:
+                    </p>
+                </div>
+                
+                <div class="form-group" style="background: var(--md-sys-color-surface-variant); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="none" checked style="margin-top: 4px;">
+                            <div>
+                                <strong>❌ None (Deterministic Rules Only)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Use only built-in classification rules. No AI/ML. Fastest, no setup needed.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="ml_only" style="margin-top: 4px;">
+                            <div>
+                                <strong>✨ ML Fallback Only (Lightweight)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Uses keyword-based ML (no dependencies). Good accuracy with minimal overhead.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="accuracy_mode" style="margin-top: 4px;">
+                            <div>
+                                <strong>🎯 Accuracy Mode (Full ML)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Full neural model (Gemma) + advanced features. Best accuracy, requires resources.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Gemma Download Section (shown when accuracy_mode selected) -->
+                <div id="gemmaDownloadSection" style="display: none; background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffc107;">
+                    <div style="margin-bottom: 12px;">
+                        <h4 style="margin: 0 0 8px 0; color: #856404;">📥 Gemma AI Model Setup</h4>
+                        
+                        <div id="depCheckResult" style="font-size: 12px; line-height: 1.6; color: #856404;">
+                            <p>Checking dependencies...</p>
+                        </div>
+                        
+                        <div id="downloadStatus" style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: none;">
+                            <p id="downloadStatusText" style="margin: 0 0 8px 0;"></p>
+                            <div id="downloadProgress" style="width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; display: none;">
+                                <div id="downloadProgressBar" style="height: 100%; background: #ffc107; width: 0%; transition: width 0.2s;"></div>
+                            </div>
+                        </div>
+                        
+                        <button id="gemmaDownloadBtn" class="btn btn-warning" style="margin-top: 12px; display: none;">
+                            📥 Download Gemma Model Now
+                        </button>
+                        <button id="gemmaSkipBtn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
+                            ⏭️ Skip (Download Later)
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" style="margin-top: 16px;">
+                    <strong>💡 Recommendation:</strong> Start with "ML Fallback Only" or "None". You can always upgrade to Accuracy Mode later in Settings once you're familiar with the system.
+                </div>
+            </div>
+            
             <div class="wizard-actions">
                 <button class="btn btn-secondary" id="prevBtn" style="display: none;">
                     Previous
@@ -610,13 +689,23 @@
     <script nonce="{{ csp_nonce }}">
         // Start at step 2 since account is already created via first_time_setup
         let currentStep = 2;
-        const totalSteps = 5;
+        const totalSteps = 6;
         let accountCreated = true;
         let setupScriptRan = false;
+        let gemmaDepCheckDone = false;
 
         // Initialize wizard on load
         document.addEventListener('DOMContentLoaded', async () => {
             updateProgress();
+            
+            // Setup AI strategy radio buttons
+            document.querySelectorAll('input[name="wizAiStrategy"]').forEach(radio => {
+                radio.addEventListener('change', onAiStrategyChange);
+            });
+            
+            // Setup Gemma download button
+            document.getElementById('gemmaDownloadBtn')?.addEventListener('click', downloadGemmaModel);
+            document.getElementById('gemmaSkipBtn')?.addEventListener('click', skipGemmaDownload);
             
             const prevBtn = document.getElementById('prevBtn');
             if (prevBtn) prevBtn.addEventListener('click', previousStep);
@@ -666,6 +755,112 @@
         document.getElementById('password').addEventListener('input', (e) => {
             checkPasswordStrength(e.target.value);
         });
+        
+        // ML/AI Helper Functions
+        async function onAiStrategyChange() {
+            const strategy = document.querySelector('input[name="wizAiStrategy"]:checked')?.value;
+            const gemmaSection = document.getElementById('gemmaDownloadSection');
+            
+            if (strategy === 'accuracy_mode') {
+                gemmaSection.style.display = 'block';
+                if (!gemmaDepCheckDone) {
+                    await checkGemmaDepencies();
+                }
+            } else {
+                gemmaSection.style.display = 'none';
+            }
+        }
+        
+        async function checkGemmaDepencies() {
+            gemmaDepCheckDone = true;
+            const resultDiv = document.getElementById('depCheckResult');
+            
+            try {
+                const response = await fetch('/api/ml/check-dependencies');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const depsOk = data.torch_installed && data.transformers_installed;
+                    
+                    let html = '<div style="line-height: 1.8;">';
+                    html += `<div>${data.torch_installed ? '✅' : '❌'} PyTorch: ${data.torch_installed ? 'Installed' : 'Missing'}</div>`;
+                    html += `<div>${data.transformers_installed ? '✅' : '❌'} Transformers: ${data.transformers_installed ? 'Installed' : 'Missing'}</div>`;
+                    html += `<div>📦 Model Size: ${data.estimated_download_size_gb}GB</div>`;
+                    html += `<div>💾 Free Disk: ${data.free_disk_space_gb} GB</div>`;
+                    html += '</div>';
+                    
+                    resultDiv.innerHTML = html;
+                    
+                    if (!depsOk) {
+                        html += `<div style="margin-top: 8px; padding: 8px; background: white; border-radius: 4px; font-size: 11px;">`;
+                        html += `<strong>⚠️ Missing dependencies</strong><br>`;
+                        html += `Install with: <code>${data.install_command}</code>`;
+                        html += `</div>`;
+                        resultDiv.innerHTML = html;
+                    }
+                    
+                    const downloadBtn = document.getElementById('gemmaDownloadBtn');
+                    const skipBtn = document.getElementById('gemmaSkipBtn');
+                    
+                    if (depsOk && data.free_disk_space_gb >= 5) {
+                        downloadBtn.style.display = 'block';
+                        skipBtn.style.display = 'block';
+                    } else if (depsOk) {
+                        skipBtn.style.display = 'block';
+                        downloadBtn.style.display = 'none';
+                    } else {
+                        downloadBtn.style.display = 'none';
+                        skipBtn.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">Error checking dependencies: ${error.message}</div>`;
+                document.getElementById('gemmaSkipBtn').style.display = 'block';
+            }
+        }
+        
+        async function downloadGemmaModel() {
+            const downloadBtn = document.getElementById('gemmaDownloadBtn');
+            const downloadStatus = document.getElementById('downloadStatus');
+            const downloadStatusText = document.getElementById('downloadStatusText');
+            
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = '⏳ Downloading...';
+            downloadStatus.style.display = 'block';
+            downloadStatusText.textContent = 'Connecting to Hugging Face...';
+            
+            try {
+                const response = await fetch('/api/ml/pre-download-model', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    downloadStatusText.innerHTML = '✅ Model downloaded successfully! You\'re all set to use Accuracy Mode.';
+                    downloadBtn.textContent = '✅ Download Complete';
+                    downloadBtn.style.backgroundColor = '#4CAF50';
+                } else {
+                    downloadStatusText.innerHTML = `⚠️ ${data.message}<br><small>${data.fallback}</small>`;
+                    downloadBtn.textContent = '📥 Download Gemma Model Now';
+                    downloadBtn.disabled = false;
+                }
+            } catch (error) {
+                downloadStatusText.innerHTML = `❌ Download failed: ${error.message}`;
+                downloadBtn.textContent = '📥 Download Gemma Model Now';
+                downloadBtn.disabled = false;
+            }
+        }
+        
+        function skipGemmaDownload() {
+            const skipBtn = document.getElementById('gemmaSkipBtn');
+            const downloadStatus = document.getElementById('downloadStatus');
+            const downloadStatusText = document.getElementById('downloadStatusText');
+            
+            downloadStatusText.textContent = '⏭️ Skipped. Model will download on first use of Accuracy Mode.';
+            downloadStatus.style.display = 'block';
+            skipBtn.style.display = 'none';
+            document.getElementById('gemmaDownloadBtn').style.display = 'none';
+        }
         
         function showAlert(message, type) {
             const container = document.getElementById('alertContainer');
