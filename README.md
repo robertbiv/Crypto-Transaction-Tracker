@@ -178,7 +178,7 @@ This program sends no telemetry data. All network traffic consists of direct req
 
 ### **1. Install Requirements**
 
-Install all Python dependencies from requirements.txt:
+Install core Python dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -187,10 +187,18 @@ pip install -r requirements.txt
 Or install core dependencies manually:
 
 ```bash
-pip install pandas ccxt yfinance requests
+pip install pandas ccxt yfinance requests Flask
 ```
 
-**Optional:** For staking rewards auto-import, also install StakeTaxCSV:
+**Optional - ML/AI Features:** If you want to use ML-based transaction classification and Accuracy Mode, install the optional ML dependencies:
+
+```bash
+pip install -r requirements-ml.txt
+```
+
+This installs PyTorch, Transformers, and related ML libraries. These are only needed if you enable AI/ML features in the configuration. The system works fine without them - they're completely optional.
+
+**Optional - Staking Rewards:** For automatic staking rewards import, also install StakeTaxCSV:
 
 ```bash
 pip install staketaxcsv

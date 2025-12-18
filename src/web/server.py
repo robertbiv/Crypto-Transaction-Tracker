@@ -118,6 +118,9 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 import bcrypt
 import jwt
+
+# Import wallet linking utility
+from src.web.wallet_linker import WalletLinker, WalletMatcher
 import filelock
 import logging
 import threading
@@ -169,9 +172,10 @@ SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 BCRYPT_COST_FACTOR = 12
 
-# Setup audit logging
+# Setup audit logging and general logger
 AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 audit_logger = logging.getLogger('audit')
+logger = logging.getLogger(__name__)
 
 # Initialize scheduler
 scheduler = None  # Will be initialized in main()
@@ -228,6 +232,15 @@ limiter = Limiter(
 # ====================================================================================
 # All encryption, decryption, and file I/O functions for API keys and wallets
 # are now imported from src.core.encryption module for consistency and deduplication
+
+def load_config():
+    """Load configuration from config.json file"""
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading config from {CONFIG_FILE}: {e}")
+        return {}
 
 # ====================================================================================
 # SECURITY HEADERS & CSP
@@ -1561,6 +1574,61 @@ def api_upload_transactions():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallets/available-for-linking', methods=['GET'])
+@login_required
+@web_security_required
+def api_get_wallets_for_linking():
+    """Get all available wallets for manual linking during CSV import"""
+    try:
+        wallets = load_wallets_file()
+        linker = WalletLinker(wallets)
+        available_wallets = linker.get_all_wallets_for_selection()
+        
+        return jsonify({
+            'success': True,
+            'wallets': available_wallets
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/wallets/match-source', methods=['POST'])
+@login_required
+@web_security_required
+def api_match_wallet_source():
+    """Match a CSV source to available wallets"""
+    try:
+        data = request.get_json()
+        source = data.get('source')
+        address = data.get('address')
+        
+        if not source:
+            return jsonify({'error': 'Source is required'}), 400
+        
+        wallets = load_wallets_file()
+        linker = WalletLinker(wallets)
+        
+        # Try to find matching wallet
+        match = linker.find_matching_wallet(source, address)
+        
+        if match:
+            return jsonify({
+                'success': True,
+                'matched': True,
+                'wallet': match
+            })
+        
+        # If no match, get possible options
+        possible_matches = linker.get_possible_wallets_for_source(source)
+        
+        return jsonify({
+            'success': True,
+            'matched': False,
+            'possible_matches': possible_matches
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/transactions/<transaction_id>', methods=['PUT'])
 @login_required
 @web_security_required
@@ -1670,66 +1738,81 @@ def api_reprocess_all_transactions():
         # Initialize ML service
         ml_service = MLService(mode=ml_config.get('model_name', 'shim'))
         
+        # Get batch size from config
+        batch_size = ml_config.get('batch_size', 10)
+        if batch_size < 1:
+            batch_size = 1
+        
         # Setup logging for suggestions
         log_dir = OUTPUT_DIR / 'logs'
         log_dir.mkdir(exist_ok=True)
         log_file = log_dir / 'model_suggestions.log'
         
-        # Process transactions
+        # Process transactions in batches
         processed_count = 0
         updated_count = 0
         
-        for tx in transactions:
-            try:
-                # Convert database row to dict with proper keys
-                row = {
-                    'description': f"{tx.get('action', '')} {tx.get('coin', '')}",
-                    'amount': tx.get('amount', 0),
-                    'price_usd': tx.get('price_usd', 0),
-                    'coin': tx.get('coin', ''),
-                    'action': tx.get('action', ''),
-                    'source': tx.get('source', ''),
-                    'date': tx.get('date', '')
-                }
-                
-                # Run through ML classification bridge (tries rules first, then ML)
-                result = classify_rules_ml(row, ml_service)
-                
-                processed_count += 1
-                
-                # If ML provided a classification different from current, update it
-                if result.get('source') == 'ml' and result.get('label'):
-                    current_action = tx.get('action', '')
-                    new_action = result['label']
-                    
-                    if current_action != new_action:
-                        conn = get_db_connection()
-                        conn.execute(
-                            "UPDATE trades SET action = ? WHERE id = ?",
-                            (new_action, tx['id'])
-                        )
-                        conn.commit()
-                        conn.close()
-                        updated_count += 1
-                
-                # Log the suggestion
-                if result.get('source') == 'ml':
-                    log_entry = {
-                        'timestamp': datetime.now().isoformat(),
-                        'transaction_id': tx['id'],
-                        'date': tx.get('date', ''),
+        # Split into batches
+        import gc
+        for batch_start in range(0, len(transactions), batch_size):
+            batch_end = min(batch_start + batch_size, len(transactions))
+            batch = transactions[batch_start:batch_end]
+            
+            for tx in batch:
+                try:
+                    # Convert database row to dict with proper keys
+                    row = {
+                        'description': f"{tx.get('action', '')} {tx.get('coin', '')}",
+                        'amount': tx.get('amount', 0),
+                        'price_usd': tx.get('price_usd', 0),
                         'coin': tx.get('coin', ''),
-                        'original_action': tx.get('action', ''),
-                        'suggested_action': result.get('label'),
-                        'confidence': result.get('confidence', 0),
-                        'explanation': result.get('explanation', '')
+                        'action': tx.get('action', ''),
+                        'source': tx.get('source', ''),
+                        'date': tx.get('date', '')
                     }
-                    with open(log_file, 'a') as f:
-                        f.write(json.dumps(log_entry) + '\n')
-                
-            except Exception as tx_error:
-                print(f"Error processing transaction {tx.get('id')}: {tx_error}")
-                continue
+                    
+                    # Run through ML classification bridge (tries rules first, then ML)
+                    result = classify_rules_ml(row, ml_service)
+                    
+                    processed_count += 1
+                    
+                    # If ML provided a classification different from current, update it
+                    if result.get('source') == 'ml' and result.get('label'):
+                        current_action = tx.get('action', '')
+                        new_action = result['label']
+                        
+                        if current_action != new_action:
+                            conn = get_db_connection()
+                            conn.execute(
+                                "UPDATE trades SET action = ? WHERE id = ?",
+                                (new_action, tx['id'])
+                            )
+                            conn.commit()
+                            conn.close()
+                            updated_count += 1
+                    
+                    # Log the suggestion
+                    if result.get('source') == 'ml':
+                        log_entry = {
+                            'timestamp': datetime.now().isoformat(),
+                            'transaction_id': tx['id'],
+                            'date': tx.get('date', ''),
+                            'coin': tx.get('coin', ''),
+                            'original_action': tx.get('action', ''),
+                            'suggested_action': result.get('label'),
+                            'confidence': result.get('confidence', 0),
+                            'explanation': result.get('explanation', '')
+                        }
+                        with open(log_file, 'a') as f:
+                            f.write(json.dumps(log_entry) + '\n')
+                    
+                except Exception as tx_error:
+                    print(f"Error processing transaction {tx.get('id')}: {tx_error}")
+                    continue
+            
+            # Memory cleanup after each batch
+            if (batch_end % batch_size == 0) or (batch_end == len(transactions)):
+                gc.collect()  # Force garbage collection between batches
         
         # Shutdown ML service if configured
         if ml_config.get('auto_shutdown_after_batch', True):
@@ -1747,7 +1830,6 @@ def api_reprocess_all_transactions():
             'processed': processed_count,
             'updated': updated_count
         })
-        
     except Exception as e:
         print(f"Error in reprocess endpoint: {e}")
         import traceback
@@ -1756,6 +1838,473 @@ def api_reprocess_all_transactions():
             'success': False,
             'error': str(e)
         }), 500
+
+# ==========================================
+# HELPER FUNCTIONS - ACCURACY MODE
+# ==========================================
+
+def get_accuracy_controller(mode='accurate'):
+    """Initialize accuracy mode controller with Gemma support and error handling"""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        
+        accuracy_config = config.get('accuracy_mode', {})
+        ml_config = config.get('ml_fallback', {})
+        
+        use_accuracy = (accuracy_config.get('enabled', True) and 
+                       ml_config.get('enabled', False) and 
+                       mode == 'accurate')
+        
+        if use_accuracy:
+            try:
+                from src.advanced_ml_features_accurate import AccuracyModeController
+                from src.ml_service import MLService
+                
+                ml_service = MLService(mode=ml_config.get('model_name', 'gemma'))
+                return AccuracyModeController(ml_service=ml_service, enabled=True), True
+            except Exception as e:
+                print(f"Failed to initialize accuracy controller: {e}")
+                return None, False
+        else:
+            return None, False
+    except Exception as e:
+        print(f"Error in accuracy controller init: {e}")
+        return None, False
+
+# ==========================================
+# API ROUTES - ADVANCED ML FEATURES
+# ==========================================
+
+@app.route('/api/advanced/fraud-detection', methods=['POST'])
+@login_required
+@web_security_required
+def api_fraud_detection():
+    """Check all transactions for fraud patterns with optional accuracy mode"""
+    try:
+        import json
+        from src.advanced_ml_features_accurate import AccuracyModeController
+        from src.ml_service import MLService
+        
+        data = request.get_json() or {}
+        mode = data.get('mode', 'accurate')  # Default to accurate
+        
+        # Load config
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        
+        accuracy_config = config.get('accuracy_mode', {})
+        ml_config = config.get('ml_fallback', {})
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Determine if we should use accuracy mode
+        use_accuracy = (accuracy_config.get('enabled', True) and 
+                       ml_config.get('enabled', False) and 
+                       accuracy_config.get('fraud_detection', True) and
+                       mode == 'accurate')
+        
+        results = {'source': 'heuristic'}
+        
+        if use_accuracy:
+            try:
+                ml_service = MLService(mode=ml_config.get('model_name', 'gemma'))
+                controller = AccuracyModeController(ml_service=ml_service, enabled=True)
+                result = controller.detect_fraud(transactions, mode='accurate')
+                results = result
+                results['source'] = 'gemma'
+            except Exception as gemma_error:
+                # Log Gemma failure and fall back
+                print(f"Gemma fraud detection failed: {gemma_error}")
+                from src.advanced_ml_features import FraudDetector
+                detector = FraudDetector()
+                results = {
+                    'wash_sales': detector.detect_wash_sale(transactions),
+                    'pump_dumps': detector.detect_pump_dump(transactions),
+                    'suspicious_volumes': detector.detect_suspicious_volume(transactions),
+                    'total_alerts': 0,
+                    'source': 'heuristic',
+                    'gemma_error': 'Gemma analysis failed, using fast analysis',
+                    'error_details': str(gemma_error)
+                }
+        else:
+            from src.advanced_ml_features import FraudDetector
+            detector = FraudDetector()
+            results = {
+                'wash_sales': detector.detect_wash_sale(transactions),
+                'pump_dumps': detector.detect_pump_dump(transactions),
+                'suspicious_volumes': detector.detect_suspicious_volume(transactions),
+                'total_alerts': 0,
+                'source': 'heuristic'
+            }
+        
+        results['total_alerts'] = (len(results.get('wash_sales', [])) + 
+                                   len(results.get('pump_dumps', [])) + 
+                                   len(results.get('suspicious_volumes', [])))
+        
+        return jsonify({'success': True, 'results': results})
+    except Exception as e:
+        print(f"Error in fraud detection endpoint: {e}")
+        return jsonify({'success': False, 'error': str(e), 'source': 'error'}), 500
+
+@app.route('/api/advanced/smart-descriptions', methods=['POST'])
+@login_required
+@web_security_required
+def api_smart_descriptions():
+    """Generate intelligent descriptions for transactions"""
+    try:
+        from src.advanced_ml_features import SmartDescriptionGenerator
+        
+        generator = SmartDescriptionGenerator()
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        descriptions = []
+        for tx in transactions:
+            try:
+                desc = generator.generate_description(tx)
+                descriptions.append({
+                    'id': tx['id'],
+                    'coin': tx.get('coin', ''),
+                    'action': tx.get('action', ''),
+                    'original': tx.get('description', ''),
+                    'suggested': desc
+                })
+            except Exception as e:
+                print(f"Error generating description for transaction {tx.get('id')}: {e}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'descriptions': descriptions,
+            'count': len(descriptions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/defi-classification', methods=['POST'])
+@login_required
+@web_security_required
+def api_defi_classification():
+    """Classify DeFi interactions (swaps, lending, staking, NFTs)"""
+    try:
+        from src.advanced_ml_features import DeFiClassifier
+        
+        classifier = DeFiClassifier()
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        classifications = []
+        high_fees = []
+        
+        for tx in transactions:
+            try:
+                classification = classifier.classify(tx)
+                
+                if classification and classification.get('type') != 'Unknown':
+                    classifications.append({
+                        'id': tx['id'],
+                        'coin': tx.get('coin', ''),
+                        'type': classification.get('type'),
+                        'category': classification.get('category'),
+                    })
+                
+                # Check for high fees
+                fee_alert = classifier.flag_high_fees(tx)
+                if fee_alert:
+                    high_fees.append({
+                        'id': tx['id'],
+                        'coin': tx.get('coin', ''),
+                        'amount': tx.get('amount', 0),
+                        'fee_percentage': fee_alert.get('fee_percentage', 0),
+                        'flag': fee_alert.get('flag', '')
+                    })
+            except Exception as e:
+                print(f"Error classifying transaction {tx.get('id')}: {e}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'classifications': classifications,
+            'high_fees': high_fees,
+            'defi_count': len(classifications),
+            'high_fee_count': len(high_fees)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/pattern-analysis', methods=['POST'])
+@login_required
+@web_security_required
+def api_pattern_analysis():
+    """Analyze transaction patterns and detect anomalies"""
+    try:
+        from src.advanced_ml_features import PatternLearner
+        
+        learner = PatternLearner()
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Learn patterns from all transactions
+        learner.learn_patterns(transactions)
+        
+        # Detect anomalies
+        anomalies = []
+        for tx in transactions:
+            try:
+                anomaly_list = learner.detect_anomalies(tx)
+                if anomaly_list:
+                    for anomaly in anomaly_list:
+                        anomalies.append({
+                            'id': tx['id'],
+                            'coin': tx.get('coin', ''),
+                            'amount': tx.get('amount', 0),
+                            'date': tx.get('date', ''),
+                            'reason': anomaly.get('reason', ''),
+                            'severity': anomaly.get('severity', 'low')
+                        })
+            except Exception as e:
+                print(f"Error analyzing pattern for transaction {tx.get('id')}: {e}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'anomalies': anomalies,
+            'anomaly_count': len(anomalies),
+            'patterns_analyzed': len(transactions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/aml-detection', methods=['POST'])
+@login_required
+@web_security_required
+def api_aml_detection():
+    """Detect AML suspicious patterns (structuring, unusual timing)"""
+    try:
+        from src.advanced_ml_features import AMLDetector
+        
+        detector = AMLDetector()
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Detect structuring patterns
+        structuring_alerts = detector.detect_structuring(transactions)
+        
+        return jsonify({
+            'success': True,
+            'alerts': structuring_alerts,
+            'alert_count': len(structuring_alerts),
+            'transactions_analyzed': len(transactions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/transaction-history/<int:tx_id>', methods=['GET'])
+@login_required
+@web_security_required
+def api_transaction_history(tx_id):
+    """Get transaction history and changes"""
+    try:
+        from src.advanced_ml_features import TransactionHistory
+        
+        history_manager = TransactionHistory()
+        
+        # Get transaction from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades WHERE id = ?", (tx_id,))
+        tx = dict(cursor.fetchone() or {})
+        conn.close()
+        
+        if not tx:
+            return jsonify({'success': False, 'error': 'Transaction not found'}), 404
+        
+        # Get history
+        tx_history = history_manager.get_history(str(tx_id))
+        
+        return jsonify({
+            'success': True,
+            'transaction_id': tx_id,
+            'history': tx_history,
+            'current_state': tx
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/search', methods=['POST'])
+@login_required
+@web_security_required
+def api_natural_language_search():
+    """Search transactions using natural language queries"""
+    try:
+        from src.advanced_ml_features import NaturalLanguageSearch
+        
+        query = request.get_json().get('query', '')
+        if not query:
+            return jsonify({'success': False, 'error': 'Query required'}), 400
+        
+        searcher = NaturalLanguageSearch()
+        
+        # Get all transactions from database
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Search (parse_query is called internally by search)
+        results = searcher.search(transactions, query)
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'results': results,
+            'result_count': len(results)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/update-transaction', methods=['POST'])
+@login_required
+@web_security_required
+def api_update_transaction_with_history():
+    """Update transaction and record in history"""
+    try:
+        from src.advanced_ml_features import TransactionHistory
+        
+        data = request.get_json()
+        tx_id = str(data.get('id'))
+        old_value = data.get('old_value')
+        new_value = data.get('new_value')
+        field = data.get('field', 'action')
+        reason = data.get('reason', 'Manual update')
+        
+        if not all([tx_id, old_value, new_value]):
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        history_manager = TransactionHistory()
+        
+        # Record the change
+        history_manager.record_change(
+            tx_id=tx_id,
+            old_value=old_value,
+            new_value=new_value,
+            reason=reason
+        )
+        
+        # Update database
+        conn = get_db_connection()
+        conn.execute(
+            f"UPDATE trades SET {field} = ? WHERE id = ?",
+            (new_value, int(tx_id))
+        )
+        conn.commit()
+        conn.close()
+        
+        # Mark data as changed
+        tax_app.mark_data_changed()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Transaction updated and history recorded'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/gemma/specs', methods=['GET'])
+@login_required
+@web_security_required
+def api_gemma_specs():
+    """Get Gemma system requirements and local execution info"""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        
+        accuracy_config = config.get('accuracy_mode', {})
+        ml_config = config.get('ml_fallback', {})
+        
+        specs = {
+            'accuracy_mode_enabled': accuracy_config.get('enabled', False),
+            'ml_enabled': ml_config.get('enabled', False),
+            'model_name': ml_config.get('model_name', 'shim'),
+            'local_execution': True,
+            'data_privacy': 'All data processed locally, never sent to external servers',
+            'recommended_specs': accuracy_config.get('recommended_specs', {
+                'cpu': 'Intel i5 / AMD Ryzen 5 or better',
+                'ram': '8GB minimum (16GB recommended)',
+                'gpu': '2GB VRAM optional (NVIDIA with CUDA recommended)',
+                'storage': '5GB free for model cache',
+                'execution': 'Local - All data stays on your machine'
+            }),
+            'features': {
+                'fraud_detection': accuracy_config.get('fraud_detection', True),
+                'smart_descriptions': accuracy_config.get('smart_descriptions', True),
+                'pattern_learning': accuracy_config.get('pattern_learning', True),
+                'natural_language_search': accuracy_config.get('natural_language_search', True)
+            }
+        }
+        
+        return jsonify({'success': True, 'specs': specs})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/accuracy/config', methods=['GET', 'POST'])
+@login_required
+@web_security_required
+def api_accuracy_config():
+    """Get or update accuracy mode configuration"""
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        
+        if request.method == 'GET':
+            accuracy_config = config.get('accuracy_mode', {})
+            return jsonify({'success': True, 'config': accuracy_config})
+        
+        elif request.method == 'POST':
+            data = request.get_json()
+            
+            # Update accuracy mode settings
+            if 'accuracy_mode' not in config:
+                config['accuracy_mode'] = {}
+            
+            # Only allow specific fields to be updated
+            allowed_fields = ['enabled', 'fraud_detection', 'smart_descriptions', 
+                            'pattern_learning', 'natural_language_search', 'fallback_on_error']
+            
+            for field in allowed_fields:
+                if field in data:
+                    config['accuracy_mode'][field] = data[field]
+            
+            # Save updated config
+            lock = filelock.FileLock(str(CONFIG_FILE) + '.lock')
+            with lock:
+                with open(CONFIG_FILE, 'w') as f:
+                    json.dump(config, f, indent=4)
+            
+            return jsonify({'success': True, 'message': 'Accuracy mode configuration updated'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==========================================
 # API ROUTES - CONFIGURATION
@@ -1802,6 +2351,177 @@ def api_update_config():
         return jsonify({'data': json.dumps({'success': True, 'message': 'Configuration updated'})})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# ==========================================
+# API ROUTES - ML/AI MANAGEMENT
+# ==========================================
+
+@app.route('/api/ml/check-dependencies', methods=['GET'])
+@login_required
+@web_security_required
+def api_ml_check_dependencies():
+    """Check if ML dependencies are installed and provide download info"""
+    import os
+    
+    try:
+        # Check if torch and transformers are installed
+        torch_installed = False
+        transformers_installed = False
+        
+        try:
+            import torch
+            torch_installed = True
+        except ImportError:
+            pass
+        
+        try:
+            import transformers
+            transformers_installed = True
+        except ImportError:
+            pass
+        
+        # Get Hugging Face cache location
+        hf_cache = os.environ.get('HF_HOME', 
+                                  os.path.expanduser('~/.cache/huggingface/hub'))
+        
+        # Get free disk space (rough estimate)
+        try:
+            import shutil
+            stat = shutil.disk_usage(os.path.dirname(hf_cache))
+            free_gb = stat.free / (1024**3)
+        except:
+            free_gb = None
+        
+        return jsonify({
+            'success': True,
+            'torch_installed': torch_installed,
+            'transformers_installed': transformers_installed,
+            'deps_satisfied': torch_installed and transformers_installed,
+            'model_name': 'google/gemma-2b-it',
+            'estimated_download_size_gb': '2-5',
+            'cache_location': hf_cache,
+            'free_disk_space_gb': round(free_gb, 1) if free_gb else 'Unknown',
+            'install_command': 'pip install torch transformers',
+            'notes': 'First inference will download the model from Hugging Face.'
+        })
+    except Exception as e:
+        logger.error(f"Error checking ML dependencies: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/ml/pre-download-model', methods=['POST'])
+@login_required
+@web_security_required
+def api_ml_pre_download_model():
+    """Pre-download Gemma model to avoid delays during first reprocess"""
+    try:
+        from src.ml_service import MLService
+        
+        logger.info("[ML] Starting pre-download of Gemma model...")
+        
+        # Initialize with gemma mode to trigger download
+        ml_service = MLService(mode='gemma', auto_shutdown_after_inference=False)
+        
+        # Load model (this triggers download if not cached)
+        ml_service._load_model()
+        
+        if ml_service.pipe is not None:
+            logger.info("[ML] ✅ Model downloaded and cached successfully")
+            ml_service.shutdown()
+            return jsonify({
+                'success': True,
+                'message': 'Model downloaded and ready to use',
+                'model': 'google/gemma-2b-it'
+            })
+        else:
+            logger.warning("[ML] ⚠️  Model failed to load, will use shim fallback")
+            return jsonify({
+                'success': False,
+                'message': 'Failed to load model. System will use lightweight shim mode.',
+                'fallback': 'shim'
+            }), 400
+        
+    except ImportError as e:
+        logger.warning(f"[ML] Missing dependencies for Gemma: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Missing dependencies: {e}',
+            'solution': 'pip install torch transformers',
+            'fallback': 'shim'
+        }), 400
+    except Exception as e:
+        logger.error(f"[ML] Error pre-downloading model: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'fallback': 'shim'
+        }), 500
+
+@app.route('/api/ml/delete-gemma-model', methods=['POST'])
+@login_required
+@web_security_required
+def api_ml_delete_gemma_model():
+    """Delete cached Gemma model to free up disk space"""
+    import os
+    import shutil
+    
+    try:
+        # Get Hugging Face cache location
+        hf_cache = os.environ.get('HF_HOME', 
+                                  os.path.expanduser('~/.cache/huggingface/hub'))
+        
+        # The Gemma model cache location
+        gemma_cache = os.path.join(hf_cache, 'models--google--gemma-2b-it')
+        
+        freed_space_gb = 0
+        
+        # Calculate space before deletion
+        if os.path.exists(gemma_cache):
+            try:
+                import shutil as sh
+                total_size = 0
+                for dirpath, dirnames, filenames in os.walk(gemma_cache):
+                    for filename in filenames:
+                        filepath = os.path.join(dirpath, filename)
+                        total_size += os.path.getsize(filepath)
+                
+                freed_space_gb = round(total_size / (1024**3), 1)
+                
+                # Delete the cache directory
+                shutil.rmtree(gemma_cache)
+                
+                logger.info(f"[ML] ✅ Deleted Gemma model cache. Freed {freed_space_gb}GB")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Gemma model deleted successfully',
+                    'freed_space_gb': freed_space_gb,
+                    'cache_location': gemma_cache
+                })
+            except Exception as e:
+                logger.warning(f"[ML] Could not delete Gemma cache: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Could not delete model: {str(e)}',
+                    'freed_space_gb': 0
+                }), 400
+        else:
+            logger.info("[ML] Gemma model cache not found")
+            return jsonify({
+                'success': True,
+                'message': 'Gemma model cache not found (already deleted)',
+                'freed_space_gb': 0
+            })
+            
+    except Exception as e:
+        logger.error(f"[ML] Error deleting Gemma model: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'freed_space_gb': 0
+        }), 500
 
 @app.route('/api/wallets', methods=['GET'])
 @login_required

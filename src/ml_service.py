@@ -42,7 +42,7 @@ class MLService:
         self._use_count = 0
 
     def _load_model(self):
-        """Load real model on first use (lazy loading)."""
+        """Load real model on first use (lazy loading) with recovery attempts."""
         if self.model is not None:
             return  # Already loaded
 
@@ -68,8 +68,24 @@ class MLService:
                 model_kwargs={"quantization_config": self._get_quantization_config()},
             )
             logger.info(f"[ML] Model loaded: {model_name}")
+        except ImportError as e:
+            logger.warning(f"[ML] ⚠️  Missing dependencies: {e}")
+            logger.warning(f"[ML] 💡 Install with: pip install torch transformers")
+            logger.warning(f"[ML] → Falling back to lightweight 'shim' mode (keyword-based ML)")
+            self.mode = "shim"
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                logger.warning(f"[ML] ⚠️  Out of memory when loading model: {e}")
+                logger.warning(f"[ML] 💡 Try: (1) Increase system RAM, (2) Use 'shim' mode in config, or (3) Enable auto_shutdown_after_batch")
+                logger.warning(f"[ML] → Falling back to lightweight 'shim' mode")
+            else:
+                logger.warning(f"[ML] ⚠️  Runtime error loading model: {e}")
+                logger.warning(f"[ML] → Falling back to lightweight 'shim' mode")
+            self.mode = "shim"
         except Exception as e:
-            logger.warning(f"[ML] Failed to load model: {e}. Falling back to shim.")
+            logger.warning(f"[ML] ⚠️  Failed to load Gemma model: {e}")
+            logger.warning(f"[ML] 💡 Check: (1) Model name is correct, (2) Internet connection (first download), (3) Disk space for cache (~5GB)")
+            logger.warning(f"[ML] → Falling back to lightweight 'shim' mode (keyword-based ML)")
             self.mode = "shim"
 
     def _get_quantization_config(self):
@@ -175,8 +191,17 @@ Category:"""
                 "explanation": f"Gemma model classified as {label}"
             }
 
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                logger.warning(f"[ML] ⚠️  Out of memory during inference: {e}")
+                logger.warning(f"[ML] 💡 Try enabling auto_shutdown_after_batch or reducing batch size")
+            else:
+                logger.warning(f"[ML] ⚠️  Runtime error during inference: {e}")
+            logger.warning(f"[ML] → Using lightweight 'shim' mode for this transaction")
+            return self._suggest_shim(tx)
         except Exception as e:
-            logger.warning(f"[ML] Gemma inference failed: {e}. Falling back to shim.")
+            logger.warning(f"[ML] ⚠️  Gemma inference failed: {e}")
+            logger.warning(f"[ML] → Using lightweight 'shim' mode for this transaction")
             return self._suggest_shim(tx)
 
     def shutdown(self):
