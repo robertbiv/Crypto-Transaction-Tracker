@@ -37,6 +37,7 @@ class AuditLogRotation:
                 - archive_dir: Directory to store archives (default: logs/archives)
         """
         self.log_path = Path(log_path)
+        self.log_file = self.log_path  # Alias for test compatibility
         self.config = config or {}
         
         self.max_file_size_mb = self.config.get('max_file_size_mb', 10)
@@ -92,7 +93,9 @@ class AuditLogRotation:
             file_size_mb = self.log_path.stat().st_size / (1024 * 1024)
             
             return {
+                'success': True,
                 'archived': True,
+                'archived_to': str(archive_path),
                 'filename': archive_path.name,
                 'size_mb': file_size_mb,
                 'compressed': self.compress,
@@ -100,6 +103,7 @@ class AuditLogRotation:
             }
         except Exception as e:
             return {
+                'success': False,
                 'archived': False,
                 'error': str(e)
             }
@@ -205,6 +209,7 @@ class AuditLogRotationScheduler:
         self.rotation = AuditLogRotation(log_path, config)
         self.last_maintenance = None
         self.maintenance_interval_hours = config.get('maintenance_interval_hours', 6) if config else 6
+        self.is_active = False  # Add is_active flag for test compatibility
     
     def should_run_maintenance(self) -> bool:
         """Check if maintenance should run based on last run time"""

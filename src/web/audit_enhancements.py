@@ -742,7 +742,7 @@ class MLAnomalyDetector:
         Returns training summary
         """
         if not self.model:
-            return {'success': False, 'message': 'ML model not available'}
+            return {'success': False, 'message': 'ML model not available (scikit-learn not installed). Need at least 10 samples to train.'}
         
         try:
             # Extract features from all entries
