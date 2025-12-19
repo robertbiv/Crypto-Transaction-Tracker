@@ -1,0 +1,49 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.11, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\yoshi\OneDrive\Documents\GitHub\Crypto-Transaction-Tracker\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\yoshi\OneDrive\Documents\GitHub\Crypto-Transaction-Tracker
+configfile: pytest.ini
+plugins: timeout-2.4.0
+collecting ... collected 39 items
+
+tests/test_database_error_recovery.py::test_failed_write_rollback PASSED [  2%]
+tests/test_database_error_recovery.py::test_incomplete_transaction_recovery PASSED [  5%]
+tests/test_database_error_recovery.py::test_database_corruption_detection PASSED [  7%]
+tests/test_database_error_recovery.py::test_connection_timeout_handling PASSED [ 10%]
+tests/test_database_error_recovery.py::test_large_batch_insert_integrity PASSED [ 12%]
+tests/test_database_error_recovery.py::test_connection_leak_prevention PASSED [ 15%]
+tests/test_database_error_recovery.py::test_transaction_isolation_under_contention PASSED [ 17%]
+tests/test_database_error_recovery.py::test_constraint_enforcement_under_load PASSED [ 20%]
+tests/test_backup_consistency.py::test_backup_during_concurrent_writes PASSED [ 23%]
+tests/test_backup_consistency.py::test_backup_integrity_check PASSED     [ 25%]
+tests/test_backup_consistency.py::test_restore_into_clean_database PASSED [ 28%]
+tests/test_backup_consistency.py::test_restore_with_concurrent_access_blocked PASSED [ 30%]
+tests/test_backup_consistency.py::test_multiple_concurrent_backups PASSED [ 33%]
+tests/test_backup_consistency.py::test_backup_doesnt_block_writes PASSED [ 35%]
+tests/test_backup_consistency.py::test_backup_chain_integrity PASSED     [ 38%]
+tests/test_input_validation.py::test_sql_injection_in_id PASSED          [ 41%]
+tests/test_input_validation.py::test_sql_injection_in_strings PASSED     [ 43%]
+tests/test_input_validation.py::test_special_characters_unicode PASSED   [ 46%]
+tests/test_input_validation.py::test_malformed_dates PASSED              [ 48%]
+tests/test_input_validation.py::test_invalid_amounts PASSED              [ 51%]
+tests/test_input_validation.py::test_boundary_values PASSED              [ 53%]
+tests/test_input_validation.py::test_null_and_empty_strings PASSED       [ 56%]
+tests/test_input_validation.py::test_duplicate_prevention PASSED         [ 58%]
+tests/test_input_validation.py::test_case_sensitivity PASSED             [ 61%]
+tests/test_input_validation.py::test_whitespace_handling PASSED          [ 64%]
+tests/test_schema_and_encryption.py::test_schema_migration_success PASSED [ 66%]
+tests/test_schema_and_encryption.py::test_schema_migration_rollback PASSED [ 69%]
+tests/test_schema_and_encryption.py::test_audit_log_consistency PASSED   [ 71%]
+tests/test_schema_and_encryption.py::test_concurrent_audit_logging PASSED [ 74%]
+tests/test_schema_and_encryption.py::test_audit_log_integrity PASSED     [ 76%]
+tests/test_schema_and_encryption.py::test_encryption_isolation PASSED    [ 79%]
+tests/test_schema_and_encryption.py::test_audit_log_no_data_loss PASSED  [ 82%]
+tests/test_schema_and_encryption.py::test_schema_compatibility_read_write PASSED [ 84%]
+tests/test_performance_and_wallets.py::test_multi_wallet_consistency PASSED [ 87%]
+tests/test_performance_and_wallets.py::test_cross_wallet_rollup_calculation PASSED [ 89%]
+tests/test_performance_and_wallets.py::test_query_performance_baseline PASSED [ 92%]
+tests/test_performance_and_wallets.py::test_performance_degradation_detection PASSED [ 94%]
+tests/test_performance_and_wallets.py::test_latency_percentiles_under_load PASSED [ 97%]
+tests/test_performance_and_wallets.py::test_wallet_balance_consistency PASSED [100%]
+
+============================= 39 passed in 3.92s ==============================

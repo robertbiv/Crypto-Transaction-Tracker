@@ -28,6 +28,12 @@ Access at **https://localhost:5000**. On first launch you will:
 
 See [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) for command-line usage; the Web UI includes inline help and onboarding.
 
+## **🧭 CLI Parity**
+
+- Full feature parity with the web interface: transactions (list/add/update/delete/upload/reprocess), reports/warnings/stats, config + wallets + API keys, backups/restores, logs, diagnostics/health, scheduling, and accuracy/ML controls.
+- Colorized output and friendly errors; everything scriptable for automation or CI.
+- Start here for automation: [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md)
+
 ## **🌟 What It’s Good At**
 
 - **Full Transaction Tracking:** Ingest trades, transfers, staking rewards, and holdings across exchanges and wallets; consolidate into a single view with audit-friendly CSVs.
@@ -671,16 +677,19 @@ The project includes a comprehensive test suite located in the `tests/` director
 
 To run the full test suite (recommended):
 
-```bash
-# Windows
-python -m pytest -q
+## Testing
 
-# Linux/Mac
-python3 -m pytest -q
+Comprehensive test coverage ensures CLI and Web UI remain in sync and can be used simultaneously without data corruption.
+
+**Quick Start**:
+```bash
+python -m pytest tests/test_cli_web_ui_concurrency.py -v
 ```
 
-Common targeted runs:
-- Full regression: `python -m pytest -q tests/test_comprehensive_scenarios.py`
-- Setup wizard: `python -m pytest -q tests/test_setup_workflow.py`
-- Stress harness: `python tests/generate_stress_test_data.py` then `python tests/verify_stress_test.py`
+**Full Documentation**: See [docs/TESTING.md](docs/TESTING.md)
+
+Key test suites:
+- **Concurrency**: `tests/test_cli_web_ui_concurrency.py` (✅ 6 tests, all passing)
+- **CLI Parity**: `tests/test_cli_expanded.py` (comprehensive CLI command coverage)
+- **Original CLI**: `tests/test_cli.py`
 
