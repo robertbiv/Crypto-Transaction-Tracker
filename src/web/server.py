@@ -3348,9 +3348,13 @@ def api_wizard_create_account():
         data = request.get_json()
         username = data.get('username', '').strip()
         password = data.get('password', '')
+        tos_accepted = data.get('tos_accepted', False)
         
         if not username or not password:
             return jsonify({'error': 'Username and password are required'}), 400
+        
+        if not tos_accepted:
+            return jsonify({'error': 'You must accept the Terms of Service to create an account'}), 400
         
         if len(password) < 8:
             return jsonify({'error': 'Password must be at least 8 characters'}), 400
@@ -3360,6 +3364,7 @@ def api_wizard_create_account():
             username: {
                 'password_hash': bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'),
                 'created_at': datetime.now(timezone.utc).isoformat(),
+                'tos_accepted_at': datetime.now(timezone.utc).isoformat(),
                 'setup_completed': False  # Will be set to True when wizard completes
             }
         }
@@ -4344,21 +4349,20 @@ def register_audit_enhancements():
         
         # Initialize enhancement modules
         audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+        db_file = Path(BASE_DIR) / 'crypto_taxes.db'
         signing_key = secrets.token_hex(32)
         
         anomaly_detector = AuditAnomalyDetector()
-        indexing = AuditLogIndexing(audit_log_path)
         pdf_gen = PDFReportGenerator()
         signer = AuditLogSigner(signing_key)
         rate_limiter = AuditAPIRateLimiting()
         
-        # Create indexes for performance
-        indexing.create_indexes()
+        # Create indexes for performance (AuditLogIndexing is static)
+        AuditLogIndexing.create_indexes(db_file)
         
         # Store instances in app context
         app.audit_enhancements = {
             'anomaly_detector': anomaly_detector,
-            'indexing': indexing,
             'pdf_generator': pdf_gen,
             'signer': signer,
             'rate_limiter': rate_limiter

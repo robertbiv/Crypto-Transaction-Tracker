@@ -438,6 +438,117 @@
         <div class="wizard-content">
             <div id="alertContainer"></div>
             
+            <!-- ToS Modal -->
+            <div id="tosModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; padding: 20px;">
+                <div style="background: var(--md-sys-color-surface); border-radius: 12px; max-width: 800px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                    <div style="padding: 20px; border-bottom: 1px solid var(--md-sys-color-outline); display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0; font-size: 1.5rem;">Terms of Service</h2>
+                        <button onclick="closeTosModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--md-sys-color-on-surface); padding: 0; width: 32px; height: 32px;">×</button>
+                    </div>
+                    <div id="tosContent" style="padding: 20px; overflow-y: auto; flex: 1; line-height: 1.6; font-size: 0.9rem;">
+                        <div style="padding: 12px; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); border-radius: 8px; margin-bottom: 20px; font-weight: 500;">
+                            ⚠️ Please scroll to the bottom to enable the Accept button
+                        </div>
+                        <h1>Terms of Service - Crypto Tax Automation Engine</h1>
+                        <p><strong>Last Updated: December 16, 2025</strong></p>
+                        <h2>TL;DR</h2>
+                        <p>This is a personal tool built to track crypto taxes. It's provided AS-IS with <strong>no warranty</strong>. Not a tax professional. You must review all outputs with a qualified tax professional before filing. This tool can make mistakes. <strong>No liability for errors, data loss, or audit penalties.</strong> Use locally only. Use Read-Only API tokens for security.</p>
+                        <hr>
+                        <h2>Acceptance of Terms</h2>
+                        <p>By downloading, installing, or using this software ("the Program"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the Program.</p>
+                        <h2>1. NO WARRANTY; AS-IS USE</h2>
+                        <p>The Program is provided "AS IS" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, or non-infringement.</p>
+                        <p>The author makes no warranty that:</p>
+                        <ul>
+                            <li>The Program will meet your requirements</li>
+                            <li>The Program will be uninterrupted, timely, secure, or error-free</li>
+                            <li>Any defects will be corrected</li>
+                            <li>The Program is free of harmful code or malware</li>
+                        </ul>
+                        <h2>2. NO TAX ADVICE; NOT A PROFESSIONAL SERVICE</h2>
+                        <p>The author is <strong>not a tax professional, tax attorney, or accountant</strong>. The Program was built for personal transaction tracking and does not constitute professional tax advice.</p>
+                        <p>The Program is designed to follow 2025 US tax guidelines (IRS Publication 544) but is <strong>not guaranteed to be accurate, complete, or correct</strong>.</p>
+                        <p><strong>You must independently verify all outputs and consult a qualified tax professional (CPA, tax attorney, or IRS-enrolled agent) before filing any tax return.</strong></p>
+                        <h2>3. LIMITATION OF LIABILITY</h2>
+                        <p><strong>IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY:</strong></p>
+                        <ul>
+                            <li>Direct, indirect, incidental, special, exemplary, or consequential damages</li>
+                            <li>Loss of profits, revenue, data, use, or other intangible losses</li>
+                            <li>Damage to data or property</li>
+                            <li>Tax liabilities, penalties, interest, or back taxes</li>
+                            <li>Audit costs or legal fees</li>
+                            <li>Any damages arising from use or inability to use the Program</li>
+                        </ul>
+                        <h2>4. USER ASSUMES ALL RISK</h2>
+                        <p>You assume all risk of loss associated with using this Program, including:</p>
+                        <ul>
+                            <li>Inaccurate calculations or missing transactions</li>
+                            <li>Incorrect cost basis or gain/loss computations</li>
+                            <li>Undetected duplicates or data corruption</li>
+                            <li>Incorrect price data or exchange rate errors</li>
+                            <li>Tax misstatements or non-compliance</li>
+                            <li>Audit exposure or penalties from the IRS</li>
+                            <li>Data loss or security breaches</li>
+                        </ul>
+                        <h2>5. LOCAL USE ONLY</h2>
+                        <p>The Program is intended to run on your local machine or private network only. <strong>Do not expose the Program to the internet or make it publicly accessible.</strong></p>
+                        <h2>6. SECURITY AND DATA RESPONSIBILITY</h2>
+                        <p>You are solely responsible for:</p>
+                        <ul>
+                            <li>Securing the host machine and network</li>
+                            <li>Protecting API keys and secrets</li>
+                            <li><strong>Using READ-ONLY API tokens only</strong> – Never provide write/trade permissions</li>
+                            <li>Managing backups of your data and database</li>
+                            <li>Keeping the Program and dependencies up to date</li>
+                            <li>Monitoring for security patches and updates</li>
+                            <li>Protecting your wallet addresses and personal information</li>
+                        </ul>
+                        <h2>7. NO LIABILITY FOR DATA LOSS</h2>
+                        <p>The Program may delete, corrupt, or lose data due to software bugs, hardware failure, network interruption, user error, third-party API failures, or backup failures.</p>
+                        <p><strong>The author is not responsible for any lost data or recovery costs. You are responsible for maintaining independent backups.</strong></p>
+                        <h2>8. ACCURACY AND COMPLETENESS NOT GUARANTEED</h2>
+                        <p>The Program may calculate gains/losses incorrectly, miss transactions, produce incorrect cost basis, fail to detect wash sales, misclassify income or losses, generate incomplete reports, or fail to fetch prices.</p>
+                        <p><strong>You must manually review all CSV outputs before using them for tax purposes.</strong></p>
+                        <h2>9. THIRD-PARTY SERVICES</h2>
+                        <p>The Program uses third-party APIs: CCXT, StakeTaxCSV, Moralis, Blockchair, CoinGecko, Yahoo Finance. The author is not responsible for service outages, incorrect data, API changes, account bans, or privacy breaches at third-party providers.</p>
+                        <h2>10. NO SUPPORT OR SLA</h2>
+                        <p>The Program is provided without any support, updates, or service level agreement. The author may or may not respond to issues or feature requests.</p>
+                        <h2>11. COMPLIANCE RESPONSIBILITY</h2>
+                        <p>You are solely responsible for:</p>
+                        <ul>
+                            <li>Complying with all applicable tax laws</li>
+                            <li>Accurate tax reporting to the IRS</li>
+                            <li>Paying all taxes owed</li>
+                            <li>Responding to IRS inquiries or audits</li>
+                            <li>Hiring professional representation if audited</li>
+                        </ul>
+                        <p><strong>If you file incorrect taxes using this Program, you are responsible for resulting penalties, interest, or legal consequences.</strong></p>
+                        <h2>12. CHANGES TO TERMS</h2>
+                        <p>The author may update these Terms at any time without notice. Continued use constitutes acceptance.</p>
+                        <hr>
+                        <h2>Acceptance</h2>
+                        <p>By using this Program, you acknowledge that:</p>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li>✓ You have read and understand these Terms of Service</li>
+                            <li>✓ You assume all risk and responsibility for use</li>
+                            <li>✓ You will not hold the author liable for any losses or damages</li>
+                            <li>✓ You will review all outputs with a qualified tax professional</li>
+                            <li>✓ You will not file taxes based solely on this Program's output</li>
+                            <li>✓ You understand this is not professional tax advice</li>
+                            <li>✓ You will keep the Program local and secure</li>
+                            <li>✓ You will maintain your own backups</li>
+                        </ul>
+                        <hr>
+                        <p><strong>Questions?</strong> Consult a qualified tax professional or attorney before using this Program.</p>
+                    </div>
+                    <div style="padding: 20px; border-top: 1px solid var(--md-sys-color-outline); display: flex; justify-content: flex-end; gap: 12px;">
+                        <button onclick="closeTosModal()" id="acceptTosModalBtn" disabled style="padding: 10px 24px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border: none; border-radius: 4px; cursor: not-allowed; font-weight: 500; opacity: 0.5;">
+                            I Understand and Accept
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Step 1: Create Account -->
             <div class="step-content active" data-step="1">
                 <h2 class="step-title">Create Your Account</h2>
@@ -457,6 +568,21 @@
                 <div class="form-group">
                     <label class="form-label" for="confirmPassword">Confirm Password</label>
                     <input type="password" id="confirmPassword" class="form-input" placeholder="Confirm password">
+                </div>
+                
+                <div class="form-group" style="margin-top: 24px; padding: 16px; background: var(--md-sys-color-surface-variant); border-radius: 8px;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" id="viewTosBtn" onclick="showTosModal()" style="padding: 8px 16px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: 500;">
+                            📄 View Terms of Service (Required)
+                        </button>
+                    </div>
+                    <label style="display: flex; align-items: flex-start; cursor: pointer; gap: 12px; opacity: 0.5;" id="tosCheckboxLabel">
+                        <input type="checkbox" id="acceptTos" disabled style="margin-top: 4px; width: 18px; height: 18px; cursor: not-allowed;">
+                        <span style="flex: 1; font-size: 0.95rem; line-height: 1.5;">
+                            I have read and agree to the Terms of Service. 
+                            I understand this software is provided "as-is" with no warranties, and I am solely responsible for my tax reporting obligations.
+                        </span>
+                    </label>
                 </div>
                 
                 <div class="security-note">
@@ -960,9 +1086,15 @@
                 const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
                 const confirmPassword = document.getElementById('confirmPassword').value;
+                const acceptTos = document.getElementById('acceptTos').checked;
                 
                 if (!username) {
                     showAlert('Username is required', 'error');
+                    return;
+                }
+                
+                if (!acceptTos) {
+                    showAlert('You must accept the Terms of Service to continue', 'error');
                     return;
                 }
                 
@@ -990,7 +1122,7 @@
                     const response = await fetch('/api/wizard/create-account', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, password })
+                        body: JSON.stringify({ username, password, tos_accepted: true })
                     });
                     
                     const data = await response.json();
@@ -1584,11 +1716,64 @@
             }
         }
         
+        // ToS Modal Functions
+        let tosViewed = false;
+        
+        function showTosModal() {
+            const modal = document.getElementById('tosModal');
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeTosModal() {
+            const modal = document.getElementById('tosModal');
+            const tosContent = document.getElementById('tosContent');
+            const scrolledToBottom = tosContent.scrollHeight - tosContent.scrollTop <= tosContent.clientHeight + 50;
+            
+            if (!scrolledToBottom) {
+                if (!confirm('You must scroll to the bottom of the Terms of Service. Close anyway?')) {
+                    return;
+                }
+            }
+            
+            tosViewed = true;
+            enableTosCheckbox();
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        function enableTosCheckbox() {
+            const checkbox = document.getElementById('acceptTos');
+            const label = document.getElementById('tosCheckboxLabel');
+            const viewBtn = document.getElementById('viewTosBtn');
+            
+            checkbox.disabled = false;
+            checkbox.style.cursor = 'pointer';
+            label.style.opacity = '1';
+            label.style.cursor = 'pointer';
+            viewBtn.textContent = '✅ Terms of Service (Viewed)';
+            viewBtn.style.background = 'var(--md-sys-color-tertiary)';
+        }
+        
         // Bind events on page load
         document.addEventListener('DOMContentLoaded', () => {
             const addBtn = document.getElementById('addWalletBtn');
             if (addBtn) addBtn.addEventListener('click', addWallet);
             updateProgress();
+            
+            // Check if ToS content scrolls to bottom
+            const tosContent = document.getElementById('tosContent');
+            if (tosContent) {
+                tosContent.addEventListener('scroll', () => {
+                    const scrolledToBottom = tosContent.scrollHeight - tosContent.scrollTop <= tosContent.clientHeight + 50;
+                    const acceptModalBtn = document.getElementById('acceptTosModalBtn');
+                    if (scrolledToBottom) {
+                        acceptModalBtn.disabled = false;
+                        acceptModalBtn.style.opacity = '1';
+                        acceptModalBtn.style.cursor = 'pointer';
+                    }
+                });
+            }
         });
     </script>
 </body>
