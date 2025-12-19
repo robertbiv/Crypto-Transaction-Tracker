@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Enhancement Settings</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 28px; margin-bottom: 10px; }
+        .header p { opacity: 0.9; }
+        
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+        
+        .setting-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        .setting-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        .setting-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+            font-size: 14px;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .form-group .help-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-1px); }
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        .btn-secondary:hover { background: #e0e0e0; }
+        .btn-danger {
+            background: #ef5350;
+            color: white;
+        }
+        .btn-danger:hover { background: #e53935; }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .status-active { background: #4caf50; }
+        .status-inactive { background: #999; }
+        .status-error { background: #ef5350; }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .alert.show { display: block; }
+        .alert-success {
+            background: #c8e6c9;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+        }
+        .alert-error {
+            background: #ffcdd2;
+            color: #c62828;
+            border-left: 4px solid #ef5350;
+        }
+        .alert-info {
+            background: #bbdefb;
+            color: #1565c0;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .toggle-switch.active { background: #4caf50; }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: left 0.3s;
+        }
+        .toggle-switch.active::after { left: 26px; }
+        
+        .section-title {
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 20px;
+            margin-top: 30px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: inline-block;
+        }
+        
+        .loader {
+            display: none;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loader.show { display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 Audit Enhancement Settings</h1>
+            <p>Configure advanced security and auditing features for your crypto tax system</p>
+        </div>
+        
+        <div id="alert-container"></div>
+        
+        <!-- Dashboard Widget Settings -->
+        <div class="section-title">Dashboard Widget</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Real-Time Monitoring</h3>
+                <div class="form-group">
+                    <label>Widget Refresh Interval (seconds)</label>
+                    <input type="number" id="refresh_interval" min="5" max="300" value="10">
+                    <div class="help-text">How often to refresh the dashboard widget (5-300 seconds)</div>
+                </div>
+                <div class="form-group">
+                    <label>Anomaly Detection Threshold</label>
+                    <input type="number" id="anomaly_threshold" min="1" max="100" value="5">
+                    <div class="help-text">Number of anomalies to trigger alert</div>
+                </div>
+                <div class="form-group toggle">
+                    <label>Enable Widget</label>
+                    <div class="toggle-switch active" onclick="toggleSetting(this, 'widget_enabled')"></div>
+                </div>
+                <input type="hidden" id="widget_enabled" value="true">
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('dashboard')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('dashboard')">
+                        <span class="loader"></span>Save Dashboard Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Rotation Settings -->
+        <div class="section-title">Audit Log Rotation</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Log File Management</h3>
+                <div class="form-group">
+                    <label>Maximum Log File Size (MB)</label>
+                    <input type="number" id="max_log_size" min="10" max="1000" value="100">
+                    <div class="help-text">Automatically rotate when log reaches this size</div>
+                </div>
+                <div class="form-group">
+                    <label>Retention Period (days)</label>
+                    <input type="number" id="retention_days" min="7" max="365" value="90">
+                    <div class="help-text">Delete logs older than this many days</div>
+                </div>
+                <div class="form-group">
+                    <label>Compression</label>
+                    <select id="compression_type">
+                        <option value="gzip">Gzip (.gz)</option>
+                        <option value="bz2">Bzip2 (.bz2)</option>
+                        <option value="none">No Compression</option>
+                    </select>
+                    <div class="help-text">Archive format for rotated logs</div>
+                </div>
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('rotation')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('rotation')">Save Rotation Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Baseline Learning Settings -->
+        <div class="section-title">Baseline Learning</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Pattern Recognition</h3>
+                <div class="form-group">
+                    <label>Learning Period (days)</label>
+                    <input type="number" id="learning_period" min="7" max="90" value="30">
+                    <div class="help-text">Initial period to establish baseline patterns</div>
+                </div>
+                <div class="form-group">
+                    <label>Drift Detection Threshold (%)</label>
+                    <input type="number" id="drift_threshold" min="5" max="50" step="5" value="20">
+                    <div class="help-text">Deviation % that triggers drift alert</div>
+                </div>
+                <div class="form-group toggle">
+                    <label>Auto-Learn Updates</label>
+                    <div class="toggle-switch active" onclick="toggleSetting(this, 'auto_learn')"></div>
+                </div>
+                <input type="hidden" id="auto_learn" value="true">
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('baseline')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('baseline')">Save Baseline Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Rate Limiting Settings -->
+        <div class="section-title">Rate Limiting</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>API Protection</h3>
+                <div class="form-group">
+                    <label>Requests Per Hour (Sensitive Endpoints)</label>
+                    <input type="number" id="rate_limit_strict" min="5" max="100" value="30">
+                    <div class="help-text">Max requests/hour for audit & security endpoints</div>
+                </div>
+                <div class="form-group">
+                    <label>Requests Per Hour (Standard Endpoints)</label>
+                    <input type="number" id="rate_limit_standard" min="50" max="500" value="300">
+                    <div class="help-text">Max requests/hour for regular endpoints</div>
+                </div>
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('rate_limiting')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('rate_limiting')">Save Rate Limiting</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Signature Verification Settings -->
+        <div class="section-title">Digital Signatures</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Data Integrity Protection</h3>
+                <div class="form-group">
+                    <label>Signing Algorithm</label>
+                    <select id="signing_algorithm">
+                        <option value="HMAC-SHA256" selected>HMAC-SHA256 (Recommended)</option>
+                        <option value="HMAC-SHA512">HMAC-SHA512</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Signature Key (Secret)</label>
+                    <input type="password" id="signature_key" placeholder="•••••••••••••••••">
+                    <div class="help-text">32+ character secret key. Leave blank to keep current.</div>
+                </div>
+                <div class="form-group toggle">
+                    <label>Verify Audit Entries</label>
+                    <div class="toggle-switch active" onclick="toggleSetting(this, 'verify_enabled')"></div>
+                </div>
+                <input type="hidden" id="verify_enabled" value="true">
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('signatures')">Revert</button>
+                    <button class="btn-danger" onclick="rotateSignatureKey()">Generate New Key</button>
+                    <button class="btn-primary" onclick="saveSettings('signatures')">Save Signature Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ML Detection Settings -->
+        <div class="section-title">Machine Learning Anomaly Detection</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>AI-Powered Detection</h3>
+                <div class="form-group">
+                    <label>Detection Model</label>
+                    <select id="ml_model_type">
+                        <option value="isolation_forest" selected>Isolation Forest</option>
+                        <option value="local_outlier">Local Outlier Factor</option>
+                        <option value="ensemble">Ensemble (Experimental)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Contamination Rate (%)</label>
+                    <input type="number" id="contamination_rate" min="1" max="20" step="1" value="5">
+                    <div class="help-text">Expected % of anomalies in training data</div>
+                </div>
+                <div class="form-group toggle">
+                    <label>Enable ML Detection</label>
+                    <div class="toggle-switch active" onclick="toggleSetting(this, 'ml_enabled')"></div>
+                </div>
+                <input type="hidden" id="ml_enabled" value="true">
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('ml')">Revert</button>
+                    <button class="btn-primary" onclick="trainMLModel()">Train Model Now</button>
+                    <button class="btn-primary" onclick="saveSettings('ml')">Save ML Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Automatic Response Settings -->
+        <div class="section-title">Automatic Response System</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Incident Response</h3>
+                <div class="form-group">
+                    <label>Lock Duration (minutes)</label>
+                    <input type="number" id="lock_duration" min="1" max="480" value="30">
+                    <div class="help-text">How long to lock operations on incident</div>
+                </div>
+                <div class="form-group">
+                    <label>Critical Severity Threshold</label>
+                    <input type="number" id="critical_threshold" min="1" max="100" value="50">
+                    <div class="help-text">Anomaly score that triggers CRITICAL</div>
+                </div>
+                <div class="form-group toggle">
+                    <label>Enable Auto-Lock</label>
+                    <div class="toggle-switch active" onclick="toggleSetting(this, 'auto_lock_enabled')"></div>
+                </div>
+                <input type="hidden" id="auto_lock_enabled" value="true">
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('responses')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('responses')">Save Response Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Forensics Settings -->
+        <div class="section-title">Forensic Investigation</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Evidence Collection</h3>
+                <div class="form-group">
+                    <label>Snapshot Collection Interval (minutes)</label>
+                    <input type="number" id="snapshot_interval" min="1" max="60" value="5">
+                    <div class="help-text">How often to capture system snapshots</div>
+                </div>
+                <div class="form-group">
+                    <label>Retention Period (days)</label>
+                    <input type="number" id="forensic_retention" min="7" max="365" value="90">
+                    <div class="help-text">Keep forensic snapshots for this long</div>
+                </div>
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('forensics')">Revert</button>
+                    <button class="btn-primary" onclick="saveSettings('forensics')">Save Forensic Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Comparative Analysis Settings -->
+        <div class="section-title">Trend Analysis & Reporting</div>
+        <div class="settings-grid">
+            <div class="setting-card">
+                <h3>Historical Comparison</h3>
+                <div class="form-group">
+                    <label>Report Lookback Period (days)</label>
+                    <input type="number" id="lookback_days" min="7" max="365" value="30">
+                    <div class="help-text">Historical period to include in reports</div>
+                </div>
+                <div class="form-group">
+                    <label>Auto-Report Generation</label>
+                    <select id="report_frequency">
+                        <option value="never">Never</option>
+                        <option value="daily" selected>Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="revertSettings('analysis')">Revert</button>
+                    <button class="btn-primary" onclick="generateReport()">Generate Report Now</button>
+                    <button class="btn-primary" onclick="saveSettings('analysis')">Save Analysis Settings</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Global Actions -->
+        <div style="margin-top: 40px; padding: 20px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+            <h3 style="color: #667eea; margin-bottom: 15px;">⚙️ Global Actions</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-secondary" onclick="resetAllSettings()">Reset All to Defaults</button>
+                <button class="btn-primary" onclick="exportSettings()">Export Settings</button>
+                <button class="btn-secondary" onclick="importSettings()">Import Settings</button>
+                <button class="btn-danger" onclick="clearAllIncidents()">Clear All Incidents</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} show`;
+            alert.innerHTML = message;
+            container.appendChild(alert);
+            
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        function toggleSetting(element, fieldId) {
+            element.classList.toggle('active');
+            document.getElementById(fieldId).value = element.classList.contains('active') ? 'true' : 'false';
+        }
+
+        function saveSettings(section) {
+            const button = event.target;
+            const loader = button.querySelector('.loader');
+            loader.classList.add('show');
+            button.disabled = true;
+
+            const settings = collectSettings(section);
+
+            fetch('/api/audit-settings/update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(`✓ ${section.charAt(0).toUpperCase() + section.slice(1)} settings saved successfully!`, 'success');
+                } else {
+                    showAlert(`✗ Error: ${data.message}`, 'error');
+                }
+            })
+            .catch(err => {
+                showAlert(`✗ Failed to save settings: ${err.message}`, 'error');
+            })
+            .finally(() => {
+                loader.classList.remove('show');
+                button.disabled = false;
+            });
+        }
+
+        function collectSettings(section) {
+            const settings = {};
+            
+            if (section === 'dashboard') {
+                settings.refresh_interval = document.getElementById('refresh_interval').value;
+                settings.anomaly_threshold = document.getElementById('anomaly_threshold').value;
+                settings.widget_enabled = document.getElementById('widget_enabled').value === 'true';
+            } else if (section === 'rotation') {
+                settings.max_log_size = document.getElementById('max_log_size').value;
+                settings.retention_days = document.getElementById('retention_days').value;
+                settings.compression = document.getElementById('compression_type').value;
+            } else if (section === 'baseline') {
+                settings.learning_period = document.getElementById('learning_period').value;
+                settings.drift_threshold = document.getElementById('drift_threshold').value;
+                settings.auto_learn = document.getElementById('auto_learn').value === 'true';
+            } else if (section === 'rate_limiting') {
+                settings.strict_limit = document.getElementById('rate_limit_strict').value;
+                settings.standard_limit = document.getElementById('rate_limit_standard').value;
+            } else if (section === 'signatures') {
+                settings.algorithm = document.getElementById('signing_algorithm').value;
+                settings.key = document.getElementById('signature_key').value;
+                settings.verify_enabled = document.getElementById('verify_enabled').value === 'true';
+            } else if (section === 'ml') {
+                settings.model_type = document.getElementById('ml_model_type').value;
+                settings.contamination = document.getElementById('contamination_rate').value;
+                settings.enabled = document.getElementById('ml_enabled').value === 'true';
+            } else if (section === 'responses') {
+                settings.lock_duration = document.getElementById('lock_duration').value;
+                settings.critical_threshold = document.getElementById('critical_threshold').value;
+                settings.auto_lock = document.getElementById('auto_lock_enabled').value === 'true';
+            } else if (section === 'forensics') {
+                settings.snapshot_interval = document.getElementById('snapshot_interval').value;
+                settings.retention = document.getElementById('forensic_retention').value;
+            } else if (section === 'analysis') {
+                settings.lookback_days = document.getElementById('lookback_days').value;
+                settings.report_frequency = document.getElementById('report_frequency').value;
+            }
+            
+            return { section, settings };
+        }
+
+        function revertSettings(section) {
+            if (confirm(`Are you sure you want to revert ${section} settings to defaults?`)) {
+                location.reload();
+            }
+        }
+
+        function rotateSignatureKey() {
+            if (confirm('Generate a new signature key? This will invalidate existing signatures.')) {
+                fetch('/api/audit-settings/rotate-key', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        showAlert(data.message, data.success ? 'success' : 'error');
+                    });
+            }
+        }
+
+        function trainMLModel() {
+            if (confirm('Train ML model with current audit logs? This may take a minute.')) {
+                const btn = event.target;
+                btn.disabled = true;
+                fetch('/api/audit-settings/train-model', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        showAlert(data.message, data.success ? 'success' : 'error');
+                    })
+                    .finally(() => btn.disabled = false);
+            }
+        }
+
+        function generateReport() {
+            fetch('/api/audit-settings/generate-report', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    showAlert(data.message, data.success ? 'success' : 'error');
+                });
+        }
+
+        function resetAllSettings() {
+            if (confirm('⚠️ This will reset ALL settings to defaults. Continue?')) {
+                fetch('/api/audit-settings/reset', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        showAlert(data.message, data.success ? 'success' : 'error');
+                        if (data.success) setTimeout(() => location.reload(), 1000);
+                    });
+            }
+        }
+
+        function exportSettings() {
+            fetch('/api/audit-settings/export')
+                .then(r => r.blob())
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `audit-settings-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    showAlert('Settings exported successfully', 'success');
+                });
+        }
+
+        function importSettings() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const settings = JSON.parse(event.target.result);
+                        fetch('/api/audit-settings/import', {
+                            method: 'POST',
+                            body: JSON.stringify(settings),
+                            headers: { 'Content-Type': 'application/json' }
+                        })
+                        .then(r => r.json())
+                        .then(data => {
+                            showAlert(data.message, data.success ? 'success' : 'error');
+                            if (data.success) setTimeout(() => location.reload(), 1000);
+                        });
+                    } catch (err) {
+                        showAlert('Invalid settings file', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearAllIncidents() {
+            if (confirm('⚠️ This will delete ALL incident records. Continue?')) {
+                fetch('/api/audit-settings/clear-incidents', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(data => {
+                        showAlert(data.message, data.success ? 'success' : 'error');
+                    });
+            }
+        }
+
+        // Load current settings on page load
+        window.addEventListener('load', () => {
+            fetch('/api/audit-settings/current')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.settings) {
+                        Object.entries(data.settings).forEach(([key, value]) => {
+                            const el = document.getElementById(key);
+                            if (el) {
+                                if (value === 'true' || value === true) {
+                                    el.value = 'true';
+                                    const toggle = el.parentElement.querySelector('.toggle-switch');
+                                    if (toggle) toggle.classList.add('active');
+                                } else if (value === 'false' || value === false) {
+                                    el.value = 'false';
+                                } else {
+                                    el.value = value;
+                                }
+                            }
+                        });
+                    }
+                });
+        });
+    </script>
+</body>
+</html>

@@ -69,6 +69,46 @@
 
 {% block content %}
 <h1 style="margin-bottom: 24px;">Settings</h1>
+<!-- BEGIN: Integrated Config Features -->
+<div class="card">
+    <div class="settings-section">
+        <h3>Tax & Calculation Settings</h3>
+        <form id="generalConfigForm">
+            <!-- General Settings, Tax, Compliance, AI/ML, and Performance settings from config.html -->
+            <!-- (Copy the full form from config.html here, including all fields and structure) -->
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>Blockchain Wallets</h3>
+        <div id="walletsContainer">
+            <p>Loading wallets...</p>
+        </div>
+        <button class="btn btn-secondary" id="btnAddWallet" style="margin-top: 16px;">
+            <span class="material-icons" style="vertical-align: middle;">add</span>
+            Add Wallet Address
+        </button>
+        <button class="btn btn-primary" id="btnSaveWallets" style="margin-top: 16px; margin-left: 12px;">
+            Save All Wallets
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="settings-section">
+        <h3>Exchange API Keys</h3>
+        <div class="alert alert-warning">
+            <strong>⚠️ Security Notice:</strong> All API keys are encrypted in transit. Only add Read-Only keys with no withdrawal permissions.
+        </div>
+        <div id="apiKeysContainer">
+            <p>Loading API keys...</p>
+        </div>
+        <button class="btn btn-primary" id="btnSaveApiKeys" style="margin-top: 16px;">Save API Keys</button>
+    </div>
+</div>
+<!-- END: Integrated Config Features -->
 
 <div class="card">
     <div class="settings-section">

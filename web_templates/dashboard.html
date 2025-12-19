@@ -42,6 +42,29 @@
 {% block content %}
 <h1 style="margin-bottom: 24px;">Dashboard</h1>
 
+<!-- Security Incident Warning Banner -->
+<div id="security-alert-banner" style="display: none; background: linear-gradient(135deg, #ef5350 0%, #f44336 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="flex: 1;">
+            <h2 style="margin: 0 0 10px 0; font-size: 20px;">
+                <span class="material-icons" style="vertical-align: middle; font-size: 24px;">warning</span>
+                Security Incident Detected
+            </h2>
+            <p id="alert-message" style="margin: 0 0 10px 0; opacity: 0.95;">The system has detected suspicious activity and operations may be restricted.</p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <span id="critical-count" style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600;">🔴 0 Critical</span>
+                <span id="high-count" style="background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600;">🟠 0 High</span>
+                <span id="lock-status" style="background: rgba(255,255,255,0.3); padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600; display: none;">🔒 Operations Locked</span>
+            </div>
+        </div>
+        <div>
+            <button class="btn" onclick="window.location.href='/audit-responses'" style="background: white; color: #f44336; font-weight: 600;">
+                View Incident Dashboard
+            </button>
+        </div>
+    </div>
+</div>
+
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-label">Total Transactions</div>
@@ -94,6 +117,93 @@
     <h2 class="card-title">System Status</h2>
     <div id="systemStatus">
         <p>Loading status...</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Audit System Integrity</h2>
+    <div id="auditIntegrityWidget" style="margin-top: 16px;">
+        <!-- Integrity Score Meter -->
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 8px;"><strong>System Integrity Score</strong></p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="flex: 1; height: 24px; background: #e0e0e0; border-radius: 12px; overflow: hidden;">
+                    <div id="integrityMeter" style="height: 100%; background: linear-gradient(90deg, #4caf50, #8bc34a); width: 95%; transition: width 0.3s ease;"></div>
+                </div>
+                <span id="integrityScore" style="font-weight: 700; min-width: 50px;">95%</span>
+            </div>
+            <p id="integrityStatus" style="margin-top: 8px; font-size: 0.9rem; color: #4caf50;">✓ HEALTHY</p>
+        </div>
+
+        <!-- Recent Anomalies -->
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 8px;"><strong>Recent Anomalies</strong></p>
+            <div id="recentAnomalies" style="max-height: 200px; overflow-y: auto; background: #f5f5f5; border-radius: 8px; padding: 12px;">
+                <p style="color: #999; font-size: 0.9rem;">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Last Audit Check -->
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 8px;"><strong>Last Audit Check</strong></p>
+            <p id="lastAuditCheck" style="font-size: 0.9rem; color: #666;">Never</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="runAuditBtn" style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 1rem; vertical-align: middle;">refresh</span>
+                Run Audit Check
+            </button>
+            <button class="btn btn-secondary" id="viewAuditDetailsBtn" style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 1rem; vertical-align: middle;">info</span>
+                View Details
+            </button>
+            <button class="btn btn-secondary" id="downloadAuditReportBtn" style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 1rem; vertical-align: middle;">download</span>
+                Download Report
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Audit Log Signature Verification</h2>
+    <div id="signatureVerificationWidget" style="margin-top: 16px;">
+        <!-- Verification Summary -->
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 8px;"><strong>Signature Status</strong></p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #4caf50;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #666;">Valid Signatures</p>
+                    <p id="validSignatureCount" style="margin: 8px 0 0 0; font-size: 1.5rem; font-weight: 700; color: #4caf50;">—</p>
+                </div>
+                <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #ff9800;">
+                    <p style="margin: 0; font-size: 0.85rem; color: #666;">Invalid/Missing Signatures</p>
+                    <p id="invalidSignatureCount" style="margin: 8px 0 0 0; font-size: 1.5rem; font-weight: 700; color: #ff9800;">—</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invalid Entries List -->
+        <div style="margin-bottom: 20px;">
+            <p style="margin-bottom: 8px;"><strong>⚠️ Invalid/Unsigned Entries</strong></p>
+            <div id="invalidSignatureEntries" style="max-height: 250px; overflow-y: auto; background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; padding: 12px;">
+                <p style="color: #999; font-size: 0.9rem;">Loading verification results...</p>
+            </div>
+        </div>
+
+        <!-- Verification Controls -->
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" id="verifySignaturesBtn" style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 1rem; vertical-align: middle;">verified_user</span>
+                Verify All Signatures
+            </button>
+            <button class="btn btn-secondary" id="signatureStatsBtn" style="font-size: 0.9rem;">
+                <span class="material-icons" style="font-size: 1rem; vertical-align: middle;">bar_chart</span>
+                View Statistics
+            </button>
+        </div>
     </div>
 </div>
 
@@ -397,7 +507,253 @@
             .plain-list li { padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
         .status-ok-list li { border-bottom: none; padding: 6px 0; color: var(--md-sys-color-on-surface); }
         .status-icon { font-size: 1.2em; margin-right: 8px; vertical-align: middle; }
-        loadDashboardData();
+        async function loadAuditIntegrity() {
+        try {
+            const response = await api.get('/api/audit-dashboard-data');
+            const data = JSON.parse(response.data);
+            
+            // Update integrity score meter
+            const score = data.integrity_score || 0;
+            const scorePercent = Math.round(score * 100);
+            document.getElementById('integrityScore').textContent = scorePercent + '%';
+            document.getElementById('integrityMeter').style.width = (scorePercent) + '%';
+            
+            // Update status and color based on score
+            const statusEl = document.getElementById('integrityStatus');
+            if (score >= 0.9) {
+                statusEl.innerHTML = '✓ HEALTHY';
+                statusEl.style.color = '#4caf50';
+                document.getElementById('integrityMeter').style.background = 'linear-gradient(90deg, #4caf50, #8bc34a)';
+            } else if (score >= 0.7) {
+                statusEl.innerHTML = '⚠ CONCERNS';
+                statusEl.style.color = '#ff9800';
+                document.getElementById('integrityMeter').style.background = 'linear-gradient(90deg, #ff9800, #ffc107)';
+            } else {
+                statusEl.innerHTML = '⚠️ COMPROMISED';
+                statusEl.style.color = '#f44336';
+                document.getElementById('integrityMeter').style.background = 'linear-gradient(90deg, #f44336, #e91e63)';
+            }
+            
+            // Update recent anomalies
+            const anomaliesContainer = document.getElementById('recentAnomalies');
+            if (data.anomalies && data.anomalies.length > 0) {
+                anomaliesContainer.innerHTML = data.anomalies.slice(0, 5).map(a => `
+                    <div style="padding: 8px; border-bottom: 1px solid #ddd;">
+                        <strong>${a.type || 'Unknown'}</strong> - <span style="color: ${
+                            a.severity === 'CRITICAL' ? '#f44336' : 
+                            a.severity === 'HIGH' ? '#ff9800' : '#ffc107'
+                        };">${a.severity || 'UNKNOWN'}</span>
+                        <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">${a.description || 'No details'}</div>
+                    </div>
+                `).join('');
+            } else {
+                anomaliesContainer.innerHTML = '<p style="color: #999; font-size: 0.9rem; margin: 0;">No recent anomalies detected ✓</p>';
+            }
+            
+            // Update last audit check timestamp
+            const lastCheck = data.last_check ? new Date(data.last_check).toLocaleString() : 'Never';
+            document.getElementById('lastAuditCheck').textContent = lastCheck;
+            
+            // Store data for details view
+            window.auditData = data;
+            
+        } catch (error) {
+            console.error('Error loading audit integrity:', error);
+            document.getElementById('recentAnomalies').innerHTML = '<p style="color: #f44336;">Failed to load audit data</p>';
+        }
+    }
+    
+    async function runAuditCheck() {
+        try {
+            document.getElementById('runAuditBtn').disabled = true;
+            document.getElementById('runAuditBtn').textContent = 'Running...';
+            
+            // Get recent audit logs
+            const response = await api.post('/api/audit-enhancements/detect-manipulation', {
+                logs: []  // API will handle getting recent logs
+            });
+            
+            const result = JSON.parse(response.data);
+            
+            if (result.success || result.anomalies !== undefined) {
+                showAlert('✓ Audit check complete. Anomalies found: ' + (result.anomalies.length || 0), 'success');
+                await loadAuditIntegrity();
+            } else {
+                showAlert('Failed to run audit check', 'error');
+            }
+        } catch (error) {
+            showAlert('Error running audit check: ' + error.message, 'error');
+        } finally {
+            document.getElementById('runAuditBtn').disabled = false;
+            document.getElementById('runAuditBtn').textContent = 'Run Audit Check';
+        }
+    }
+    
+    function viewAuditDetails() {
+        if (!window.auditData) {
+            showAlert('No audit data loaded', 'warning');
+            return;
+        }
+        
+        const data = window.auditData;
+        let html = `<h3 style="margin-top: 0;">Audit System Details</h3>`;
+        html += `<p><strong>Integrity Score:</strong> ${Math.round(data.integrity_score * 100)}%</p>`;
+        html += `<p><strong>Status:</strong> ${data.status}</p>`;
+        html += `<p><strong>Tampering Score:</strong> ${data.tampering_score}</p>`;
+        html += `<p><strong>Critical Anomalies:</strong> ${data.critical_anomalies}</p>`;
+        
+        if (data.anomalies && data.anomalies.length > 0) {
+            html += `<h4>All Anomalies (${data.anomalies.length})</h4><ul style="max-height: 300px; overflow-y: auto;">`;
+            for (const a of data.anomalies) {
+                html += `<li><strong>${a.type}</strong> [${a.severity}]: ${a.description}</li>`;
+            }
+            html += `</ul>`;
+        }
+        
+        showModal('Audit Details', html, [
+            {label: 'Close', onclick: closeModal}
+        ]);
+    }
+    
+    async function downloadAuditReport() {
+        try {
+            window.location.href = '/api/audit-enhancements/pdf-report?year=' + new Date().getFullYear() + '&month=' + (new Date().getMonth() + 1);
+        } catch (error) {
+            showAlert('Error downloading report: ' + error.message, 'error');
+        }
+    }
+
+    // ===== SIGNATURE VERIFICATION FUNCTIONS =====
+    
+    async function loadSignatureVerification() {
+        try {
+            const response = await api.get('/api/audit-enhancements/verify-signatures');
+            const data = JSON.parse(response.data);
+            
+            if (data.success) {
+                // Update counts
+                document.getElementById('validSignatureCount').textContent = data.valid_count || 0;
+                document.getElementById('invalidSignatureCount').textContent = data.invalid_count || 0;
+                
+                // Display invalid entries
+                const invalidList = document.getElementById('invalidSignatureEntries');
+                if (data.invalid_entries && data.invalid_entries.length > 0) {
+                    invalidList.innerHTML = data.invalid_entries.map(entry => `
+                        <div style="padding: 8px; margin-bottom: 6px; background: #fff; border-radius: 4px; border-left: 3px solid #ff9800;">
+                            <p style="margin: 0; font-size: 0.85rem; font-weight: 500;">
+                                ${entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Unknown time'}
+                            </p>
+                            <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #666;">
+                                ${entry.action || 'Unknown action'} ${entry.status ? '(' + entry.status + ')' : ''}
+                            </p>
+                            <p style="margin: 4px 0 0 0; font-size: 0.75rem; color: #f57c00; font-weight: 500;">
+                                ⚠️ ${entry.reason || 'Invalid or missing signature'}
+                            </p>
+                        </div>
+                    `).join('');
+                } else {
+                    invalidList.innerHTML = '<p style="color: #4caf50; font-size: 0.9rem; margin: 0;">✓ All entries have valid signatures</p>';
+                }
+                
+                // Show status message
+                if (data.invalid_count > 0) {
+                    showAlert(`⚠️ Found ${data.invalid_count} invalid/unsigned entries out of ${data.valid_count + data.invalid_count} total`, 'warning');
+                } else {
+                    showAlert('✓ All audit log entries have valid signatures', 'success');
+                }
+            } else {
+                showAlert('Error: ' + (data.error || 'Verification failed'), 'error');
+            }
+        } catch (error) {
+            showAlert('Failed to verify signatures: ' + error.message, 'error');
+        }
+    }
+
+    async function verifySignatures() {
+        try {
+            showAlert('Verifying all audit log signatures...', 'info');
+            await loadSignatureVerification();
+        } catch (error) {
+            showAlert('Verification error: ' + error.message, 'error');
+        }
+    }
+
+    async function showSignatureStats() {
+        try {
+            const response = await api.get('/api/audit-enhancements/signature-stats');
+            const data = JSON.parse(response.data);
+            
+            if (data.success && data.stats) {
+                const stats = data.stats;
+                const message = `
+Signature Statistics:
+- Total entries: ${stats.total_entries}
+- Valid signatures: ${stats.valid_signatures}
+- Invalid/missing: ${stats.invalid_signatures}
+- Verification rate: ${((stats.valid_signatures / stats.total_entries) * 100).toFixed(1)}%
+- Last verified: ${stats.last_verified ? new Date(stats.last_verified).toLocaleString() : 'Never'}`;
+                showAlert(message, 'info');
+            } else {
+                showAlert('Could not retrieve signature statistics', 'error');
+            }
+        } catch (error) {
+            showAlert('Error fetching statistics: ' + error.message, 'error');
+        }
+    }
+    
+    // Check for security incidents and update warning banner
+    async function checkSecurityIncidents() {
+        try {
+            const response = await api.get('/api/audit-responses/all');
+            const data = JSON.parse(response.data);
+            
+            if (data.success && data.incidents && data.incidents.length > 0) {
+                // Show warning banner
+                document.getElementById('security-alert-banner').style.display = 'block';
+                
+                // Count by severity
+                const critical = data.incidents.filter(i => i.severity === 'CRITICAL').length;
+                const high = data.incidents.filter(i => i.severity === 'HIGH').length;
+                
+                document.getElementById('critical-count').textContent = `🔴 ${critical} Critical`;
+                document.getElementById('high-count').textContent = `🟠 ${high} High`;
+                
+                // Update alert message
+                const total = data.incidents.length;
+                document.getElementById('alert-message').textContent = 
+                    `${total} security incident${total > 1 ? 's' : ''} detected. Review the incident dashboard for details.`;
+            } else {
+                // Hide warning banner if no incidents
+                document.getElementById('security-alert-banner').style.display = 'none';
+            }
+            
+            // Check lock status
+            const lockResponse = await api.get('/api/audit-responses/lock-status');
+            const lockData = JSON.parse(lockResponse.data);
+            
+            if (lockData.success && lockData.is_locked) {
+                // Show lock status
+                document.getElementById('lock-status').style.display = 'inline-block';
+                document.getElementById('security-alert-banner').style.display = 'block';
+                
+                // Update message to reflect lock
+                const lockMsg = document.getElementById('alert-message');
+                lockMsg.innerHTML = `<strong>⚠️ OPERATIONS LOCKED</strong><br>Database operations are suspended due to security incident. Reason: ${lockData.reason || 'Unknown'}`;
+            } else {
+                document.getElementById('lock-status').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Failed to check security incidents:', error);
+        }
+    }
+    
+    loadDashboardData();
+    loadAuditIntegrity();
+    loadSignatureVerification();  // Load signature status on page load
+    checkSecurityIncidents();  // Check for security incidents
+    setInterval(loadAuditIntegrity, 30000);  // Refresh audit integrity every 30 seconds
+    setInterval(loadSignatureVerification, 60000);  // Refresh signatures every 60 seconds
+    setInterval(checkSecurityIncidents, 5000);  // Check incidents every 5 seconds
         
         const btnRunTax = document.getElementById('btnRunTax');
         if (btnRunTax) btnRunTax.addEventListener('click', runTaxCalculation);
@@ -410,6 +766,21 @@
         
         const btnDownloadReports = document.getElementById('btnDownloadReports');
         if (btnDownloadReports) btnDownloadReports.addEventListener('click', () => window.location.href='/reports');
+        
+        const runAuditBtn = document.getElementById('runAuditBtn');
+        if (runAuditBtn) runAuditBtn.addEventListener('click', runAuditCheck);
+        
+        const viewAuditDetailsBtn = document.getElementById('viewAuditDetailsBtn');
+        if (viewAuditDetailsBtn) viewAuditDetailsBtn.addEventListener('click', viewAuditDetails);
+        
+        const downloadAuditReportBtn = document.getElementById('downloadAuditReportBtn');
+        if (downloadAuditReportBtn) downloadAuditReportBtn.addEventListener('click', downloadAuditReport);
+        
+        const verifySignaturesBtn = document.getElementById('verifySignaturesBtn');
+        if (verifySignaturesBtn) verifySignaturesBtn.addEventListener('click', verifySignatures);
+        
+        const signatureStatsBtn = document.getElementById('signatureStatsBtn');
+        if (signatureStatsBtn) signatureStatsBtn.addEventListener('click', showSignatureStats);
     });
 </script>
 {% endblock %}

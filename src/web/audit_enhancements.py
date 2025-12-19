@@ -38,6 +38,7 @@ class AuditAnomalyDetector:
     
     def __init__(self):
         self.baseline = {}
+        self.baseline_history = []  # Track baseline changes over time
         self.detection_methods = [
             'detect_wash_sale',
             'detect_pump_dump',
@@ -47,6 +48,7 @@ class AuditAnomalyDetector:
         ]
         self.anomalies = []
         self.tampering_score = 0.0
+        self.last_baseline_update = None
     
     def calculate_baseline(self, audit_logs: List[Dict]) -> Dict:
         """Calculate baseline patterns from audit logs for detection method calls"""
@@ -92,10 +94,123 @@ class AuditAnomalyDetector:
                         baseline['average_time_between_calls'][method] = statistics.mean(diffs)
             
             self.baseline = baseline
+            self.last_baseline_update = datetime.now()
+            
+            # Store in history for drift detection
+            self.baseline_history.append({
+                'timestamp': self.last_baseline_update.isoformat(),
+                'baseline': dict(baseline)
+            })
+            
             return baseline
         except Exception as e:
             print(f"Error calculating baseline: {e}")
             return baseline
+    
+    def auto_learn_baseline_from_history(self, days_back: int = 30, 
+                                        min_logs: int = 100) -> Dict:
+        """
+        AUTO-LEARN: Learn baseline from historical successful patterns
+        
+        Analyzes past N days of audit logs and creates adaptive baseline
+        
+        Args:
+            days_back: Number of days of history to analyze (default: 30)
+            min_logs: Minimum logs required to learn baseline (default: 100)
+        
+        Returns:
+            Dict with learning results and new baseline
+        """
+        try:
+            # Simulate reading historical logs from audit.log
+            # In production, this would read from database or file
+            historical_logs = self._get_historical_logs(days_back)
+            
+            if len(historical_logs) < min_logs:
+                return {
+                    'success': False,
+                    'reason': f'Insufficient logs ({len(historical_logs)} < {min_logs})',
+                    'logs_found': len(historical_logs)
+                }
+            
+            # Calculate baseline from historical data
+            new_baseline = self.calculate_baseline(historical_logs)
+            
+            # Calculate drift from previous baseline
+            drift = self._calculate_baseline_drift(new_baseline)
+            
+            return {
+                'success': True,
+                'logs_analyzed': len(historical_logs),
+                'baseline_updated': True,
+                'methods_monitored': len(self.detection_methods),
+                'drift_score': drift,
+                'update_timestamp': datetime.now().isoformat(),
+                'baseline': {
+                    'success_rates': new_baseline['detection_success_rate'],
+                    'method_frequencies': dict(new_baseline['method_call_frequency']),
+                    'avg_times_between_calls': dict(new_baseline['average_time_between_calls'])
+                }
+            }
+        except Exception as e:
+            print(f"Error in auto-learn baseline: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'logs_analyzed': 0
+            }
+    
+    def _get_historical_logs(self, days_back: int) -> List[Dict]:
+        """Retrieve historical audit logs from past N days"""
+        # In production, integrate with database query
+        # For now, return empty list as placeholder
+        # TODO: Integrate with actual audit log storage
+        return []
+    
+    def _calculate_baseline_drift(self, new_baseline: Dict) -> float:
+        """
+        Calculate drift (change) between current and new baseline
+        
+        Returns: drift score 0-1 (0 = no change, 1 = complete change)
+        """
+        if not self.baseline or not self.baseline.get('detection_success_rate'):
+            return 0.0
+        
+        try:
+            old_rates = self.baseline.get('detection_success_rate', {})
+            new_rates = new_baseline.get('detection_success_rate', {})
+            
+            if not old_rates:
+                return 0.0
+            
+            # Calculate average difference in success rates
+            diffs = []
+            for method in self.detection_methods:
+                old_rate = old_rates.get(method, 0.5)
+                new_rate = new_rates.get(method, 0.5)
+                diff = abs(old_rate - new_rate)
+                diffs.append(diff)
+            
+            drift = statistics.mean(diffs) if diffs else 0.0
+            return min(1.0, drift)
+        except Exception as e:
+            print(f"Error calculating drift: {e}")
+            return 0.0
+    
+    def get_baseline_statistics(self) -> Dict:
+        """Get current baseline statistics and health"""
+        if not self.baseline:
+            return {'has_baseline': False}
+        
+        return {
+            'has_baseline': True,
+            'last_updated': self.last_baseline_update.isoformat() if self.last_baseline_update else None,
+            'total_logs_in_baseline': self.baseline.get('total_logs', 0),
+            'methods_tracked': len(self.detection_methods),
+            'success_rates': self.baseline.get('detection_success_rate', {}),
+            'history_points': len(self.baseline_history),
+            'history_span': f'{self.baseline_history[0]["timestamp"] if self.baseline_history else "N/A"} to {self.baseline_history[-1]["timestamp"] if self.baseline_history else "N/A"}'
+        }
     
     def detect_manipulation(self, recent_logs: List[Dict]) -> List[Dict]:
         """
@@ -547,3 +662,178 @@ class AuditAPIRateLimiting:
             endpoint, 100
         )
         return f"{limit} per hour"
+
+# ==========================================
+# 6. ML-BASED ANOMALY DETECTION
+# ==========================================
+
+class MLAnomalyDetector:
+    """
+    ML-based anomaly detection using Isolation Forest
+    Detects subtle patterns that rule-based detection misses
+    """
+    
+    def __init__(self, contamination: float = 0.05):
+        """
+        Initialize ML detector
+        contamination: Expected proportion of anomalies (5% default)
+        """
+        try:
+            from sklearn.ensemble import IsolationForest
+            from sklearn.preprocessing import StandardScaler
+            self.IsolationForest = IsolationForest
+            self.StandardScaler = StandardScaler
+            self.model = IsolationForest(contamination=contamination, random_state=42)
+            self.scaler = StandardScaler()
+            self.is_trained = False
+            self.feature_names = []
+            self.training_history = []
+        except ImportError:
+            print("WARNING: scikit-learn not installed. ML anomaly detection disabled.")
+            self.is_trained = False
+            self.model = None
+    
+    def extract_features(self, entry: Dict) -> List[float]:
+        """
+        Extract numerical features from audit log entry
+        Returns normalized feature vector
+        """
+        try:
+            timestamp = entry.get('timestamp', '')
+            action = entry.get('action', '')
+            user = entry.get('user', '')
+            status = entry.get('status', '')
+            
+            features = []
+            
+            # Temporal features
+            hour_of_day = datetime.fromisoformat(timestamp).hour if timestamp else 0
+            features.append(float(hour_of_day))
+            
+            # Action frequency encoding
+            action_code = hash(action) % 100 if action else 0
+            features.append(float(action_code))
+            
+            # User encoding
+            user_code = hash(user) % 100 if user else 0
+            features.append(float(user_code))
+            
+            # Status encoding
+            status_map = {'SUCCESS': 1.0, 'FAILURE': 2.0, 'WARNING': 3.0, 'ERROR': 4.0}
+            features.append(float(status_map.get(status, 0.0)))
+            
+            # Additional numeric features
+            details = entry.get('details', {})
+            if isinstance(details, dict):
+                features.append(float(len(details)))  # Details dict size
+                features.append(float(details.get('transaction_count', 0)))
+                features.append(float(details.get('anomaly_count', 0)))
+            else:
+                features.extend([0.0, 0.0, 0.0])
+            
+            return features
+        except Exception as e:
+            print(f"Error extracting features: {e}")
+            return [0.0] * 7
+    
+    def train_model(self, log_entries: List[Dict]) -> Dict:
+        """
+        Train ML model on historical audit logs
+        Returns training summary
+        """
+        if not self.model:
+            return {'success': False, 'message': 'ML model not available'}
+        
+        try:
+            # Extract features from all entries
+            features_list = []
+            for entry in log_entries:
+                features = self.extract_features(entry)
+                features_list.append(features)
+            
+            if len(features_list) < 10:
+                return {
+                    'success': False,
+                    'message': f'Need at least 10 samples to train. Got {len(features_list)}'
+                }
+            
+            # Convert to numpy array and normalize
+            import numpy as np
+            X = np.array(features_list)
+            X_scaled = self.scaler.fit_transform(X)
+            
+            # Train model
+            self.model.fit(X_scaled)
+            self.is_trained = True
+            self.feature_names = ['hour', 'action', 'user', 'status', 'details_size', 'tx_count', 'anomaly_count']
+            
+            # Store training info
+            self.training_history.append({
+                'timestamp': datetime.now().isoformat(),
+                'samples': len(features_list),
+                'features': self.feature_names
+            })
+            
+            return {
+                'success': True,
+                'samples_used': len(features_list),
+                'features': self.feature_names,
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {'success': False, 'message': f'Training failed: {str(e)}'}
+    
+    def detect_anomalies(self, entries: List[Dict]) -> List[Dict]:
+        """
+        Detect anomalies in audit log entries using trained ML model
+        Returns list of flagged anomalies with ML scores
+        """
+        if not self.is_trained or not self.model:
+            return []
+        
+        try:
+            import numpy as np
+            
+            anomalies = []
+            features_list = []
+            
+            # Extract features from entries
+            for entry in entries:
+                features = self.extract_features(entry)
+                features_list.append((features, entry))
+            
+            if not features_list:
+                return []
+            
+            # Normalize and predict
+            X = np.array([f[0] for f in features_list])
+            X_scaled = self.scaler.transform(X)
+            predictions = self.model.predict(X_scaled)
+            scores = self.model.score_samples(X_scaled)
+            
+            # Collect anomalies (predictions == -1)
+            for i, (features, entry) in enumerate(features_list):
+                if predictions[i] == -1:  # Anomaly
+                    anomalies.append({
+                        'timestamp': entry.get('timestamp'),
+                        'action': entry.get('action'),
+                        'user': entry.get('user'),
+                        'ml_score': float(scores[i]),  # Lower = more anomalous
+                        'severity': 'HIGH' if scores[i] < -1.0 else 'MEDIUM',
+                        'type': 'ML_DETECTED_ANOMALY'
+                    })
+            
+            return anomalies
+        except Exception as e:
+            print(f"Error in ML detection: {e}")
+            return []
+    
+    def get_model_info(self) -> Dict:
+        """Get information about the trained model"""
+        return {
+            'is_trained': self.is_trained,
+            'feature_names': self.feature_names,
+            'training_samples': len(self.training_history),
+            'last_trained': self.training_history[-1]['timestamp'] if self.training_history else None,
+            'training_history': self.training_history[-5:]  # Last 5 trainings
+        }

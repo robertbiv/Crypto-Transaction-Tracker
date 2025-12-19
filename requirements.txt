@@ -52,6 +52,7 @@ yarl==1.22.0                           # URL manipulation | https://github.com/a
 
 # Data Science
 numpy==2.2.6                           # Numerical computing | https://numpy.org
+scikit-learn==1.6.1                    # ML library for anomaly detection | https://scikit-learn.org
 
 # Web Server & UI
 Flask==3.1.2                           # Web framework | https://flask.palletsprojects.com
