@@ -224,14 +224,14 @@ def cmd_export(args):
 
 def main():
     """Main CLI entry point"""
-        parser = argparse.ArgumentParser(
-                description='Crypto Transaction Tracker - Self-Hosted Activity Suite',
+    parser = argparse.ArgumentParser(
+        description='Crypto Transaction Tracker - Self-Hosted Activity Suite',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
   %(prog)s setup              # Run initial setup wizard
-    %(prog)s run                # Process current-year activity
-    %(prog)s run --cascade      # Process all years
+  %(prog)s run                # Process current-year activity
+  %(prog)s run --cascade      # Process all years
   %(prog)s review             # Review and fix audit warnings
   %(prog)s review 2024        # Review specific year
   %(prog)s web                # Start web UI
