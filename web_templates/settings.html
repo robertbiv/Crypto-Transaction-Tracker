@@ -67,6 +67,58 @@
 </style>
 {% endblock %}
 
+        /* --- Mobile Responsive Enhancements --- */
+        @media (max-width: 700px) {
+            body, html {
+                font-size: 15px;
+            }
+            .card {
+                padding: 10px 4vw;
+                margin: 10px 0;
+                border-radius: 10px;
+            }
+            .settings-section h3 {
+                font-size: 1.1em;
+            }
+            .form-group, .wallet-entry, .api-key-section {
+                flex-direction: column !important;
+                display: flex !important;
+                gap: 8px !important;
+            }
+            .wallet-entry {
+                grid-template-columns: 1fr !important;
+            }
+            .btn, button, input, select, label {
+                font-size: 1em !important;
+            }
+            .btn {
+                width: 100%;
+                margin: 6px 0 !important;
+            }
+            input, select {
+                width: 100% !important;
+                min-width: 0 !important;
+            }
+            .danger-zone {
+                padding: 10px;
+            }
+            .security-warning {
+                padding: 10px;
+            }
+            .form-label {
+                margin-bottom: 2px;
+            }
+            .settings-section {
+                margin-bottom: 18px;
+            }
+            h1, h3, h4 {
+                font-size: 1.1em;
+            }
+            .material-icons {
+                font-size: 1.2em !important;
+            }
+        }
+
 {% block content %}
 <h1 style="margin-bottom: 24px;">Settings</h1>
 <!-- BEGIN: Integrated Config Features -->
