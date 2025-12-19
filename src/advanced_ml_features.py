@@ -5,10 +5,13 @@ Includes: Fraud Detection, Smart Descriptions, DeFi Classification, AML, Pattern
 
 import json
 import hashlib
+from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
+from src.decimal_utils import to_decimal
+from src.decimal_utils import to_decimal
 
 
 class FraudDetector:
@@ -72,7 +75,7 @@ class FraudDetector:
         for coin, txs in by_coin.items():
             for i, tx in enumerate(txs):
                 if tx.get('action') == 'BUY':
-                    buy_price = float(tx.get('price_usd', 0))
+                    buy_price = to_decimal(tx.get('price_usd', 0))
                     if buy_price == 0:
                         continue
                     
@@ -80,20 +83,21 @@ class FraudDetector:
                     for j in range(i + 1, min(i + 5, len(txs))):
                         next_tx = txs[j]
                         if next_tx.get('action') == 'SELL':
-                            sell_price = float(next_tx.get('price_usd', 0))
+                            sell_price = to_decimal(next_tx.get('price_usd', 0))
                             if sell_price == 0:
                                 continue
                             
                             price_change = abs(sell_price - buy_price) / buy_price
-                            if price_change > self.pump_dump_threshold:
+                            if price_change > Decimal(str(self.pump_dump_threshold)):
+                                price_change_pct = (price_change * Decimal(100)).quantize(Decimal('0.01'))
                                 alerts.append({
                                     'type': 'pump_dump',
                                     'coin': coin,
                                     'buy_id': tx['id'],
                                     'sell_id': next_tx['id'],
-                                    'price_change_pct': round(price_change * 100, 2),
+                                    'price_change_pct': float(price_change_pct),
                                     'severity': 'medium',
-                                    'message': f'{coin} {price_change*100:.1f}% price change between buy and sell'
+                                    'message': f'{coin} {price_change_pct}% price change between buy and sell'
                                 })
         
         return alerts
@@ -109,24 +113,25 @@ class FraudDetector:
                 by_coin[coin].append(tx)
         
         for coin, txs in by_coin.items():
-            amounts = [float(t.get('amount', 0)) for t in txs if t.get('amount')]
+            amounts = [to_decimal(t.get('amount', 0)) for t in txs if t.get('amount')]
             if not amounts:
                 continue
             
             avg_amount = sum(amounts) / len(amounts)
             
             for tx in txs:
-                amount = float(tx.get('amount', 0))
-                if amount > 0 and amount > (avg_amount * self.suspicious_volume_threshold):
+                amount = to_decimal(tx.get('amount', 0))
+                if amount > 0 and amount > (avg_amount * Decimal(str(self.suspicious_volume_threshold))):
+                    multiplier = (amount / avg_amount) if avg_amount else Decimal(0)
                     alerts.append({
                         'type': 'suspicious_volume',
                         'coin': coin,
                         'tx_id': tx['id'],
-                        'amount': amount,
-                        'avg_amount': round(avg_amount, 8),
-                        'multiplier': round(amount / avg_amount, 1),
+                        'amount': float(amount),
+                        'avg_amount': float(avg_amount),
+                        'multiplier': float(multiplier.quantize(Decimal('0.1'))),
                         'severity': 'low',
-                        'message': f'Large {coin} transaction: {amount} ({round(amount/avg_amount)}x average)'
+                        'message': f'Large {coin} transaction: {amount} ({round(float(multiplier))}x average)'
                     })
         
         return alerts
@@ -150,8 +155,10 @@ class SmartDescriptionGenerator:
         """Generate smart description from transaction data"""
         action = tx.get('action', 'UNKNOWN').upper()
         coin = tx.get('coin', '').upper()
-        amount = tx.get('amount', 0)
-        price = tx.get('price_usd', 0)
+        amount_raw = tx.get('amount', 0)
+        price_raw = tx.get('price_usd', 0)
+        amount = to_decimal(amount_raw)
+        price = to_decimal(price_raw)
         source = tx.get('source', '').lower()
         description = tx.get('description', '').lower()
         
@@ -211,17 +218,18 @@ class DeFiClassifier:
     
     def flag_high_fees(self, tx: Dict) -> Optional[Dict]:
         """Flag unusually high gas/swap fees"""
-        fee = float(tx.get('fee', 0))
-        total_value = float(tx.get('price_usd', 0)) * float(tx.get('amount', 1))
+        fee = to_decimal(tx.get('fee', 0))
+        total_value = to_decimal(tx.get('price_usd', 0)) * to_decimal(tx.get('amount', 1))
         
         if total_value > 0:
-            fee_pct = (fee / total_value) * 100
-            if fee_pct > 5:  # Flag if > 5%
+            fee_pct = (fee / total_value) * Decimal(100)
+            if fee_pct > Decimal(5):  # Flag if > 5%
+                fee_pct_rounded = fee_pct.quantize(Decimal('0.01'))
                 return {
                     'type': 'high_fee',
-                    'fee': fee,
-                    'fee_pct': round(fee_pct, 2),
-                    'message': f'High fee: {fee_pct:.1f}% of transaction value'
+                    'fee': float(fee),
+                    'fee_pct': float(fee_pct_rounded),
+                    'message': f'High fee: {fee_pct_rounded}% of transaction value'
                 }
         
         return None
@@ -246,10 +254,10 @@ class PatternLearner:
             pattern = self.patterns[key]
             
             pattern['count'] += 1
-            amount = float(tx.get('amount', 0))
+            amount = to_decimal(tx.get('amount', 0))
             pattern['avg_amount'] = (pattern['avg_amount'] * (pattern['count'] - 1) + amount) / pattern['count']
             
-            price = float(tx.get('price_usd', 0))
+            price = to_decimal(tx.get('price_usd', 0))
             if price > 0:
                 pattern['avg_price'] = (pattern['avg_price'] * (pattern['count'] - 1) + price) / pattern['count']
             
@@ -265,7 +273,7 @@ class PatternLearner:
             return alerts
         
         pattern = self.patterns[key]
-        amount = float(tx.get('amount', 0))
+        amount = to_decimal(tx.get('amount', 0))
         
         # Flag if amount is 3x average
         if pattern['avg_amount'] > 0 and amount > (pattern['avg_amount'] * 3):
@@ -302,21 +310,22 @@ class AMLDetector:
             by_group[key].append(tx)
         
         for key, txs in by_group.items():
-            total_value = sum(float(t.get('price_usd', 0)) * float(t.get('amount', 1)) for t in txs)
+            total_value = sum(to_decimal(t.get('price_usd', 0)) * to_decimal(t.get('amount', 1)) for t in txs)
             
             # Flag if total is above threshold but individual txs are small
-            if total_value > threshold:
-                max_single = max(float(t.get('price_usd', 0)) * float(t.get('amount', 1)) for t in txs)
+            if total_value > Decimal(str(threshold)):
+                max_single = max(to_decimal(t.get('price_usd', 0)) * to_decimal(t.get('amount', 1)) for t in txs)
                 avg_single = total_value / len(txs)
                 
-                if max_single < (total_value * 0.3):  # No single tx is > 30% of total
+                if max_single < (total_value * Decimal('0.3')):  # No single tx is > 30% of total
+                    total_value_rounded = total_value.quantize(Decimal('0.01'))
                     alerts.append({
                         'type': 'structuring',
-                        'total_value': round(total_value, 2),
+                        'total_value': float(total_value_rounded),
                         'num_transactions': len(txs),
                         'days': days,
                         'severity': 'high',
-                        'message': f'Structuring alert: ${total_value:,.0f} split across {len(txs)} txs in {days} days'
+                        'message': f'Structuring alert: ${total_value_rounded:,.0f} split across {len(txs)} txs in {days} days'
                     })
         
         return alerts
@@ -401,7 +410,7 @@ class NaturalLanguageSearch:
         # Extract min/max
         amount_match = re.search(r'(largest|biggest|most|over)\s+(\d+(?:\.\d+)?)', query)
         if amount_match:
-            filters['min_amount'] = float(amount_match.group(2))
+            filters['min_amount'] = to_decimal(amount_match.group(2))
         
         return filters
     
@@ -421,11 +430,11 @@ class NaturalLanguageSearch:
             results = [t for t in results if t.get('date', '').startswith(str(year))]
         
         if 'min_amount' in filters:
-            results = [t for t in results if float(t.get('amount', 0)) >= filters['min_amount']]
+            results = [t for t in results if to_decimal(t.get('amount', 0)) >= filters['min_amount']]
         
         # Sort by price descending if asking for largest
         if 'largest' in query.lower() or 'biggest' in query.lower():
-            results.sort(key=lambda t: float(t.get('price_usd', 0)) * float(t.get('amount', 1)), reverse=True)
+            results.sort(key=lambda t: to_decimal(t.get('price_usd', 0)) * to_decimal(t.get('amount', 1)), reverse=True)
         
         return results
 

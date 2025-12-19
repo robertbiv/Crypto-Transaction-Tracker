@@ -32,6 +32,7 @@ from advanced_ml_features_accurate import (
     SmartDescriptionGeneratorAccurate,
     PatternLearnerAccurate
 )
+from anomaly_detector import AnomalyDetector
 
 
 # ============================================================================
@@ -93,7 +94,8 @@ def all_features():
     return {
         'fraud_detector': FraudDetectorAccurate(),
         'description_gen': SmartDescriptionGeneratorAccurate(),
-        'pattern_learner': PatternLearnerAccurate()
+        'pattern_learner': PatternLearnerAccurate(),
+        'anomaly_detector': AnomalyDetector()
     }
 
 
@@ -152,7 +154,7 @@ class TestEndToEndPipelines:
         # Create batch of transactions
         transactions = [
             {
-                'date': f'2024-06-{01+i}',
+                'date': f'2024-06-{1 + i:02d}',
                 'action': 'buy' if i % 2 == 0 else 'sell',
                 'coin': ['BTC', 'ETH', 'ADA'][i % 3],
                 'amount': 0.5 + (i % 10) * 0.1,
@@ -196,7 +198,7 @@ class TestEndToEndPipelines:
                 'amount': 0.5 + (i * 0.01),
                 'price_usd': 45000 + (i * 50),
                 'source': 'binance',
-                'date': f'2024-06-{01+i}'
+                'date': f'2024-06-{1 + i:02d}'
             }
             for i in range(25)  # Enough for pattern learning
         ]
