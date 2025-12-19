@@ -277,6 +277,20 @@ def main():
                 "storage": "5GB free for model cache",
                 "execution": "Local - All data stays on your machine"
             }
+        },
+        "anomaly_detection": {
+            "_INSTRUCTIONS": "Configure anomaly detection sensitivity for AI-powered transaction analysis. Adjust thresholds to tune sensitivity. Higher values = less sensitive (fewer warnings). Lower values = more sensitive (more warnings). Recommended defaults work for most users.",
+            "enabled": True,
+            "price_error_threshold": 0.20,
+            "_price_error_threshold_INFO": "Maximum price deviation (0.0-1.0) from market price before warning. Default: 0.20 (20%). Adjustable range: 0.05 (5% strict) to 0.50 (50% lenient).",
+            "extreme_value_threshold": 3.0,
+            "_extreme_value_threshold_INFO": "Statistical outlier threshold in standard deviations. Default: 3.0. Adjustable range: 2.0 (stricter) to 5.0 (more lenient).",
+            "dust_threshold_usd": 0.10,
+            "_dust_threshold_usd_INFO": "Minimum transaction value in USD to flag dust attacks. Default: $0.10. Adjustable range: $0.01 to $1.00.",
+            "pattern_deviation_multiplier": 2.5,
+            "_pattern_deviation_multiplier_INFO": "Pattern learning sensitivity. How many times above learned patterns triggers alert. Default: 2.5x. Adjustable range: 1.5x (stricter) to 4.0x (more lenient).",
+            "min_transactions_for_learning": 20,
+            "_min_transactions_for_learning_INFO": "Minimum transactions needed before pattern learning activates. Default: 20. Adjustable range: 10 to 100."
         }
     }
     validate_json(CONFIG_FILE, config_data)

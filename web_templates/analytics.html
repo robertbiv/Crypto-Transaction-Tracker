@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}AI Analytics Dashboard - Crypto Tax Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .analytics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 24px;
+    }
+    
+    .analytics-card {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .analytics-card h3 {
+        margin-top: 0;
+        color: var(--md-sys-color-primary);
+        border-bottom: 2px solid var(--md-sys-color-primary);
+        padding-bottom: 12px;
+    }
+    
+    .anomaly-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .anomaly-item {
+        padding: 12px;
+        margin: 8px 0;
+        border-left: 4px solid;
+        background: #f5f5f5;
+        border-radius: 4px;
+    }
+    
+    .anomaly-item.high-severity {
+        border-left-color: #d32f2f;
+        background: #ffebee;
+    }
+    
+    .anomaly-item.medium-severity {
+        border-left-color: #f57c00;
+        background: #fff3e0;
+    }
+    
+    .anomaly-item.low-severity {
+        border-left-color: #fbc02d;
+        background: #fffde7;
+    }
+    
+    .pattern-item {
+        padding: 12px;
+        margin: 8px 0;
+        background: #e3f2fd;
+        border-radius: 4px;
+        border-left: 4px solid #1976d2;
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--md-sys-color-primary);
+    }
+    
+    .loading-spinner {
+        text-align: center;
+        padding: 40px;
+    }
+    
+    .export-btn {
+        margin-top: 16px;
+    }
+    
+    .severity-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .severity-high {
+        background: #d32f2f;
+        color: white;
+    }
+    
+    .severity-medium {
+        background: #f57c00;
+        color: white;
+    }
+    
+    .severity-low {
+        background: #fbc02d;
+        color: #333;
+    }
+    
+    .chart-container {
+        height: 300px;
+        margin: 20px 0;
+    }
+    
+    .nlp-search-box {
+        margin-bottom: 24px;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        color: white;
+    }
+    
+    .nlp-search-input {
+        width: 100%;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        margin-top: 12px;
+    }
+    
+    .nlp-search-results {
+        margin-top: 12px;
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 24px;">AI Analytics Dashboard</h1>
+
+<!-- NLP Search Interface -->
+<div class="nlp-search-box">
+    <h3 style="margin: 0;">🔍 Natural Language Search</h3>
+    <p style="margin: 8px 0; opacity: 0.9;">Ask about your transactions in plain English</p>
+    <input type="text" id="nlpSearchInput" class="nlp-search-input" 
+           placeholder="e.g., 'Show all BTC buys in 2024' or 'Large ETH transactions over $10,000'">
+    <div id="nlpSearchResults" class="nlp-search-results" style="display: none;"></div>
+</div>
+
+<!-- Summary Stats -->
+<div class="analytics-grid">
+    <div class="analytics-card">
+        <h3>📊 Summary</h3>
+        <div class="stat-number" id="totalAnomalies">-</div>
+        <div>Total Anomalies Detected</div>
+        <div style="margin-top: 16px;">
+            <div><span class="severity-badge severity-high" id="highCount">0</span> High Severity</div>
+            <div style="margin-top: 8px;"><span class="severity-badge severity-medium" id="mediumCount">0</span> Medium Severity</div>
+            <div style="margin-top: 8px;"><span class="severity-badge severity-low" id="lowCount">0</span> Low Severity</div>
+        </div>
+        <button class="btn btn-primary export-btn" onclick="exportAnomalyReport()">
+            📥 Export Anomaly Report
+        </button>
+    </div>
+    
+    <div class="analytics-card">
+        <h3>🧠 Learned Patterns</h3>
+        <div class="stat-number" id="patternCount">-</div>
+        <div>Transaction Patterns Identified</div>
+        <button class="btn btn-secondary export-btn" onclick="exportPatterns()">
+            📥 Export Patterns
+        </button>
+    </div>
+    
+    <div class="analytics-card">
+        <h3>🚨 Fraud Alerts</h3>
+        <div class="stat-number" id="fraudCount">-</div>
+        <div>Potential Fraud Detected</div>
+        <div id="fraudTypes" style="margin-top: 16px; font-size: 0.9rem;"></div>
+    </div>
+</div>
+
+<!-- Detailed Anomalies -->
+<div class="analytics-card">
+    <h3>⚠️ Detected Anomalies</h3>
+    <div id="anomaliesLoading" class="loading-spinner">
+        <div>Loading anomaly data...</div>
+    </div>
+    <div id="anomaliesList" class="anomaly-list" style="display: none;"></div>
+</div>
+
+<!-- Fraud Detection Details -->
+<div class="analytics-card" style="margin-top: 20px;">
+    <h3>🔍 Fraud Detection Details</h3>
+    <div id="fraudLoading" class="loading-spinner">
+        <div>Running fraud detection...</div>
+    </div>
+    <div id="fraudDetails" style="display: none;"></div>
+</div>
+
+<!-- Pattern Learning -->
+<div class="analytics-card" style="margin-top: 20px;">
+    <h3>📈 Pattern Analysis</h3>
+    <div id="patternLoading" class="loading-spinner">
+        <div>Analyzing patterns...</div>
+    </div>
+    <div id="patternDetails" style="display: none;"></div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+let allAnomalies = [];
+let allPatterns = [];
+
+async function loadAnalytics() {
+    try {
+        // Load bulk anomaly report
+        const anomalyResponse = await fetch('/api/advanced/bulk-anomaly-report', {
+            headers: {
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            }
+        });
+        
+        if (anomalyResponse.ok) {
+            const anomalyData = await anomalyResponse.json();
+            allAnomalies = anomalyData.anomalies || [];
+            displayAnomalies(anomalyData);
+        }
+        
+        // Load patterns
+        const patternResponse = await fetch('/api/advanced/export-patterns', {
+            headers: {
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            }
+        });
+        
+        if (patternResponse.ok) {
+            const patternData = await patternResponse.json();
+            allPatterns = patternData.patterns || [];
+            displayPatterns(patternData);
+        }
+        
+        // Load fraud detection
+        const fraudResponse = await fetch('/api/advanced/fraud-detection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            }
+        });
+        
+        if (fraudResponse.ok) {
+            const fraudData = await fraudResponse.json();
+            displayFraudDetails(fraudData);
+        }
+        
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+        document.getElementById('anomaliesLoading').innerHTML = '<div style="color: red;">Error loading data: ' + error.message + '</div>';
+    }
+}
+
+function displayAnomalies(data) {
+    document.getElementById('anomaliesLoading').style.display = 'none';
+    document.getElementById('anomaliesList').style.display = 'block';
+    
+    document.getElementById('totalAnomalies').textContent = data.total_anomalies || 0;
+    document.getElementById('highCount').textContent = data.summary?.high_severity || 0;
+    document.getElementById('mediumCount').textContent = data.summary?.medium_severity || 0;
+    document.getElementById('lowCount').textContent = data.summary?.low_severity || 0;
+    document.getElementById('fraudCount').textContent = data.summary?.fraud_alerts || 0;
+    
+    const anomaliesList = document.getElementById('anomaliesList');
+    anomaliesList.innerHTML = '';
+    
+    if (data.anomalies.length === 0) {
+        anomaliesList.innerHTML = '<div style="text-align: center; padding: 20px; color: #4caf50;">✅ No anomalies detected! Your transactions look good.</div>';
+        return;
+    }
+    
+    // Group by severity
+    const high = data.anomalies.filter(a => a.severity === 'high');
+    const medium = data.anomalies.filter(a => a.severity === 'medium');
+    const low = data.anomalies.filter(a => a.severity === 'low');
+    
+    [high, medium, low].forEach(group => {
+        group.slice(0, 20).forEach(anomaly => {
+            const item = document.createElement('div');
+            item.className = `anomaly-item ${anomaly.severity}-severity`;
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${anomaly.coin || 'Unknown'}</strong> 
+                        <span class="severity-badge severity-${anomaly.severity}">${anomaly.severity}</span>
+                    </div>
+                    <div style="font-size: 0.85rem; opacity: 0.8;">${anomaly.date || ''}</div>
+                </div>
+                <div style="margin-top: 8px;">${anomaly.message || 'No message'}</div>
+                <div style="margin-top: 4px; font-size: 0.85rem; opacity: 0.7;">
+                    Type: ${anomaly.type} | Category: ${anomaly.category}
+                </div>
+            `;
+            anomaliesList.appendChild(item);
+        });
+    });
+    
+    if (data.anomalies.length > 20) {
+        const moreNote = document.createElement('div');
+        moreNote.style.textAlign = 'center';
+        moreNote.style.padding = '12px';
+        moreNote.style.fontStyle = 'italic';
+        moreNote.innerHTML = `Showing 20 of ${data.anomalies.length} anomalies. Export for full report.`;
+        anomaliesList.appendChild(moreNote);
+    }
+}
+
+function displayPatterns(data) {
+    document.getElementById('patternLoading').style.display = 'none';
+    document.getElementById('patternDetails').style.display = 'block';
+    
+    document.getElementById('patternCount').textContent = data.pattern_count || 0;
+    
+    const patternDetails = document.getElementById('patternDetails');
+    patternDetails.innerHTML = '';
+    
+    if (data.patterns.length === 0) {
+        patternDetails.innerHTML = '<div style="text-align: center; padding: 20px;">No patterns learned yet. Add more transactions to build patterns.</div>';
+        return;
+    }
+    
+    data.patterns.slice(0, 10).forEach(pattern => {
+        const item = document.createElement('div');
+        item.className = 'pattern-item';
+        item.innerHTML = `
+            <div><strong>${pattern.action} ${pattern.coin}</strong></div>
+            <div style="margin-top: 8px; font-size: 0.9rem;">
+                📊 ${pattern.transaction_count} transactions
+                | 💰 Avg: ${pattern.average_amount.toFixed(4)} ${pattern.coin}
+                | 💵 Avg Price: $${pattern.average_price_usd.toFixed(2)}
+            </div>
+            <div style="margin-top: 4px; font-size: 0.85rem; opacity: 0.7;">
+                Sources: ${Object.keys(pattern.common_sources).join(', ') || 'Various'}
+            </div>
+        `;
+        patternDetails.appendChild(item);
+    });
+}
+
+function displayFraudDetails(data) {
+    document.getElementById('fraudLoading').style.display = 'none';
+    document.getElementById('fraudDetails').style.display = 'block';
+    
+    const fraudDetails = document.getElementById('fraudDetails');
+    const fraudTypes = document.getElementById('fraudTypes');
+    
+    const washSales = data.wash_sales || [];
+    const pumpDumps = data.pump_dumps || [];
+    const suspiciousVolumes = data.suspicious_volumes || [];
+    
+    fraudTypes.innerHTML = `
+        <div>🔄 ${washSales.length} Wash Sales</div>
+        <div>📈 ${pumpDumps.length} Pump & Dumps</div>
+        <div>📊 ${suspiciousVolumes.length} Suspicious Volumes</div>
+    `;
+    
+    fraudDetails.innerHTML = '';
+    
+    if (washSales.length === 0 && pumpDumps.length === 0 && suspiciousVolumes.length === 0) {
+        fraudDetails.innerHTML = '<div style="text-align: center; padding: 20px; color: #4caf50;">✅ No fraud patterns detected!</div>';
+        return;
+    }
+    
+    [...washSales, ...pumpDumps, ...suspiciousVolumes].forEach(alert => {
+        const item = document.createElement('div');
+        item.className = 'anomaly-item high-severity';
+        item.innerHTML = `
+            <div><strong>${alert.type || 'Fraud Alert'}</strong> - ${alert.coin}</div>
+            <div style="margin-top: 8px;">${alert.message}</div>
+            <div style="margin-top: 4px; font-size: 0.85rem; opacity: 0.7;">
+                Severity: ${alert.severity}
+            </div>
+        `;
+        fraudDetails.appendChild(item);
+    });
+}
+
+async function exportAnomalyReport() {
+    const csvContent = 'data:text/csv;charset=utf-8,' + 
+        'Transaction ID,Date,Coin,Amount,Type,Severity,Message,Category\n' +
+        allAnomalies.map(a => 
+            `"${a.tx_id}","${a.date}","${a.coin}","${a.amount}","${a.type}","${a.severity}","${a.message}","${a.category}"`
+        ).join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `anomaly_report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+async function exportPatterns() {
+    const csvContent = 'data:text/csv;charset=utf-8,' + 
+        'Action,Coin,Transaction Count,Average Amount,Average Price USD,Common Sources\n' +
+        allPatterns.map(p => 
+            `"${p.action}","${p.coin}","${p.transaction_count}","${p.average_amount}","${p.average_price_usd}","${Object.keys(p.common_sources).join(', ')}"`
+        ).join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `patterns_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// NLP Search
+document.getElementById('nlpSearchInput').addEventListener('keypress', async function(e) {
+    if (e.key === 'Enter') {
+        const query = this.value.trim();
+        if (!query) return;
+        
+        const resultsDiv = document.getElementById('nlpSearchResults');
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = '<div style="padding: 12px;">Searching...</div>';
+        
+        try {
+            const response = await fetch('/api/advanced/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ query })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                displaySearchResults(data);
+            } else {
+                resultsDiv.innerHTML = '<div style="padding: 12px; color: red;">Search failed. Please try again.</div>';
+            }
+        } catch (error) {
+            resultsDiv.innerHTML = '<div style="padding: 12px; color: red;">Error: ' + error.message + '</div>';
+        }
+    }
+});
+
+function displaySearchResults(data) {
+    const resultsDiv = document.getElementById('nlpSearchResults');
+    
+    if (data.results.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding: 12px;">No transactions match your query.</div>';
+        return;
+    }
+    
+    resultsDiv.innerHTML = `
+        <div style="padding: 12px; border-bottom: 1px solid #e0e0e0;">
+            <strong>Found ${data.result_count} transaction(s)</strong>
+        </div>
+    `;
+    
+    data.results.slice(0, 10).forEach(tx => {
+        const item = document.createElement('div');
+        item.style.padding = '12px';
+        item.style.borderBottom = '1px solid #f0f0f0';
+        item.innerHTML = `
+            <div style="display: flex; justify-content: space-between;">
+                <div>
+                    <strong>${tx.action || 'UNKNOWN'}</strong> ${tx.amount || 0} ${tx.coin || ''}
+                </div>
+                <div style="opacity: 0.7;">${tx.date || ''}</div>
+            </div>
+            <div style="margin-top: 4px; font-size: 0.9rem; opacity: 0.7;">
+                ${tx.source || 'Manual'} | $${(parseFloat(tx.price_usd) * parseFloat(tx.amount)).toFixed(2)}
+            </div>
+        `;
+        resultsDiv.appendChild(item);
+    });
+    
+    if (data.result_count > 10) {
+        const moreNote = document.createElement('div');
+        moreNote.style.padding = '12px';
+        moreNote.style.textAlign = 'center';
+        moreNote.style.fontStyle = 'italic';
+        moreNote.textContent = `Showing 10 of ${data.result_count} results`;
+        resultsDiv.appendChild(moreNote);
+    }
+}
+
+// Load analytics on page load
+document.addEventListener('DOMContentLoaded', loadAnalytics);
+</script>
+{% endblock %}
