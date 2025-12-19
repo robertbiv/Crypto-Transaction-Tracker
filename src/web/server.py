@@ -4302,6 +4302,20 @@ def api_test_schedule():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def register_audit_endpoints():
+    """Register audit log API endpoints as optional enhancements"""
+    try:
+        from src.web.audit_endpoints import create_audit_endpoints
+        create_audit_endpoints(app, BASE_DIR)
+        print("✓ Audit log endpoints registered")
+        print("  - /api/audit-logs/download (CSV export)")
+        print("  - /api/audit-logs/summary (statistics)")
+        print("  - /api/audit-logs/events (paginated events)")
+        print("  - /api/audit-logs/compliance-report (monthly reports)")
+        print("  - /api/audit-logs/dashboard-data (visualization)\n")
+    except Exception as e:
+        print(f"⚠️  Could not register audit endpoints: {e}\n")
+
 def main():
     """Start the web server"""
     global scheduler
@@ -4393,6 +4407,9 @@ def main():
 
     t = threading.Thread(target=_auto_backup_worker, daemon=True)
     t.start()
+    
+    # Register optional audit log endpoints
+    register_audit_endpoints()
     
     # Generate SSL certificate
     cert_file, key_file = generate_self_signed_cert()
