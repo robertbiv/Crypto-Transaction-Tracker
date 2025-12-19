@@ -1426,6 +1426,12 @@ def schedule_page():
     """Schedule page"""
     return render_template('schedule.html')
 
+@app.route('/analytics')
+@login_required
+def analytics_page():
+    """Analytics dashboard with AI insights"""
+    return render_template('analytics.html')
+
 # ==========================================
 # API ROUTES - TRANSACTIONS
 # ==========================================
@@ -1499,17 +1505,50 @@ def api_create_transaction():
     except (json.JSONDecodeError, TypeError, ValueError):
         return jsonify({'error': 'Invalid data format'}), 400
     
-    required_fields = ['date', 'action', 'coin', 'amount']
+    required_fields = ['date', 'coin', 'amount']
     for field in required_fields:
         if field not in data or not data[field]:
             return jsonify({'error': f'Missing required field: {field}'}), 400
-            
+
+    # --- AI/ML Categorization and Anomaly Detection ---
+    from src.ml_service import MLService
+    from src.anomaly_detector import AnomalyDetector
+    from src.advanced_ml_features import FraudDetector, PatternLearner
+    ml = MLService()
+    anomaly = AnomalyDetector()
+    fraud = FraudDetector()
+    pattern = PatternLearner()
+
+    # Auto-categorize if action is missing or unknown
+    action = data.get('action', '').upper()
+    needs_user_category = False
+    suggestion = None
+    if not action or action not in ['BUY','SELL','DEPOSIT','WITHDRAWAL','FEE','INCOME','TRANSFER','TRADE']:
+        ml_suggestion = ml.suggest(data)
+        suggestion = ml_suggestion.get('suggested_label','TRANSFER')
+        data['action'] = None  # Mark as needing user input
+        needs_user_category = True
+
+    # Run anomaly detection
+    anomaly_results = anomaly.scan_row(data)
+    # (Pattern learning and fraud detection would need transaction history; skipped for single add)
+
+    # If user category is needed, add to warnings and do not insert yet
+    if needs_user_category:
+        warning = {
+            'type': 'uncategorized',
+            'message': f"Transaction could not be auto-categorized. Suggested: {suggestion}",
+            'suggestion': suggestion,
+            'transaction': data,
+            'anomalies': anomaly_results
+        }
+        # Store warning for user review (could append to a warnings DB or return directly)
+        return jsonify({'status': 'warning', 'warning': warning, 'message': 'Transaction needs categorization by user.'}), 200
+
     conn = get_db_connection()
-    
     try:
         # Generate a unique ID
         tx_id = str(uuid.uuid4())
-        
         # Prepare values with defaults
         values = (
             tx_id,
@@ -1523,20 +1562,16 @@ def api_create_transaction():
             data.get('fee', 0),
             data.get('fee_coin', '')
         )
-        
         query = """
             INSERT INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, fee_coin)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        
         conn.execute(query, values)
         conn.commit()
         conn.close()
-        
         # Mark data as changed
         tax_app.mark_data_changed()
-        
-        return jsonify({'status': 'success', 'message': 'Transaction created', 'id': tx_id})
+        return jsonify({'status': 'success', 'message': 'Transaction created', 'id': tx_id, 'anomalies': anomaly_results}), 200
     except Exception as e:
         if conn:
             conn.close()
@@ -2226,6 +2261,152 @@ def api_update_transaction_with_history():
         return jsonify({
             'success': True,
             'message': 'Transaction updated and history recorded'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/bulk-anomaly-report', methods=['GET'])
+@login_required
+@web_security_required
+def api_bulk_anomaly_report():
+    """Generate comprehensive anomaly report for all transactions"""
+    try:
+        from src.anomaly_detector import AnomalyDetector
+        from src.advanced_ml_features import FraudDetector, PatternLearner
+        
+        # Get all transactions
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        anomaly_detector = AnomalyDetector()
+        fraud_detector = FraudDetector()
+        pattern_learner = PatternLearner()
+        
+        # Learn patterns first
+        pattern_learner.learn_patterns(transactions)
+        
+        all_anomalies = []
+        prev_row = None
+        
+        for tx in transactions:
+            # Basic anomaly detection
+            basic_anomalies = anomaly_detector.scan_row(tx, prev_row)
+            for anom in basic_anomalies:
+                all_anomalies.append({
+                    'tx_id': tx.get('id'),
+                    'date': tx.get('date'),
+                    'coin': tx.get('coin'),
+                    'amount': tx.get('amount'),
+                    'type': anom.get('type'),
+                    'severity': anom.get('severity'),
+                    'message': anom.get('message'),
+                    'category': 'basic_anomaly'
+                })
+            
+            # Pattern anomalies
+            pattern_anomalies = pattern_learner.detect_anomalies(tx)
+            for anom in pattern_anomalies:
+                all_anomalies.append({
+                    'tx_id': tx.get('id'),
+                    'date': tx.get('date'),
+                    'coin': tx.get('coin'),
+                    'amount': tx.get('amount'),
+                    'type': anom.get('type'),
+                    'severity': anom.get('severity'),
+                    'message': anom.get('message'),
+                    'category': 'pattern_anomaly'
+                })
+            
+            prev_row = tx
+        
+        # Fraud detection (wash sales, pump & dump)
+        wash_sales = fraud_detector.detect_wash_sale(transactions)
+        pump_dumps = fraud_detector.detect_pump_dump(transactions)
+        suspicious_volumes = fraud_detector.detect_suspicious_volume(transactions)
+        
+        for alert in wash_sales:
+            all_anomalies.append({
+                'tx_id': alert.get('buy_id'),
+                'date': '',
+                'coin': alert.get('coin'),
+                'type': 'wash_sale',
+                'severity': alert.get('severity'),
+                'message': alert.get('message'),
+                'category': 'fraud_detection'
+            })
+        
+        for alert in pump_dumps:
+            all_anomalies.append({
+                'tx_id': alert.get('buy_id'),
+                'coin': alert.get('coin'),
+                'type': 'pump_dump',
+                'severity': alert.get('severity'),
+                'message': alert.get('message'),
+                'category': 'fraud_detection'
+            })
+        
+        for alert in suspicious_volumes:
+            all_anomalies.append({
+                'tx_id': alert.get('tx_id'),
+                'coin': alert.get('coin'),
+                'type': 'suspicious_volume',
+                'severity': alert.get('severity'),
+                'message': alert.get('message'),
+                'category': 'fraud_detection'
+            })
+        
+        return jsonify({
+            'success': True,
+            'anomalies': all_anomalies,
+            'total_anomalies': len(all_anomalies),
+            'transactions_analyzed': len(transactions),
+            'summary': {
+                'high_severity': len([a for a in all_anomalies if a.get('severity') == 'high']),
+                'medium_severity': len([a for a in all_anomalies if a.get('severity') == 'medium']),
+                'low_severity': len([a for a in all_anomalies if a.get('severity') == 'low']),
+                'fraud_alerts': len(wash_sales) + len(pump_dumps) + len(suspicious_volumes)
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/advanced/export-patterns', methods=['GET'])
+@login_required
+@web_security_required
+def api_export_patterns():
+    """Export learned transaction patterns"""
+    try:
+        from src.advanced_ml_features import PatternLearner
+        
+        # Get all transactions
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM trades ORDER BY date ASC")
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        pattern_learner = PatternLearner()
+        pattern_learner.learn_patterns(transactions)
+        
+        # Convert patterns to exportable format
+        patterns_export = []
+        for key, pattern in pattern_learner.patterns.items():
+            action, coin = key.split('_', 1)
+            patterns_export.append({
+                'action': action,
+                'coin': coin,
+                'transaction_count': pattern['count'],
+                'average_amount': float(pattern['avg_amount']),
+                'average_price_usd': float(pattern['avg_price']),
+                'common_sources': dict(pattern['sources'])
+            })
+        
+        return jsonify({
+            'success': True,
+            'patterns': patterns_export,
+            'pattern_count': len(patterns_export),
+            'transactions_analyzed': len(transactions)
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
