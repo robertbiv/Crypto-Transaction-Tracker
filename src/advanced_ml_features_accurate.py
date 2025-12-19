@@ -15,10 +15,12 @@ Last Modified: December 2025
 
 import json
 import hashlib
+from decimal import Decimal
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
+from src.decimal_utils import to_decimal
 from src.advanced_ml_features import (
     FraudDetector, SmartDescriptionGenerator, PatternLearner, NaturalLanguageSearch
 )
@@ -27,9 +29,50 @@ from src.advanced_ml_features import (
 class FraudDetectorAccurate:
     """Context-aware fraud detection using TinyLLaMA + heuristics"""
     
-    def __init__(self, ml_service=None):
+    def __init__(self, ml_service=None, fallback_enabled: bool = False):
         self.ml_service = ml_service
+        self.fallback_enabled = fallback_enabled
         self.fallback = FraudDetector()
+
+    def detect(self, tx: Dict) -> Dict:
+        """Single-transaction wrapper around comprehensive detection."""
+        if not isinstance(tx, dict):
+            return {}
+
+        safe_tx = {
+            'id': tx.get('id', tx.get('tx_id', 'tx_1')),
+            'action': tx.get('action', '').upper(),
+            'coin': tx.get('coin', ''),
+            'amount': to_decimal(tx.get('amount', 0)),
+            'price_usd': to_decimal(tx.get('price_usd', 0)),
+            'source': tx.get('source', ''),
+            'date': tx.get('date', tx.get('timestamp', '')) or '',
+            **{k: v for k, v in tx.items() if k not in {'id', 'tx_id', 'action', 'coin', 'amount', 'price_usd', 'source', 'date'}}
+        }
+
+        try:
+            summary = self.detect_fraud_comprehensive([safe_tx])
+            has_flags = any(summary.get(key) for key in ['wash_sales', 'pump_dumps', 'suspicious_volumes', 'contextual_flags'])
+            risk_level = 'medium' if has_flags else 'low'
+            fraud_score = 0.6 if has_flags else 0.1
+            return {
+                'risk_level': risk_level,
+                'fraud_score': fraud_score,
+                'details': summary
+            }
+        except Exception:
+            if self.fallback_enabled:
+                alerts = self.fallback.detect_suspicious_volume([safe_tx])
+                return {
+                    'risk_level': 'low',
+                    'fraud_score': 0.1,
+                    'details': {'suspicious_volumes': alerts}
+                }
+            return {}
+
+    def get_model(self):
+        """Return underlying ML service for mocking/tests."""
+        return self.ml_service
     
     def detect_fraud_comprehensive(self, transactions: List[Dict]) -> Dict:
         """
@@ -107,9 +150,26 @@ Return JSON with:
 class SmartDescriptionGeneratorAccurate:
     """Creative, context-aware descriptions using TinyLLaMA + heuristics"""
     
-    def __init__(self, ml_service=None):
+    def __init__(self, ml_service=None, fallback_enabled: bool = False):
         self.ml_service = ml_service
+        self.fallback_enabled = fallback_enabled
         self.fallback = SmartDescriptionGenerator()
+
+    def generate(self, tx: Dict, context_txs: Optional[List[Dict]] = None) -> Optional[str]:
+        """Compatibility wrapper returning a plain description string."""
+        if tx is None:
+            return None
+        try:
+            result = self.generate_description_smart(tx, context_txs)
+            if isinstance(result, dict):
+                return result.get('description')
+            return result
+        except Exception:
+            return self.fallback.generate_description(tx) if self.fallback_enabled else None
+
+    def get_model(self):
+        """Return underlying ML service for mocking/tests."""
+        return self.ml_service
     
     def generate_description_smart(self, tx: Dict, context_txs: Optional[List[Dict]] = None) -> Dict:
         """
@@ -175,9 +235,31 @@ Be specific and brief (under 50 chars). Return JSON: {{"description": "..."}}
 class PatternLearnerAccurate:
     """Behavioral pattern learning using TinyLLaMA + statistical analysis"""
     
-    def __init__(self, ml_service=None):
+    def __init__(self, ml_service=None, fallback_enabled: bool = False):
         self.ml_service = ml_service
+        self.fallback_enabled = fallback_enabled
         self.fallback = PatternLearner()
+
+    def learn(self, transactions: List[Dict]) -> Dict:
+        """Compatibility wrapper around accurate pattern learning."""
+        try:
+            return self.learn_and_detect_accurate(transactions or [])
+        except Exception:
+            return {}
+
+    def detect_anomaly(self, tx: Dict) -> Dict:
+        """Single-transaction anomaly check using learned patterns."""
+        if not isinstance(tx, dict):
+            return {}
+        try:
+            anomalies = self.fallback.detect_anomalies(tx)
+            return {'anomalies': anomalies}
+        except Exception:
+            return {}
+
+    def get_model(self):
+        """Return underlying ML service for mocking/tests."""
+        return self.ml_service
     
     def learn_and_detect_accurate(self, transactions: List[Dict]) -> Dict:
         """

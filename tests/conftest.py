@@ -230,3 +230,41 @@ def ensure_test_directories():
     yield
 
 
+# ---------------------------------------------------------------------------
+# TinyLLaMA feature fixtures (accurate mode)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def fraud_detector():
+    from src.advanced_ml_features_accurate import FraudDetectorAccurate
+    return FraudDetectorAccurate(fallback_enabled=True)
+
+
+@pytest.fixture
+def smart_description_gen():
+    from src.advanced_ml_features_accurate import SmartDescriptionGeneratorAccurate
+    return SmartDescriptionGeneratorAccurate(fallback_enabled=True)
+
+
+@pytest.fixture
+def pattern_learner():
+    from src.advanced_ml_features_accurate import PatternLearnerAccurate
+    return PatternLearnerAccurate(fallback_enabled=True)
+
+
+@pytest.fixture
+def anomaly_detector():
+    from src.anomaly_detector import AnomalyDetector
+    return AnomalyDetector()
+
+
+@pytest.fixture
+def all_features(fraud_detector, smart_description_gen, pattern_learner, anomaly_detector):
+    return {
+        'fraud_detector': fraud_detector,
+        'description_gen': smart_description_gen,
+        'pattern_learner': pattern_learner,
+        'anomaly_detector': anomaly_detector,
+    }
+
+

@@ -6,6 +6,8 @@ Detects common data entry errors and suspicious patterns:
 - Timestamp gaps and duplicates
 """
 from typing import Dict, List
+from decimal import Decimal, InvalidOperation
+from src.decimal_utils import to_decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -154,6 +156,22 @@ class AnomalyDetector:
                 anomalies.append({"type": "TIMESTAMP_GAP", **gap_check})
         
         return anomalies
+
+    def is_price_anomaly(self, price: float, recent_prices: List[float]) -> bool:
+        """Simple range-based price anomaly check used in integration tests."""
+        if price is None:
+            return False
+        try:
+            numeric_prices = [to_decimal(p) for p in recent_prices if p is not None]
+            current = to_decimal(price)
+        except (InvalidOperation, ValueError, TypeError):
+            return False
+        if not numeric_prices:
+            return False
+        avg = sum(numeric_prices) / Decimal(len(numeric_prices))
+        max_allowed = avg * Decimal(3)
+        min_allowed = avg * Decimal('0.1')
+        return current > max_allowed or current < min_allowed
 
 
 def demo():

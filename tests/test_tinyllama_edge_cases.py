@@ -182,7 +182,7 @@ class TestConcurrentOperations:
                         'amount': 1.0 + (i % 5),
                         'price_usd': 45000 + (batch_id * 100) + (i * 10),
                         'source': 'binance',
-                        'date': f'2024-06-{01 + batch_id}'
+                        'date': f'2024-06-{1 + batch_id:02d}'
                     }
                     for i in range(5)
                 ]
@@ -323,7 +323,7 @@ class TestComplexTransactionPatterns:
                 'amount': 10000,
                 'price_usd': 0.01,
                 'source': 'binance',
-                'date': f'2024-06-{01+i}'
+                'date': f'2024-06-{1 + i:02d}'
             })
         
         # Pump phase (high volume, skyrocketing price)
@@ -334,7 +334,7 @@ class TestComplexTransactionPatterns:
                 'amount': 100000,
                 'price_usd': 0.10 + (i * 0.05),
                 'source': 'binance',
-                'date': f'2024-06-{06+i}'
+                'date': f'2024-06-{6 + i:02d}'
             })
         
         # Dump phase (massive sells at inflated prices)
@@ -345,7 +345,7 @@ class TestComplexTransactionPatterns:
                 'amount': 50000,
                 'price_usd': 0.20,
                 'source': 'binance',
-                'date': f'2024-06-{09+i}'
+                'date': f'2024-06-{9 + i:02d}'
             })
         
         for tx in transactions:
@@ -361,7 +361,7 @@ class TestComplexTransactionPatterns:
                 'amount': round_amount,
                 'price_usd': 45000,
                 'source': 'binance',
-                'date': f'2024-06-{01 + i}'
+                'date': f'2024-06-{1 + i:02d}'
             }
             for i, round_amount in enumerate([1, 5, 10, 50, 100])
         ]
@@ -383,7 +383,7 @@ class TestComplexTransactionPatterns:
                 'amount': 1.0,
                 'price_usd': 45000,
                 'source': source,
-                'date': f'2024-06-{01+i}'
+                'date': f'2024-06-{1 + i:02d}'
             }
             for i, source in enumerate(sources)
         ]
@@ -430,7 +430,7 @@ class TestDataConsistency:
                 'amount': 1.0,
                 'price_usd': 45000 + (i * 100),
                 'source': 'binance',
-                'date': f'2024-06-{01+i}'
+                'date': f'2024-06-{1 + i:02d}'
             }
             for i in range(25)
         ]
@@ -681,7 +681,7 @@ class TestARMNASOptimization:
                     'amount': 1.0,
                     'price_usd': 45000 + (i * 10),
                     'source': 'binance',
-                    'date': f'2024-06-{01 + batch_num}'
+                    'date': f'2024-06-{1 + batch_num:02d}'
                 }
                 for i in range(5)
             ]
