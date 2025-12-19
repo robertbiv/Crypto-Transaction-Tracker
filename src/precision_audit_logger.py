@@ -24,6 +24,9 @@ def create_precision_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     
     # File handler with JSON format for machine parsing
+    import os
+    log_dir = 'outputs/logs'
+    os.makedirs(log_dir, exist_ok=True)
     handler = logging.FileHandler('outputs/logs/precision_audit.log')
     formatter = logging.Formatter(
         '%(asctime)s | %(name)s | %(levelname)s | %(message)s',

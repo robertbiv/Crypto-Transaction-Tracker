@@ -20,9 +20,9 @@ from test_common import *
 
 class TestArchitectureStability(unittest.TestCase):
     def test_import_order_resilience(self):
-        for module in ['Crypto_Transaction_Engine', 'auto_runner']:
+        for module in ['Crypto_Transaction_Engine', 'Auto_Runner']:
             if module in sys.modules: del sys.modules[module]
-        modules_to_load = ['Crypto_Transaction_Engine', 'auto_runner']
+        modules_to_load = ['Crypto_Transaction_Engine', 'Auto_Runner']
         random.shuffle(modules_to_load)
         print(f"\n--- TESTING IMPORT ORDER: {modules_to_load} ---")
         try:

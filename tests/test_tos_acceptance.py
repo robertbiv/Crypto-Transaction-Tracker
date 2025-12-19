@@ -259,7 +259,10 @@ class TestAutoRunnerIntegration:
         reset_tos_acceptance()
         
         # Verify the import works
-        import auto_runner
+        try:
+            import Auto_Runner as auto_runner
+        except ImportError:
+            import auto_runner
         assert hasattr(auto_runner, '__name__')
 
 

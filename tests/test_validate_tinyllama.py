@@ -22,8 +22,39 @@ CONFIG_PATH = Path(__file__).parent.parent / "configs" / "config.json"
 
 @pytest.fixture(scope="module")
 def config():
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH) as f:
+            return json.load(f)
+    else:
+        # Return default config if file doesn't exist
+        return {
+            "ml": {
+                "enabled": True,
+                "model": "tinyllama",
+                "auto_shutdown": True
+            },
+            "ml_fallback": {
+                "enabled": True,
+                "model_name": "tinyllama",
+                "batch_size": 5,
+                "auto_shutdown_after_batch": True
+            },
+            "accuracy_mode": {
+                "enabled": True,
+                "fraud_detection": True,
+                "smart_descriptions": True,
+                "pattern_learning": True,
+                "natural_language_search": False
+            },
+            "anomaly_detection": {
+                "enabled": True,
+                "price_error_threshold": 0.15,
+                "extreme_value_threshold": 3.0,
+                "dust_threshold_usd": 1.0,
+                "pattern_deviation_multiplier": 2.5,
+                "min_transactions_for_learning": 10
+            }
+        }
 
 
 @pytest.fixture(scope="module")

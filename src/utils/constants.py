@@ -89,6 +89,7 @@ DB_BACKUP = BASE_DIR / 'crypto_master.db.bak'
 DB_KEY_FILE = BASE_DIR / 'keys' / '.db_key'
 DB_SALT_FILE = BASE_DIR / 'keys' / '.db_salt'
 KEYS_FILE = BASE_DIR / 'api_keys.json'
+API_KEYS_FILE = BASE_DIR / 'api_keys.json'  # Alias for KEYS_FILE
 API_KEYS_ENCRYPTED_FILE = BASE_DIR / 'keys' / 'api_keys_encrypted.json'
 WALLETS_FILE = BASE_DIR / 'wallets.json'
 WALLETS_ENCRYPTED_FILE = BASE_DIR / 'keys' / 'wallets_encrypted.json'

@@ -133,22 +133,55 @@ def cli_env(monkeypatch, tmp_path):
         def shutdown(self):
             self.pipe = None
 
+        def suggest(self, tx_data):
+            """Mock suggest method that returns basic classification"""
+            description = tx_data.get('description', '')
+            if not description:
+                return {'suggested_label': None, 'confidence': 0.0, 'explanation': 'No description'}
+            
+            # Simple keyword matching
+            description_lower = description.lower()
+            if 'buy' in description_lower or 'bought' in description_lower:
+                return {'suggested_label': 'BUY', 'confidence': 0.8, 'explanation': 'Keyword: buy'}
+            elif 'sell' in description_lower or 'sold' in description_lower:
+                return {'suggested_label': 'SELL', 'confidence': 0.8, 'explanation': 'Keyword: sell'}
+            elif 'trade' in description_lower:
+                return {'suggested_label': 'TRADE', 'confidence': 0.7, 'explanation': 'Keyword: trade'}
+            else:
+                return {'suggested_label': 'unknown', 'confidence': 0.5, 'explanation': 'No keywords matched'}
+
     sys.modules["src.ml_service"] = types.SimpleNamespace(MLService=FakeMLService)
     sys.modules["src.rules_model_bridge"] = types.SimpleNamespace(
-        classify_rules_ml=lambda row, svc: {"source": "ml", "label": "SELL", "confidence": 0.9, "explanation": ""}
+        classify_rules_ml=lambda row, svc: {"source": "ml", "label": "SELL", "confidence": 0.9, "explanation": ""},
+        classify=lambda row, ml=None, svc=None: {"source": "ml", "label": "SELL", "confidence": 0.9, "explanation": ""}
     )
 
     # ccxt stub
     class FakeExchange:
         def __init__(self, cfg):
             self.cfg = cfg
+            # Don't return anything from __init__
 
         def fetch_balance(self):
             return {"total": 0}
 
     class FakeCCXTModule(types.SimpleNamespace):
+        class AuthenticationError(Exception):
+            pass
+        
+        class NetworkError(Exception):
+            pass
+        
         def __init__(self):
-            super().__init__(binance=type("Binance", (), {"__init__": lambda self, cfg: FakeExchange(cfg), "fetch_balance": FakeExchange.fetch_balance}))
+            # Create a proper exchange class that doesn't return from __init__
+            class BinanceExchange:
+                def __init__(innerself, cfg):
+                    innerself.cfg = cfg
+                
+                def fetch_balance(innerself):
+                    return {"total": 0}
+            
+            super().__init__(binance=BinanceExchange)
 
     sys.modules["ccxt"] = FakeCCXTModule()
 

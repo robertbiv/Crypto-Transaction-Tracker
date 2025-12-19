@@ -741,7 +741,7 @@ class MLAnomalyDetector:
         Train ML model on historical audit logs
         Returns training summary
         """
-        if not self.model:
+        if self.model is None:
             return {'success': False, 'message': 'ML model not available (scikit-learn not installed). Need at least 10 samples to train.'}
         
         try:

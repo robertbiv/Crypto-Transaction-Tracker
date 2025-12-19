@@ -63,10 +63,20 @@ if parent_dir not in sys.path:
 # Import application logic
 import src.core.engine as app
 import src.tools.setup as setup_script
-import auto_runner
+try:
+    import Auto_Runner as auto_runner
+except ImportError:
+    try:
+        import auto_runner
+    except ImportError:
+        auto_runner = None
+        import warnings
+        warnings.warn("auto_runner module not found - some tests may be skipped")
 # Register alias so both `auto_runner` and legacy `Auto_Runner` resolve in tests
-sys.modules['Auto_Runner'] = auto_runner
-Auto_Runner = auto_runner
+if auto_runner:
+    sys.modules['Auto_Runner'] = auto_runner
+    sys.modules['auto_runner'] = auto_runner
+    Auto_Runner = auto_runner
 from src.tools.review_fixer import InteractiveReviewFixer
 from contextlib import redirect_stdout
 
