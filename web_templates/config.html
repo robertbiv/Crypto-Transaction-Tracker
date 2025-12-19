@@ -165,6 +165,165 @@
                 </div>
             </div>
             
+            <h4 style="margin-top: 20px;">🤖 AI/ML Strategy</h4>
+            <div style="background-color: var(--md-sys-color-surface-dim); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid var(--md-sys-color-primary);">
+                <p style="margin: 0; font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                    Choose how the system should handle transactions it cannot classify using built-in rules.
+                </p>
+            </div>
+            
+            <div class="form-group" style="background: var(--md-sys-color-surface-variant); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <div style="margin-bottom: 12px;">
+                    <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                        <input type="radio" name="ai_strategy" value="none" style="margin-top: 4px;">
+                        <div>
+                            <strong>❌ None (Deterministic Rules Only)</strong>
+                            <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                Use only built-in classification rules. No AI/ML models. Fastest but may have unclassified transactions.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                        <input type="radio" name="ai_strategy" value="ml_only" style="margin-top: 4px;">
+                        <div>
+                            <strong>✨ ML Fallback with TinyLLaMA</strong>
+                            <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                When rules cannot classify a transaction, TinyLLaMA AI suggests a classification. Good balance of accuracy and speed. Model runs locally on your ARM NAS.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div>
+                    <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                        <input type="radio" name="ai_strategy" value="accuracy_mode" style="margin-top: 4px;">
+                        <div>
+                            <strong>🎯 Accuracy Mode (Full Enhancement)</strong>
+                            <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                ML Fallback + Fraud Detection + Smart Descriptions + Pattern Learning + Natural Language Search. Best accuracy, requires more resources.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- ML Fallback / Accuracy Mode Options (shown when applicable) -->
+            <div id="ml_options_container" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label" for="ml_fallback_confidence_threshold">Confidence Threshold (0.0–1.0)</label>
+                    <input type="number" id="ml_fallback_confidence_threshold" class="form-input" min="0" max="1" step="0.05" placeholder="0.85">
+                    <small style="color: var(--md-sys-color-on-surface-variant);">
+                        Minimum confidence score required to apply ML suggestions. Default: 0.85. Lower values may increase false positives.
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="ml_fallback_batch_size">Batch Size (1–100)</label>
+                    <input type="number" id="ml_fallback_batch_size" class="form-input" min="1" max="100" placeholder="10">
+                    <small style="color: var(--md-sys-color-on-surface-variant);">
+                        <strong>📊 How it works:</strong> Transactions are processed in groups of this size before memory cleanup. Higher values = faster but use more RAM. Lower values = slower but use less RAM.
+                    </small>
+                    <div style="margin-top: 8px; padding: 8px; background: var(--md-sys-color-surface-dim); border-left: 3px solid var(--md-sys-color-secondary); border-radius: 4px;">
+                        <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                            <strong>✅ Increase to 20–50 if:</strong>
+                            <div>• You have 16GB+ RAM</div>
+                            <div>• Processing is too slow</div>
+                            <div>• You want to minimize pauses between batches</div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
+                            <strong>⬇️ Decrease to 1–5 if:</strong>
+                            <div>• You have <8GB RAM</div>
+                            <div>• System slows down during processing</div>
+                            <div>• You need to pause/resume processing frequently</div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 8px;">
+                            <strong>💡 Default: 10</strong> Works well for most systems with 8-16GB RAM
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Gemma Download Section (shown when accuracy_mode selected) -->
+                <div id="configGemmaDownloadSection" style="display: none; background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffc107;">
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; color: #856404;">📥 Gemma AI Model Setup</h4>
+                        
+                        <div id="configDepCheckResult" style="font-size: 12px; line-height: 1.6; color: #856404;">
+                            <p>Checking dependencies...</p>
+                        </div>
+                        
+                        <div id="configDownloadStatus" style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: none;">
+                            <p id="configDownloadStatusText" style="margin: 0 0 8px 0;"></p>
+                            <div id="configDownloadProgress" style="width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; display: none;">
+                                <div id="configDownloadProgressBar" style="height: 100%; background: #ffc107; width: 0%; transition: width 0.2s;"></div>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="configTinyLLaMADownloadBtn" class="btn btn-warning" style="margin-top: 12px; display: none;">
+                            📥 Download TinyLLaMA Model Now
+                        </button>
+                        <button type="button" id="configTinyLLaMASkipBtn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
+                            ⏭️ Skip (Download Later)
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="accuracy_mode_options_container" style="display: none;">
+                    <h4 style="margin-top: 16px;">Accuracy Mode Features</h4>
+                    <div style="margin-bottom: 12px;">
+                        <label class="form-label">
+                            <input type="checkbox" id="accuracy_fraud_detection"> Context-Aware Fraud Detection
+                        </label>
+                        <small style="color: var(--md-sys-color-on-surface-variant); display: block; margin-left: 20px; margin-top: 4px;">
+                            Detects wash sales, pump & dumps, suspicious patterns with market context
+                        </small>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label class="form-label">
+                            <input type="checkbox" id="accuracy_smart_descriptions"> Smart Descriptions
+                        </label>
+                        <small style="color: var(--md-sys-color-on-surface-variant); display: block; margin-left: 20px; margin-top: 4px;">
+                            Generates creative, context-aware transaction descriptions
+                        </small>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label class="form-label">
+                            <input type="checkbox" id="accuracy_pattern_learning"> Pattern Learning
+                        </label>
+                        <small style="color: var(--md-sys-color-on-surface-variant); display: block; margin-left: 20px; margin-top: 4px;">
+                            Learns your trading behavior to detect true anomalies
+                        </small>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label class="form-label">
+                            <input type="checkbox" id="accuracy_natural_language_search"> Natural Language Search
+                        </label>
+                        <small style="color: var(--md-sys-color-on-surface-variant); display: block; margin-left: 20px; margin-top: 4px;">
+                            Search like "Show my largest losses in 2024" - true NLP understanding
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TinyLLaMA System Requirements -->
+            <div style="background-color: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #e0e0e0;">
+                <p style="margin: 0 0 8px 0; font-weight: 500; color: #333;">💻 Recommended System Requirements</p>
+                <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                    <div>📌 <strong>CPU:</strong> Intel i5 / AMD Ryzen 5 or better</div>
+                    <div>📌 <strong>RAM:</strong> 8GB minimum (16GB recommended)</div>
+                    <div>📌 <strong>GPU:</strong> 2GB VRAM optional (NVIDIA with CUDA recommended)</div>
+                    <div>📌 <strong>Storage:</strong> 5GB free for model cache</div>
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+                        <strong>🔐 Privacy & Execution:</strong> All data processed locally. TinyLLaMA model runs on your machine - nothing sent to external servers.
+                    </div>
+                </div>
+            </div>
+            
             <button type="submit" class="btn btn-primary">Save General Settings</button>
         </form>
     </div>
@@ -239,6 +398,142 @@
         }
     }
     
+    function updateAIStrategyUI() {
+        const strategy = document.querySelector('input[name="ai_strategy"]:checked')?.value || 'none';
+        const mlContainer = document.getElementById('ml_options_container');
+        const accuracyContainer = document.getElementById('accuracy_mode_options_container');
+        const gemmaSection = document.getElementById('configGemmaDownloadSection');
+        
+        // Show/hide ML options
+        if (mlContainer) {
+            mlContainer.style.display = (strategy === 'ml_only' || strategy === 'accuracy_mode') ? 'block' : 'none';
+        }
+        
+        // Show/hide Accuracy Mode options
+        if (accuracyContainer) {
+            accuracyContainer.style.display = strategy === 'accuracy_mode' ? 'block' : 'none';
+        }
+        
+        // Show/hide Gemma download section for accuracy mode
+        if (gemmaSection) {
+            gemmaSection.style.display = strategy === 'accuracy_mode' ? 'block' : 'none';
+            if (strategy === 'accuracy_mode') {
+                checkConfigGemmaDependencies();
+            }
+        }
+        
+        // Enable/disable accuracy sub-features
+        const accuracyControls = [
+            'accuracy_fraud_detection',
+            'accuracy_smart_descriptions', 
+            'accuracy_pattern_learning',
+            'accuracy_natural_language_search'
+        ];
+        
+        accuracyControls.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.disabled = strategy !== 'accuracy_mode';
+                if (strategy !== 'accuracy_mode') {
+                    el.checked = false;
+                }
+            }
+        });
+    }
+    
+    async function checkConfigGemmaDependencies() {
+        const resultDiv = document.getElementById('configDepCheckResult');
+        
+        try {
+            const response = await fetch('/api/ml/check-dependencies');
+            const data = await response.json();
+            
+            if (data.success) {
+                const depsOk = data.torch_installed && data.transformers_installed;
+                
+                let html = '<div style="line-height: 1.8;">';
+                html += `<div>${data.torch_installed ? '✅' : '❌'} PyTorch: ${data.torch_installed ? 'Installed' : 'Missing'}</div>`;
+                html += `<div>${data.transformers_installed ? '✅' : '❌'} Transformers: ${data.transformers_installed ? 'Installed' : 'Missing'}</div>`;
+                html += `<div>📦 Model Size: ${data.estimated_download_size_gb}GB</div>`;
+                html += `<div>💾 Free Disk: ${data.free_disk_space_gb} GB</div>`;
+                html += '</div>';
+                
+                resultDiv.innerHTML = html;
+                
+                if (!depsOk) {
+                    html += `<div style="margin-top: 8px; padding: 8px; background: white; border-radius: 4px; font-size: 11px;">`;
+                    html += `<strong>⚠️ Missing dependencies</strong><br>`;
+                    html += `Install with: <code>${data.install_command}</code>`;
+                    html += `</div>`;
+                    resultDiv.innerHTML = html;
+                }
+                
+                const downloadBtn = document.getElementById('configGemmaDownloadBtn');
+                const skipBtn = document.getElementById('configGemmaSkipBtn');
+                
+                if (depsOk && data.free_disk_space_gb >= 5) {
+                    downloadBtn.style.display = 'block';
+                    skipBtn.style.display = 'block';
+                } else if (depsOk) {
+                    skipBtn.style.display = 'block';
+                    downloadBtn.style.display = 'none';
+                } else {
+                    downloadBtn.style.display = 'none';
+                    skipBtn.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `<div style="color: red;">Error checking dependencies: ${error.message}</div>`;
+            document.getElementById('configGemmaSkipBtn').style.display = 'block';
+        }
+    }
+    
+    async function downloadConfigGemmaModel() {
+        const downloadBtn = document.getElementById('configGemmaDownloadBtn');
+        const downloadStatus = document.getElementById('configDownloadStatus');
+        const downloadStatusText = document.getElementById('configDownloadStatusText');
+        
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = '⏳ Downloading...';
+        downloadStatus.style.display = 'block';
+        downloadStatusText.textContent = 'Connecting to Hugging Face...';
+        
+        try {
+            const response = await fetch('/api/ml/pre-download-model', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                downloadStatusText.innerHTML = '✅ Model downloaded successfully! You\'re all set to use Accuracy Mode.';
+                downloadBtn.textContent = '✅ Download Complete';
+                downloadBtn.style.backgroundColor = '#4CAF50';
+            } else {
+                downloadStatusText.innerHTML = `⚠️ ${data.message}<br><small>${data.fallback}</small>`;
+                downloadBtn.textContent = '📥 Download Gemma Model Now';
+                downloadBtn.disabled = false;
+                if (data.mode_switched) {
+                    // Show notification to user that mode was switched
+                    alert('Gemma model download failed repeatedly. The system has automatically switched to ML fallback mode (shim). You can continue using the app, but advanced features are disabled.');
+                }
+            }
+        } catch (error) {
+            downloadStatusText.innerHTML = `❌ Download failed: ${error.message}`;
+            downloadBtn.textContent = '📥 Download Gemma Model Now';
+            downloadBtn.disabled = false;
+        }
+    }
+    
+    function skipConfigGemmaDownload() {
+        const skipBtn = document.getElementById('configGemmaSkipBtn');
+        const downloadStatus = document.getElementById('configDownloadStatus');
+        const downloadStatusText = document.getElementById('configDownloadStatusText');
+        
+        downloadStatusText.textContent = '⏭️ Skipped. Model will download on first use of Accuracy Mode.';
+        downloadStatus.style.display = 'block';
+        skipBtn.style.display = 'none';
+        document.getElementById('configGemmaDownloadBtn').style.display = 'none';
+    }
+    
     function checkWarnings() {
         console.log('Checking warnings...');
         
@@ -306,18 +601,50 @@
             setCheck('strict_broker_mode', comp.strict_broker_mode !== false);
             setCheck('staking_taxable_on_receipt', comp.staking_taxable_on_receipt !== false);
             
+            const ml = config.ml_fallback || {};
+            const acc = config.accuracy_mode || {};
+            
+            // Determine AI strategy from config
+            let strategy = 'none';
+            if (acc.enabled === true) {
+                strategy = 'accuracy_mode';
+            } else if (ml.enabled === true) {
+                strategy = 'ml_only';
+            }
+            
+            // Set the AI strategy radio button
+            const strategyRadio = document.querySelector(`input[name="ai_strategy"][value="${strategy}"]`);
+            if (strategyRadio) strategyRadio.checked = true;
+            
+            // Set ML options
+            setVal('ml_fallback_confidence_threshold', ml.confidence_threshold || 0.85);
+            setVal('ml_fallback_batch_size', ml.batch_size || 10);
+            
+            // Load accuracy mode config
+            setCheck('accuracy_fraud_detection', acc.fraud_detection !== false);
+            setCheck('accuracy_smart_descriptions', acc.smart_descriptions !== false);
+            setCheck('accuracy_pattern_learning', acc.pattern_learning !== false);
+            setCheck('accuracy_natural_language_search', acc.natural_language_search !== false);
+            
+            // Update UI based on strategy
+            updateAIStrategyUI();
+            
             // Check warnings after loading
             checkWarnings();
             
             // Attach event listeners dynamically to ensure they work
             const inputs = [
                 'accounting_method', 'run_audit', 'create_db_backups', 
-                'respect_free_tier_limits', 'strict_broker_mode', 'staking_taxable_on_receipt'
+                'respect_free_tier_limits', 'strict_broker_mode', 'staking_taxable_on_receipt',
+                'ml_fallback_enabled', 'accuracy_mode_enabled'
             ];
             inputs.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('change', checkWarnings);
+                    if (id === 'accuracy_mode_enabled') {
+                        el.addEventListener('change', updateAccuracyModeUI);
+                    }
                     // Also listen for input on select to be safe
                     if (el.tagName === 'SELECT') el.addEventListener('input', checkWarnings);
                 }
@@ -334,6 +661,7 @@
         
         try {
             const taxYearVal = document.getElementById('tax_year').value;
+            const strategy = document.querySelector('input[name="ai_strategy"]:checked')?.value || 'none';
             
             // Build config object
             const config = {
@@ -350,6 +678,18 @@
                 compliance: {
                     strict_broker_mode: document.getElementById('strict_broker_mode').checked,
                     staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
+                },
+                ml_fallback: {
+                    enabled: strategy === 'ml_only' || strategy === 'accuracy_mode',
+                    confidence_threshold: parseFloat(document.getElementById('ml_fallback_confidence_threshold').value) || 0.85,
+                    batch_size: parseInt(document.getElementById('ml_fallback_batch_size').value) || 10
+                },
+                accuracy_mode: {
+                    enabled: strategy === 'accuracy_mode',
+                    fraud_detection: document.getElementById('accuracy_fraud_detection').checked,
+                    smart_descriptions: document.getElementById('accuracy_smart_descriptions').checked,
+                    pattern_learning: document.getElementById('accuracy_pattern_learning').checked,
+                    natural_language_search: document.getElementById('accuracy_natural_language_search').checked
                 }
             };
             
@@ -381,30 +721,59 @@
     function displayWallets() {
         const container = document.getElementById('walletsContainer');
         
-        if (Object.keys(walletsData).length === 0) {
+        if (Object.keys(walletsData).length === 0 || Object.keys(walletsData).filter(k => k !== '_INSTRUCTIONS').length === 0) {
             container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No wallets configured. Click "Add Wallet Address" to add one.</p>';
             return;
         }
         
         let html = '';
-        for (const [currency, addresses] of Object.entries(walletsData)) {
-            if (Array.isArray(addresses)) {
-                addresses.forEach((address, index) => {
-                    html += `
-                        <div class="wallet-entry">
-                            <input type="text" class="form-input" placeholder="Currency (e.g., BTC, ETH)" value="${currency}" readonly>
-                            <input type="text" class="form-input" id="wallet-${currency}-${index}" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}">
-                            <button class="btn btn-secondary" onclick="testWalletAddress('${currency}', ${index})" style="margin-right: 8px;">
-                                Test
-                            </button>
-                            <button class="btn btn-secondary remove-wallet-btn" data-currency="${currency}" data-index="${index}">
-                                <span class="material-icons" style="font-size: 16px;">delete</span>
-                            </button>
-                            <div id="wallet-test-result-${currency}-${index}" style="margin-top: 4px; grid-column: 2 / -1;"></div>
-                        </div>
-                    `;
-                });
+        for (const [currency, walletData] of Object.entries(walletsData)) {
+            if (currency === '_INSTRUCTIONS') continue;
+            
+            // Handle both old format (array) and new format (object with name and addresses)
+            let addresses = [];
+            let baseWalletName = '';
+            
+            if (Array.isArray(walletData)) {
+                addresses = walletData;
+            } else if (walletData && typeof walletData === 'object') {
+                if (walletData.addresses) {
+                    addresses = walletData.addresses;
+                    baseWalletName = walletData.name || '';
+                } else if (walletData.address) {
+                    addresses = [walletData.address];
+                    baseWalletName = walletData.name || '';
+                }
             }
+            
+            addresses.forEach((address, index) => {
+                const walletName = baseWalletName && addresses.length === 1 ? baseWalletName : 
+                                  (baseWalletName ? `${baseWalletName} #${index + 1}` : '');
+                
+                html += `
+                    <div class="wallet-entry" style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; align-items: start;">
+                        <div>
+                            <label class="form-label" style="font-size: 11px;">Blockchain</label>
+                            <input type="text" class="form-input" placeholder="e.g., BTC, ETH" value="${currency}" readonly style="opacity: 0.6; background: #f5f5f5;">
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size: 11px;">Wallet Address</label>
+                            <input type="text" class="form-input" id="wallet-${currency}-${index}" placeholder="Wallet address" value="${address}" data-currency="${currency}" data-index="${index}" style="font-family: monospace; font-size: 11px;">
+                        </div>
+                        <div>
+                            <label class="form-label" style="font-size: 11px;">Wallet Label (Optional)</label>
+                            <input type="text" class="form-input wallet-name-input" id="wallet-name-${currency}-${index}" placeholder="e.g., Main Wallet" value="${walletName}" data-currency="${currency}" data-index="${index}" maxlength="50">
+                        </div>
+                        <button class="btn btn-secondary" onclick="testWalletAddress('${currency}', ${index})" style="margin-top: 20px;">
+                            ✓ Test
+                        </button>
+                        <button class="btn btn-secondary remove-wallet-btn" data-currency="${currency}" data-index="${index}" style="margin-top: 20px;">
+                            <span class="material-icons" style="font-size: 16px;">delete</span>
+                        </button>
+                        <div id="wallet-test-result-${currency}-${index}" style="margin-top: 4px; grid-column: 1 / -1; font-size: 12px;"></div>
+                    </div>
+                `;
+            });
         }
         
         container.innerHTML = html || '<p>No wallets configured.</p>';
@@ -443,21 +812,46 @@
     async function saveWallets() {
         try {
             // Collect updated values from inputs
-            const inputs = document.querySelectorAll('#walletsContainer input[data-currency]');
+            const addressInputs = document.querySelectorAll('#walletsContainer input[data-currency][id*="wallet-"]:not([id*="wallet-name"])');
             const updated = {};
             
-            inputs.forEach(input => {
+            addressInputs.forEach(input => {
                 const currency = input.dataset.currency;
                 const index = parseInt(input.dataset.index);
-                const value = input.value.trim();
+                const address = input.value.trim();
+                const nameInput = document.getElementById(`wallet-name-${currency}-${index}`);
+                const walletName = nameInput ? nameInput.value.trim() : '';
                 
-                if (value) {
+                if (address) {
                     if (!updated[currency]) {
-                        updated[currency] = [];
+                        updated[currency] = { addresses: [], name: '' };
                     }
-                    updated[currency][index] = value;
+                    
+                    // Initialize as array if not already
+                    if (Array.isArray(updated[currency])) {
+                        updated[currency] = { addresses: updated[currency], name: '' };
+                    }
+                    
+                    // Ensure addresses array exists
+                    if (!updated[currency].addresses) {
+                        updated[currency].addresses = [];
+                    }
+                    
+                    updated[currency].addresses[index] = address;
+                    
+                    // Store wallet name if provided and only one address
+                    if (walletName) {
+                        updated[currency].name = walletName;
+                    }
                 }
             });
+            
+            // Clean up empty indices in arrays
+            for (const currency in updated) {
+                if (updated[currency].addresses) {
+                    updated[currency].addresses = updated[currency].addresses.filter(a => a);
+                }
+            }
             
             walletsData = updated;
             await api.put('/api/wallets', walletsData);
@@ -687,14 +1081,72 @@
             btn.addEventListener('click', (e) => switchTab(e, btn.dataset.tab));
         });
         
-        const btnAddWallet = document.getElementById('btnAddWallet');
-        if (btnAddWallet) btnAddWallet.addEventListener('click', addWalletEntry);
+        // Listen to AI strategy changes - handle Gemma deletion when disabling
+        document.querySelectorAll('input[name="ai_strategy"]').forEach(radio => {
+            radio.addEventListener('change', async (e) => {
+                const newStrategy = e.target.value;
+                const oldStrategy = document.querySelector('input[name="ai_strategy"]').getAttribute('data-previous-strategy') || 'none';
+                
+                // If switching FROM accuracy_mode TO something else, offer to delete Gemma
+                if (oldStrategy === 'accuracy_mode' && newStrategy !== 'accuracy_mode') {
+                    showGemmaDeleteConfirmation();
+                }
+                
+                // Update the previous strategy for next time
+                document.querySelectorAll('input[name="ai_strategy"]').forEach(r => {
+                    if (r.checked) {
+                        r.setAttribute('data-previous-strategy', newStrategy);
+                    }
+                });
+                
+                updateAIStrategyUI();
+            });
+        });
         
-        const btnSaveWallets = document.getElementById('btnSaveWallets');
-        if (btnSaveWallets) btnSaveWallets.addEventListener('click', saveWallets);
+        // Listen to Gemma download buttons
+        const downloadBtn = document.getElementById('configGemmaDownloadBtn');
+        const skipBtn = document.getElementById('configGemmaSkipBtn');
         
-        const btnSaveApiKeys = document.getElementById('btnSaveApiKeys');
-        if (btnSaveApiKeys) btnSaveApiKeys.addEventListener('click', saveApiKeys);
+        if (downloadBtn) downloadBtn.addEventListener('click', downloadConfigGemmaModel);
+        if (skipBtn) skipBtn.addEventListener('click', skipConfigGemmaDownload);
+        
+        document.getElementById('btnAddWallet').addEventListener('click', () => {
+            document.querySelectorAll('.wallet-entry:last-child')[0]?.scrollIntoView({ behavior: 'smooth' });
+        });
+        
+        document.getElementById('btnSaveWallets').addEventListener('click', saveWallets);
+        document.getElementById('btnSaveApiKeys').addEventListener('click', saveApiKeys);
     });
+    
+    async function showGemmaDeleteConfirmation() {
+        const confirmed = confirm(
+            'You are disabling Accuracy Mode.\n\n' +
+            'Would you like to delete the downloaded Gemma AI model to free up 5-10GB of disk space?\n\n' +
+            'You can re-download it later if needed.'
+        );
+        if (confirmed) {
+            await deleteGemmaModel();
+        }
+    }
+    
+    async function deleteGemmaModel() {
+        try {
+            const response = await fetch('/api/ml/delete-gemma-model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': document.getElementById('csrf_token')?.value || ''
+                }
+            });
+            const data = await response.json();
+            if (data.success) {
+                showAlert(`✅ Gemma model deleted successfully! Freed up ${data.freed_space_gb}GB of disk space.`, 'success');
+            } else {
+                showAlert(`⚠️ Could not delete model: ${data.message}`, 'warning');
+            }
+        } catch (error) {
+            showAlert(`❌ Error deleting Gemma model: ${error.message}`, 'error');
+        }
+    }
 </script>
 {% endblock %}

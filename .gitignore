@@ -36,3 +36,4 @@ __pycache__/
 .env
 
 How to run tests.md
+configs/.tos_accepted

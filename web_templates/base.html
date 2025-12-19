@@ -10,6 +10,75 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <style>
+            /* --- Global Mobile Responsive Enhancements --- */
+            @media (max-width: 700px) {
+                html, body {
+                    font-size: 15px;
+                }
+                .container {
+                    padding: 6vw 2vw;
+                    max-width: 100vw;
+                }
+                .card {
+                    padding: 10px 2vw;
+                    margin: 10px 0;
+                    border-radius: 10px;
+                }
+                .nav-bar {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    padding: 10px 2vw;
+                }
+                .nav-bar h1 {
+                    font-size: 1.1em;
+                    margin-bottom: 8px;
+                }
+                .nav-menu {
+                    flex-direction: column;
+                    gap: 2px;
+                    width: 100%;
+                }
+                .nav-link {
+                    width: 100%;
+                    padding: 10px 0;
+                    text-align: left;
+                    font-size: 1em;
+                }
+                .btn, button, input, select, label {
+                    font-size: 1em !important;
+                }
+                .btn {
+                    width: 100%;
+                    margin: 6px 0 !important;
+                }
+                input, select {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                }
+                .form-group, .wallet-entry, .api-key-section {
+                    flex-direction: column !important;
+                    display: flex !important;
+                    gap: 8px !important;
+                }
+                .wallet-entry {
+                    grid-template-columns: 1fr !important;
+                }
+                table, th, td {
+                    font-size: 13px !important;
+                    padding: 6px !important;
+                }
+                h1, h3, h4 {
+                    font-size: 1.1em;
+                }
+                .material-icons {
+                    font-size: 1.2em !important;
+                }
+                .progress-content {
+                    min-width: 0 !important;
+                    max-width: 95vw !important;
+                    padding: 10vw 2vw !important;
+                }
+            }
         :root {
             --md-sys-color-primary: #6750A4;
             --md-sys-color-on-primary: #FFFFFF;
@@ -347,9 +416,9 @@
         <div class="nav-menu">
             <a href="/dashboard" class="nav-link">Dashboard</a>
             <a href="/transactions" class="nav-link">Transactions</a>
+            <a href="/analytics" class="nav-link">🧠 Analytics</a>
             <a href="/warnings" class="nav-link">Warnings</a>
             <a href="/reports" class="nav-link">Reports</a>
-            <a href="/config" class="nav-link">Config</a>
             <a href="/logs" class="nav-link">Logs</a>
             <a href="/schedule" class="nav-link">Schedule</a>
             <a href="/settings" class="nav-link">Settings</a>

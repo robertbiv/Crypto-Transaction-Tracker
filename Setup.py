@@ -253,6 +253,130 @@ def main():
         "ui": {
             "download_warnings_enabled": True,
             "_INSTRUCTIONS": "download_warnings_enabled: Set to True to require users to acknowledge a warning before downloading tax reports. Recommended: True. If set to False, a persistent banner will remind users to always double-check all outputs and consult a tax professional."
+        },
+        "ml_fallback": {
+            "_INSTRUCTIONS": "Optional ML fallback for ambiguous/unclassified transactions. enabled=True activates ML suggestions. model_name: 'shim' (keywords) or 'tinyllama' (real model). confidence_threshold (0.0-1.0): min score to log. auto_shutdown_after_batch: free model memory after processing each batch. batch_size: transactions per batch (lower = less RAM, higher = faster). OPTIMIZED FOR ARM NAS: batch_size=5 recommended for 8GB systems.",
+            "enabled": True,
+            "model_name": "tinyllama",
+            "confidence_threshold": 0.85,
+            "auto_shutdown_after_batch": True,
+            "batch_size": 5
+        },
+        "accuracy_mode": {
+            "_INSTRUCTIONS": "Enhanced accuracy features using TinyLLaMA model (1.1B parameters). Set enabled=True for context-aware analysis (fraud detection, smart descriptions, pattern learning). NLP search disabled. Set to False to use fast heuristics only. Requires ML enabled above. OPTIMIZED FOR ARM NAS with 8GB RAM (3-4GB available). Specs: ARM CPU / 8GB RAM minimum / runs on CPU.",
+            "enabled": True,
+            "fraud_detection": True,
+            "smart_descriptions": True,
+            "pattern_learning": True,
+            "natural_language_search": False,
+            "fallback_on_error": True,
+            "recommended_specs": {
+                "cpu": "ARM or x86 processor (4+ cores recommended)",
+                "ram": "8GB minimum (3-4GB available for TinyLLaMA after OS/processes)",
+                "gpu": "Not required - TinyLLaMA optimized for CPU inference",
+                "storage": "2.5GB for TinyLLaMA model cache",
+                "execution": "Local - All data stays on your machine - ARM NAS compatible"
+            }
+        },
+        "anomaly_detection": {
+            "_INSTRUCTIONS": "Configure anomaly detection sensitivity for AI-powered transaction analysis. Adjust thresholds to tune sensitivity. Higher values = less sensitive (fewer warnings). Lower values = more sensitive (more warnings). Recommended defaults work for most users.",
+            "enabled": True,
+            "price_error_threshold": 0.20,
+            "_price_error_threshold_INFO": "Maximum price deviation (0.0-1.0) from market price before warning. Default: 0.20 (20%). Adjustable range: 0.05 (5% strict) to 0.50 (50% lenient).",
+            "extreme_value_threshold": 3.0,
+            "_extreme_value_threshold_INFO": "Statistical outlier threshold in standard deviations. Default: 3.0. Adjustable range: 2.0 (stricter) to 5.0 (more lenient).",
+            "dust_threshold_usd": 0.10,
+            "_dust_threshold_usd_INFO": "Minimum transaction value in USD to flag dust attacks. Default: $0.10. Adjustable range: $0.01 to $1.00.",
+            "pattern_deviation_multiplier": 2.5,
+            "_pattern_deviation_multiplier_INFO": "Pattern learning sensitivity. How many times above learned patterns triggers alert. Default: 2.5x. Adjustable range: 1.5x (stricter) to 4.0x (more lenient).",
+            "min_transactions_for_learning": 20,
+            "_min_transactions_for_learning_INFO": "Minimum transactions needed before pattern learning activates. Default: 20. Adjustable range: 10 to 100."
+        },
+        "audit_enhancements": {
+            "_INSTRUCTIONS": "ENTERPRISE AUDIT FEATURES (Priority 2 & 3). Enables real-time monitoring, automatic responses, ML detection, and trend analysis. All features require Flask-Limiter and scikit-learn.",
+            "enabled": True,
+            "dashboard_widget": {
+                "_INSTRUCTIONS": "Real-time audit integrity dashboard widget on web UI. Shows system integrity score, recent anomalies, and status.",
+                "enabled": True,
+                "refresh_interval_seconds": 30,
+                "display_anomaly_count": 10
+            },
+            "log_rotation": {
+                "_INSTRUCTIONS": "Automatic audit log rotation with gzip compression and archival. Prevents unbounded log growth.",
+                "enabled": True,
+                "max_file_size_mb": 10,
+                "max_age_days": 30,
+                "retention_days": 365,
+                "compress": True,
+                "archive_dir": "logs/archives",
+                "maintenance_interval_hours": 6
+            },
+            "baseline_learning": {
+                "_INSTRUCTIONS": "Auto-learn normal patterns from historical audit logs. Detects deviations and adapts baselines.",
+                "enabled": True,
+                "learning_period_days": 30,
+                "min_samples_to_train": 100,
+                "auto_update_interval_hours": 24,
+                "drift_threshold": 0.3
+            },
+            "rate_limiting": {
+                "_INSTRUCTIONS": "Rate limit all audit API endpoints to prevent abuse and DoS attacks.",
+                "enabled": True,
+                "dashboard_data_limit": "60 per hour",
+                "rotation_status_limit": "30 per hour",
+                "learn_baseline_limit": "5 per hour",
+                "ml_train_limit": "5 per hour",
+                "ml_detect_limit": "20 per hour"
+            },
+            "signature_verification": {
+                "_INSTRUCTIONS": "HMAC-SHA256 signature verification on all audit log entries. Detects tampering.",
+                "enabled": True,
+                "signing_key": "GENERATE_SECURE_KEY_ON_FIRST_RUN",
+                "algorithm": "SHA256",
+                "verify_on_load": True,
+                "dashboard_widget": True
+            },
+            "ml_anomaly_detection": {
+                "_INSTRUCTIONS": "Machine learning-based anomaly detection using Isolation Forest. Requires scikit-learn.",
+                "enabled": True,
+                "model_type": "IsolationForest",
+                "contamination_rate": 0.05,
+                "training_threshold": 100,
+                "auto_retrain_days": 7,
+                "features": ["hour_of_day", "action_code", "user_code", "status", "details_size", "transaction_count", "anomaly_count"]
+            },
+            "automatic_responses": {
+                "_INSTRUCTIONS": "Automatic incident response system. Locks operations on CRITICAL anomalies, creates incidents, escalates alerts.",
+                "enabled": True,
+                "lock_operations_on_critical": True,
+                "default_lock_duration_minutes": 60,
+                "create_incident_records": True,
+                "escalate_to_admin": True,
+                "create_forensic_snapshots": True,
+                "severity_levels": {
+                    "LOW": "Alert only",
+                    "MEDIUM": "Alert + Snapshot",
+                    "HIGH": "Alert + Escalate + Snapshot",
+                    "CRITICAL": "Lock Operations + Escalate + Admin Notify"
+                }
+            },
+            "comparative_analysis": {
+                "_INSTRUCTIONS": "Historical trend analysis and reporting. Tracks integrity, anomalies, risk scores over time.",
+                "enabled": True,
+                "default_lookback_days": 30,
+                "daily_aggregation": True,
+                "hourly_aggregation": True,
+                "generate_weekly_reports": True,
+                "trend_metrics": ["integrity_score", "anomaly_frequency", "activity_correlation", "risk_score"]
+            },
+            "incident_management": {
+                "_INSTRUCTIONS": "Incident recording, tracking, and forensics.",
+                "incidents_dir": "outputs/incidents",
+                "forensics_dir": "outputs/forensics",
+                "reports_dir": "outputs/reports/comparative",
+                "auto_cleanup_days": 90,
+                "retention_policy": "Archive after 365 days"
+            }
         }
     }
     validate_json(CONFIG_FILE, config_data)

@@ -1,0 +1,14 @@
+# Machine Learning & NLP Dependencies (Optional)
+# Install only if you want to use ML fallback with Gemma model
+# Usage: pip install -r requirements-ml.txt
+
+# These dependencies are REQUIRED if you enable:
+# - ML fallback (ml_fallback.enabled = true)
+# - Accuracy mode (accuracy_mode.enabled = true)
+
+# Note: These are large packages (~10GB+ disk space for models)
+# The application will work fine without these - it will use basic rule-based classification
+
+torch==2.1.2                           # Deep learning framework | https://pytorch.org
+transformers==4.36.2                   # Hugging Face transformers | https://huggingface.co/transformers
+bitsandbytes==0.41.3                   # Quantization library | https://github.com/TimDettmers/bitsandbytes

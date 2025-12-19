@@ -71,6 +71,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import filelock
+from src.rules_model_bridge import classify as classify_rules_ml
+from src.ml_service import MLService
+from src.anomaly_detector import AnomalyDetector
 
 # Import from modular structure
 from src.core.encryption import (
@@ -130,6 +133,9 @@ API_KEY_ENCRYPTION_FILE = BASE_DIR / 'api_key_encryption.key'
 WEB_ENCRYPTION_KEY_FILE = BASE_DIR / 'web_encryption.key'
 CONFIG_FILE = BASE_DIR / 'config.json'
 STATUS_FILE = BASE_DIR / 'status.json'
+ML_FALLBACK_ENABLED = bool(os.environ.get('ML_FALLBACK_ENABLED', '0') == '1')
+ML_CONFIDENCE_THRESHOLD = float(os.environ.get('ML_FALLBACK_THRESHOLD', '0.85'))
+ML_LOG_FILE = LOG_DIR / 'model_suggestions.log'
 
 logger = logging.getLogger("crypto_tax_engine")
 logger.setLevel(logging.INFO)
@@ -512,6 +518,14 @@ DEFI_LP_CONSERVATIVE = bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_con
 COLLECTIBLE_PREFIXES = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_prefixes', ['NFT-','ART-']))
 COLLECTIBLE_TOKENS = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_tokens', ['NFT','PUNK','BAYC']))
 
+# ML Fallback settings from config
+ML_FALLBACK_ENABLED = bool(GLOBAL_CONFIG.get('ml_fallback', {}).get('enabled', False))
+ML_CONFIDENCE_THRESHOLD = float(GLOBAL_CONFIG.get('ml_fallback', {}).get('confidence_threshold', 0.85))
+ML_MODEL_NAME = GLOBAL_CONFIG.get('ml_fallback', {}).get('model_name', 'shim')  # 'shim' or 'gemma'
+ML_AUTO_SHUTDOWN = bool(GLOBAL_CONFIG.get('ml_fallback', {}).get('auto_shutdown_after_batch', True))
+ML_LOG_FILE = LOG_DIR / 'model_suggestions.log'
+ANOMALY_LOG_FILE = LOG_DIR / 'anomalies.log'
+
 # DeFi protocol patterns for LP detection
 DEFI_LP_PATTERNS = ['UNI-V2', 'UNI-V3', 'SUSHI', 'CURVE', 'BALANCER', 'AAVE', 
                     'COMPOUND', 'MAKER', 'YEARN', '-LP', '_LP', 'POOL']
@@ -600,6 +614,10 @@ class Ingestor:
     def __init__(self, db):
         self.db = db
         self.fetcher = PriceFetcher()
+        self.ml_enabled = ML_FALLBACK_ENABLED
+        self.ml_service = MLService(mode=ML_MODEL_NAME, auto_shutdown_after_inference=False) if self.ml_enabled else None
+        self.anomaly_detector = AnomalyDetector()
+        self.prev_row = None
 
     def run_csv_scan(self):
         logger.info("--- 1. SCANNING INPUTS ---")
@@ -642,6 +660,16 @@ class Ingestor:
         df.columns = [c.lower().strip() for c in df.columns]
         
         for idx, r in df.iterrows():
+            classified = False
+            row_dict = r.to_dict()
+            
+            # Run anomaly detection on each row
+            anomalies = self.anomaly_detector.scan_row(row_dict, self.prev_row)
+            if anomalies:
+                self._log_anomalies(anomalies, row_dict, batch, idx)
+            
+            self.prev_row = row_dict
+            
             try:
                 # Force UTC timezone for all datetime parsing to avoid wash sale window errors
                 # FIX: Check all supported date column names
@@ -675,6 +703,7 @@ class Ingestor:
                     self.db.save_trade({'id': f"{batch}_{idx}_SELL", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'SELL', 'coin': str(sent_c), 'amount': sent_a, 'price_usd': sell_price, 'fee': fee, 'batch_id': batch})
                     self.db.save_trade({'id': f"{batch}_{idx}_BUY", 'date': d.isoformat(), 'source': 'SWAP', 'action': 'BUY', 'coin': str(recv_c), 'amount': recv_a, 'price_usd': buy_price, 'fee': 0, 'batch_id': batch})
                     # Ensure no other branch processes this row
+                    classified = True
                     continue
                 elif recv_c and recv_a > 0:
                     act = 'INCOME' if any(x in tx_type for x in ['airdrop','staking','reward','gift','promo','interest','fork','mining']) else 'BUY'
@@ -693,6 +722,7 @@ class Ingestor:
                         logger.warning(f"   [Price parse] Row {idx}: Invalid price value {p}: {e}")
                         price_usd = Decimal('0')
                     self.db.save_trade({'id': f"{batch}_{idx}_IN", 'date': d.isoformat(), 'source': source_lbl, 'action': act, 'coin': str(recv_c), 'amount': recv_a, 'price_usd': price_usd, 'fee': fee, 'batch_id': batch})
+                    classified = True
                     # Backfill zero prices (second pass for outgoing-only trades)
                     if to_decimal(p) == 0:
                         try:
@@ -706,9 +736,69 @@ class Ingestor:
                     act = 'SELL'
                     if any(x in tx_type for x in ['fee','cost']): act = 'SPEND'
                     self.db.save_trade({'id': f"{batch}_{idx}_OUT", 'date': d.isoformat(), 'source': 'MANUAL', 'action': act, 'coin': str(sent_c), 'amount': sent_a, 'price_usd': p, 'fee': fee, 'batch_id': batch})
+                    classified = True
             except Exception as e:
                 logger.warning(f"   [SKIP] Row {idx} failed: {type(e).__name__}: {e}")
+            finally:
+                if self.ml_enabled and not classified:
+                    self._ml_fallback(r, batch, idx)
         self.db.commit()
+
+    def _ml_fallback(self, row, batch, idx):
+        try:
+            tx = {}
+            for k, v in row.to_dict().items():
+                if pd.isna(v):
+                    tx[k] = ""
+                elif hasattr(v, 'isoformat'):
+                    try:
+                        tx[k] = v.isoformat()
+                    except Exception:
+                        tx[k] = str(v)
+                else:
+                    tx[k] = str(v)
+
+            suggestion = classify_rules_ml(tx, ml=self.ml_service)
+            entry = {
+                'batch': batch,
+                'row_index': int(idx),
+                'suggested_label': suggestion.get('label'),
+                'confidence': float(suggestion.get('confidence', 0.0)),
+                'source': suggestion.get('source'),
+                'explanation': suggestion.get('explanation', ''),
+                'raw': tx,
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }
+            self._log_ml_suggestion(entry)
+        except Exception as e:
+            logger.debug(f"   [ML_FALLBACK] Row {idx} failed: {e}")
+
+    def _log_ml_suggestion(self, entry):
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(ML_LOG_FILE, 'a', encoding='utf-8') as fh:
+                fh.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logger.debug(f"   [ML_LOG] Failed to write suggestion: {e}")
+
+    def _log_anomalies(self, anomalies, row, batch, idx):
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            for anom in anomalies:
+                entry = {
+                    'batch': batch,
+                    'row_index': int(idx),
+                    'anomaly_type': anom.get('type'),
+                    'severity': anom.get('severity'),
+                    'message': anom.get('message'),
+                    'suggested_fix': anom.get('suggested_fix'),
+                    'raw': {k: str(v) if not isinstance(v, (int, float, str)) else v for k, v in row.items()},
+                    'timestamp': datetime.utcnow().isoformat() + 'Z'
+                }
+                with open(ANOMALY_LOG_FILE, 'a', encoding='utf-8') as fh:
+                    fh.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logger.debug(f"   [ANOMALY_LOG] Failed to write: {e}")
 
     def _archive(self, fp):
         """Archive processed CSV file with timestamp"""

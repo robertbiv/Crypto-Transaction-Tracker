@@ -438,6 +438,117 @@
         <div class="wizard-content">
             <div id="alertContainer"></div>
             
+            <!-- ToS Modal -->
+            <div id="tosModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; padding: 20px;">
+                <div style="background: var(--md-sys-color-surface); border-radius: 12px; max-width: 800px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                    <div style="padding: 20px; border-bottom: 1px solid var(--md-sys-color-outline); display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin: 0; font-size: 1.5rem;">Terms of Service</h2>
+                        <button onclick="closeTosModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--md-sys-color-on-surface); padding: 0; width: 32px; height: 32px;">×</button>
+                    </div>
+                    <div id="tosContent" style="padding: 20px; overflow-y: auto; flex: 1; line-height: 1.6; font-size: 0.9rem;">
+                        <div style="padding: 12px; background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); border-radius: 8px; margin-bottom: 20px; font-weight: 500;">
+                            ⚠️ Please scroll to the bottom to enable the Accept button
+                        </div>
+                        <h1>Terms of Service - Crypto Tax Automation Engine</h1>
+                        <p><strong>Last Updated: December 16, 2025</strong></p>
+                        <h2>TL;DR</h2>
+                        <p>This is a personal tool built to track crypto taxes. It's provided AS-IS with <strong>no warranty</strong>. Not a tax professional. You must review all outputs with a qualified tax professional before filing. This tool can make mistakes. <strong>No liability for errors, data loss, or audit penalties.</strong> Use locally only. Use Read-Only API tokens for security.</p>
+                        <hr>
+                        <h2>Acceptance of Terms</h2>
+                        <p>By downloading, installing, or using this software ("the Program"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the Program.</p>
+                        <h2>1. NO WARRANTY; AS-IS USE</h2>
+                        <p>The Program is provided "AS IS" without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, or non-infringement.</p>
+                        <p>The author makes no warranty that:</p>
+                        <ul>
+                            <li>The Program will meet your requirements</li>
+                            <li>The Program will be uninterrupted, timely, secure, or error-free</li>
+                            <li>Any defects will be corrected</li>
+                            <li>The Program is free of harmful code or malware</li>
+                        </ul>
+                        <h2>2. NO TAX ADVICE; NOT A PROFESSIONAL SERVICE</h2>
+                        <p>The author is <strong>not a tax professional, tax attorney, or accountant</strong>. The Program was built for personal transaction tracking and does not constitute professional tax advice.</p>
+                        <p>The Program is designed to follow 2025 US tax guidelines (IRS Publication 544) but is <strong>not guaranteed to be accurate, complete, or correct</strong>.</p>
+                        <p><strong>You must independently verify all outputs and consult a qualified tax professional (CPA, tax attorney, or IRS-enrolled agent) before filing any tax return.</strong></p>
+                        <h2>3. LIMITATION OF LIABILITY</h2>
+                        <p><strong>IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY:</strong></p>
+                        <ul>
+                            <li>Direct, indirect, incidental, special, exemplary, or consequential damages</li>
+                            <li>Loss of profits, revenue, data, use, or other intangible losses</li>
+                            <li>Damage to data or property</li>
+                            <li>Tax liabilities, penalties, interest, or back taxes</li>
+                            <li>Audit costs or legal fees</li>
+                            <li>Any damages arising from use or inability to use the Program</li>
+                        </ul>
+                        <h2>4. USER ASSUMES ALL RISK</h2>
+                        <p>You assume all risk of loss associated with using this Program, including:</p>
+                        <ul>
+                            <li>Inaccurate calculations or missing transactions</li>
+                            <li>Incorrect cost basis or gain/loss computations</li>
+                            <li>Undetected duplicates or data corruption</li>
+                            <li>Incorrect price data or exchange rate errors</li>
+                            <li>Tax misstatements or non-compliance</li>
+                            <li>Audit exposure or penalties from the IRS</li>
+                            <li>Data loss or security breaches</li>
+                        </ul>
+                        <h2>5. LOCAL USE ONLY</h2>
+                        <p>The Program is intended to run on your local machine or private network only. <strong>Do not expose the Program to the internet or make it publicly accessible.</strong></p>
+                        <h2>6. SECURITY AND DATA RESPONSIBILITY</h2>
+                        <p>You are solely responsible for:</p>
+                        <ul>
+                            <li>Securing the host machine and network</li>
+                            <li>Protecting API keys and secrets</li>
+                            <li><strong>Using READ-ONLY API tokens only</strong> – Never provide write/trade permissions</li>
+                            <li>Managing backups of your data and database</li>
+                            <li>Keeping the Program and dependencies up to date</li>
+                            <li>Monitoring for security patches and updates</li>
+                            <li>Protecting your wallet addresses and personal information</li>
+                        </ul>
+                        <h2>7. NO LIABILITY FOR DATA LOSS</h2>
+                        <p>The Program may delete, corrupt, or lose data due to software bugs, hardware failure, network interruption, user error, third-party API failures, or backup failures.</p>
+                        <p><strong>The author is not responsible for any lost data or recovery costs. You are responsible for maintaining independent backups.</strong></p>
+                        <h2>8. ACCURACY AND COMPLETENESS NOT GUARANTEED</h2>
+                        <p>The Program may calculate gains/losses incorrectly, miss transactions, produce incorrect cost basis, fail to detect wash sales, misclassify income or losses, generate incomplete reports, or fail to fetch prices.</p>
+                        <p><strong>You must manually review all CSV outputs before using them for tax purposes.</strong></p>
+                        <h2>9. THIRD-PARTY SERVICES</h2>
+                        <p>The Program uses third-party APIs: CCXT, StakeTaxCSV, Moralis, Blockchair, CoinGecko, Yahoo Finance. The author is not responsible for service outages, incorrect data, API changes, account bans, or privacy breaches at third-party providers.</p>
+                        <h2>10. NO SUPPORT OR SLA</h2>
+                        <p>The Program is provided without any support, updates, or service level agreement. The author may or may not respond to issues or feature requests.</p>
+                        <h2>11. COMPLIANCE RESPONSIBILITY</h2>
+                        <p>You are solely responsible for:</p>
+                        <ul>
+                            <li>Complying with all applicable tax laws</li>
+                            <li>Accurate tax reporting to the IRS</li>
+                            <li>Paying all taxes owed</li>
+                            <li>Responding to IRS inquiries or audits</li>
+                            <li>Hiring professional representation if audited</li>
+                        </ul>
+                        <p><strong>If you file incorrect taxes using this Program, you are responsible for resulting penalties, interest, or legal consequences.</strong></p>
+                        <h2>12. CHANGES TO TERMS</h2>
+                        <p>The author may update these Terms at any time without notice. Continued use constitutes acceptance.</p>
+                        <hr>
+                        <h2>Acceptance</h2>
+                        <p>By using this Program, you acknowledge that:</p>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li>✓ You have read and understand these Terms of Service</li>
+                            <li>✓ You assume all risk and responsibility for use</li>
+                            <li>✓ You will not hold the author liable for any losses or damages</li>
+                            <li>✓ You will review all outputs with a qualified tax professional</li>
+                            <li>✓ You will not file taxes based solely on this Program's output</li>
+                            <li>✓ You understand this is not professional tax advice</li>
+                            <li>✓ You will keep the Program local and secure</li>
+                            <li>✓ You will maintain your own backups</li>
+                        </ul>
+                        <hr>
+                        <p><strong>Questions?</strong> Consult a qualified tax professional or attorney before using this Program.</p>
+                    </div>
+                    <div style="padding: 20px; border-top: 1px solid var(--md-sys-color-outline); display: flex; justify-content: flex-end; gap: 12px;">
+                        <button onclick="closeTosModal()" id="acceptTosModalBtn" disabled style="padding: 10px 24px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border: none; border-radius: 4px; cursor: not-allowed; font-weight: 500; opacity: 0.5;">
+                            I Understand and Accept
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Step 1: Create Account -->
             <div class="step-content active" data-step="1">
                 <h2 class="step-title">Create Your Account</h2>
@@ -457,6 +568,21 @@
                 <div class="form-group">
                     <label class="form-label" for="confirmPassword">Confirm Password</label>
                     <input type="password" id="confirmPassword" class="form-input" placeholder="Confirm password">
+                </div>
+                
+                <div class="form-group" style="margin-top: 24px; padding: 16px; background: var(--md-sys-color-surface-variant); border-radius: 8px;">
+                    <div style="margin-bottom: 12px;">
+                        <button type="button" id="viewTosBtn" onclick="showTosModal()" style="padding: 8px 16px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: 500;">
+                            📄 View Terms of Service (Required)
+                        </button>
+                    </div>
+                    <label style="display: flex; align-items: flex-start; cursor: pointer; gap: 12px; opacity: 0.5;" id="tosCheckboxLabel">
+                        <input type="checkbox" id="acceptTos" disabled style="margin-top: 4px; width: 18px; height: 18px; cursor: not-allowed;">
+                        <span style="flex: 1; font-size: 0.95rem; line-height: 1.5;">
+                            I have read and agree to the Terms of Service. 
+                            I understand this software is provided "as-is" with no warranties, and I am solely responsible for my tax reporting obligations.
+                        </span>
+                    </label>
                 </div>
                 
                 <div class="security-note">
@@ -596,6 +722,85 @@
                 </div>
             </div>
             
+            <!-- Step 6: AI/ML Settings -->
+            <div class="step-content" data-step="6">
+                <h2 class="step-title">🤖 AI/ML Settings (Optional)</h2>
+                <p class="step-description">Choose how you want the system to handle transaction classification. You can change this later in Settings.</p>
+                
+                <div style="background-color: var(--md-sys-color-surface-dim); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid var(--md-sys-color-primary);">
+                    <p style="margin: 0; font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                        Choose ONE strategy for transaction classification:
+                    </p>
+                </div>
+                
+                <div class="form-group" style="background: var(--md-sys-color-surface-variant); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="none" checked style="margin-top: 4px;">
+                            <div>
+                                <strong>❌ None (Deterministic Rules Only)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Use only built-in classification rules. No AI/ML. Fastest, no setup needed.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="ml_only" style="margin-top: 4px;">
+                            <div>
+                                <strong>✨ ML Fallback Only (Lightweight)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Uses keyword-based ML (no dependencies). Good accuracy with minimal overhead.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer;">
+                            <input type="radio" name="wizAiStrategy" value="accuracy_mode" style="margin-top: 4px;">
+                            <div>
+                                <strong>🎯 Accuracy Mode (Full ML)</strong>
+                                <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
+                                    Full neural model (Gemma) + advanced features. Best accuracy, requires resources.
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Gemma Download Section (shown when accuracy_mode selected) -->
+                <div id="gemmaDownloadSection" style="display: none; background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #ffc107;">
+                    <div style="margin-bottom: 12px;">
+                        <h4 style="margin: 0 0 8px 0; color: #856404;">📥 Gemma AI Model Setup</h4>
+                        
+                        <div id="depCheckResult" style="font-size: 12px; line-height: 1.6; color: #856404;">
+                            <p>Checking dependencies...</p>
+                        </div>
+                        
+                        <div id="downloadStatus" style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: none;">
+                            <p id="downloadStatusText" style="margin: 0 0 8px 0;"></p>
+                            <div id="downloadProgress" style="width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; display: none;">
+                                <div id="downloadProgressBar" style="height: 100%; background: #ffc107; width: 0%; transition: width 0.2s;"></div>
+                            </div>
+                        </div>
+                        
+                        <button id="gemmaDownloadBtn" class="btn btn-warning" style="margin-top: 12px; display: none;">
+                            📥 Download Gemma Model Now
+                        </button>
+                        <button id="gemmaSkipBtn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
+                            ⏭️ Skip (Download Later)
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info" style="margin-top: 16px;">
+                    <strong>💡 Recommendation:</strong> Start with "ML Fallback Only" or "None". You can always upgrade to Accuracy Mode later in Settings once you're familiar with the system.
+                </div>
+            </div>
+            
             <div class="wizard-actions">
                 <button class="btn btn-secondary" id="prevBtn" style="display: none;">
                     Previous
@@ -610,13 +815,23 @@
     <script nonce="{{ csp_nonce }}">
         // Start at step 2 since account is already created via first_time_setup
         let currentStep = 2;
-        const totalSteps = 5;
+        const totalSteps = 6;
         let accountCreated = true;
         let setupScriptRan = false;
+        let gemmaDepCheckDone = false;
 
         // Initialize wizard on load
         document.addEventListener('DOMContentLoaded', async () => {
             updateProgress();
+            
+            // Setup AI strategy radio buttons
+            document.querySelectorAll('input[name="wizAiStrategy"]').forEach(radio => {
+                radio.addEventListener('change', onAiStrategyChange);
+            });
+            
+            // Setup Gemma download button
+            document.getElementById('gemmaDownloadBtn')?.addEventListener('click', downloadGemmaModel);
+            document.getElementById('gemmaSkipBtn')?.addEventListener('click', skipGemmaDownload);
             
             const prevBtn = document.getElementById('prevBtn');
             if (prevBtn) prevBtn.addEventListener('click', previousStep);
@@ -666,6 +881,112 @@
         document.getElementById('password').addEventListener('input', (e) => {
             checkPasswordStrength(e.target.value);
         });
+        
+        // ML/AI Helper Functions
+        async function onAiStrategyChange() {
+            const strategy = document.querySelector('input[name="wizAiStrategy"]:checked')?.value;
+            const gemmaSection = document.getElementById('gemmaDownloadSection');
+            
+            if (strategy === 'accuracy_mode') {
+                gemmaSection.style.display = 'block';
+                if (!gemmaDepCheckDone) {
+                    await checkGemmaDepencies();
+                }
+            } else {
+                gemmaSection.style.display = 'none';
+            }
+        }
+        
+        async function checkGemmaDepencies() {
+            gemmaDepCheckDone = true;
+            const resultDiv = document.getElementById('depCheckResult');
+            
+            try {
+                const response = await fetch('/api/ml/check-dependencies');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const depsOk = data.torch_installed && data.transformers_installed;
+                    
+                    let html = '<div style="line-height: 1.8;">';
+                    html += `<div>${data.torch_installed ? '✅' : '❌'} PyTorch: ${data.torch_installed ? 'Installed' : 'Missing'}</div>`;
+                    html += `<div>${data.transformers_installed ? '✅' : '❌'} Transformers: ${data.transformers_installed ? 'Installed' : 'Missing'}</div>`;
+                    html += `<div>📦 Model Size: ${data.estimated_download_size_gb}GB</div>`;
+                    html += `<div>💾 Free Disk: ${data.free_disk_space_gb} GB</div>`;
+                    html += '</div>';
+                    
+                    resultDiv.innerHTML = html;
+                    
+                    if (!depsOk) {
+                        html += `<div style="margin-top: 8px; padding: 8px; background: white; border-radius: 4px; font-size: 11px;">`;
+                        html += `<strong>⚠️ Missing dependencies</strong><br>`;
+                        html += `Install with: <code>${data.install_command}</code>`;
+                        html += `</div>`;
+                        resultDiv.innerHTML = html;
+                    }
+                    
+                    const downloadBtn = document.getElementById('gemmaDownloadBtn');
+                    const skipBtn = document.getElementById('gemmaSkipBtn');
+                    
+                    if (depsOk && data.free_disk_space_gb >= 5) {
+                        downloadBtn.style.display = 'block';
+                        skipBtn.style.display = 'block';
+                    } else if (depsOk) {
+                        skipBtn.style.display = 'block';
+                        downloadBtn.style.display = 'none';
+                    } else {
+                        downloadBtn.style.display = 'none';
+                        skipBtn.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">Error checking dependencies: ${error.message}</div>`;
+                document.getElementById('gemmaSkipBtn').style.display = 'block';
+            }
+        }
+        
+        async function downloadGemmaModel() {
+            const downloadBtn = document.getElementById('gemmaDownloadBtn');
+            const downloadStatus = document.getElementById('downloadStatus');
+            const downloadStatusText = document.getElementById('downloadStatusText');
+            
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = '⏳ Downloading...';
+            downloadStatus.style.display = 'block';
+            downloadStatusText.textContent = 'Connecting to Hugging Face...';
+            
+            try {
+                const response = await fetch('/api/ml/pre-download-model', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    downloadStatusText.innerHTML = '✅ Model downloaded successfully! You\'re all set to use Accuracy Mode.';
+                    downloadBtn.textContent = '✅ Download Complete';
+                    downloadBtn.style.backgroundColor = '#4CAF50';
+                } else {
+                    downloadStatusText.innerHTML = `⚠️ ${data.message}<br><small>${data.fallback}</small>`;
+                    downloadBtn.textContent = '📥 Download Gemma Model Now';
+                    downloadBtn.disabled = false;
+                }
+            } catch (error) {
+                downloadStatusText.innerHTML = `❌ Download failed: ${error.message}`;
+                downloadBtn.textContent = '📥 Download Gemma Model Now';
+                downloadBtn.disabled = false;
+            }
+        }
+        
+        function skipGemmaDownload() {
+            const skipBtn = document.getElementById('gemmaSkipBtn');
+            const downloadStatus = document.getElementById('downloadStatus');
+            const downloadStatusText = document.getElementById('downloadStatusText');
+            
+            downloadStatusText.textContent = '⏭️ Skipped. Model will download on first use of Accuracy Mode.';
+            downloadStatus.style.display = 'block';
+            skipBtn.style.display = 'none';
+            document.getElementById('gemmaDownloadBtn').style.display = 'none';
+        }
         
         function showAlert(message, type) {
             const container = document.getElementById('alertContainer');
@@ -765,9 +1086,15 @@
                 const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
                 const confirmPassword = document.getElementById('confirmPassword').value;
+                const acceptTos = document.getElementById('acceptTos').checked;
                 
                 if (!username) {
                     showAlert('Username is required', 'error');
+                    return;
+                }
+                
+                if (!acceptTos) {
+                    showAlert('You must accept the Terms of Service to continue', 'error');
                     return;
                 }
                 
@@ -795,7 +1122,7 @@
                     const response = await fetch('/api/wizard/create-account', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, password })
+                        body: JSON.stringify({ username, password, tos_accepted: true })
                     });
                     
                     const data = await response.json();
@@ -1389,11 +1716,64 @@
             }
         }
         
+        // ToS Modal Functions
+        let tosViewed = false;
+        
+        function showTosModal() {
+            const modal = document.getElementById('tosModal');
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeTosModal() {
+            const modal = document.getElementById('tosModal');
+            const tosContent = document.getElementById('tosContent');
+            const scrolledToBottom = tosContent.scrollHeight - tosContent.scrollTop <= tosContent.clientHeight + 50;
+            
+            if (!scrolledToBottom) {
+                if (!confirm('You must scroll to the bottom of the Terms of Service. Close anyway?')) {
+                    return;
+                }
+            }
+            
+            tosViewed = true;
+            enableTosCheckbox();
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        function enableTosCheckbox() {
+            const checkbox = document.getElementById('acceptTos');
+            const label = document.getElementById('tosCheckboxLabel');
+            const viewBtn = document.getElementById('viewTosBtn');
+            
+            checkbox.disabled = false;
+            checkbox.style.cursor = 'pointer';
+            label.style.opacity = '1';
+            label.style.cursor = 'pointer';
+            viewBtn.textContent = '✅ Terms of Service (Viewed)';
+            viewBtn.style.background = 'var(--md-sys-color-tertiary)';
+        }
+        
         // Bind events on page load
         document.addEventListener('DOMContentLoaded', () => {
             const addBtn = document.getElementById('addWalletBtn');
             if (addBtn) addBtn.addEventListener('click', addWallet);
             updateProgress();
+            
+            // Check if ToS content scrolls to bottom
+            const tosContent = document.getElementById('tosContent');
+            if (tosContent) {
+                tosContent.addEventListener('scroll', () => {
+                    const scrolledToBottom = tosContent.scrollHeight - tosContent.scrollTop <= tosContent.clientHeight + 50;
+                    const acceptModalBtn = document.getElementById('acceptTosModalBtn');
+                    if (scrolledToBottom) {
+                        acceptModalBtn.disabled = false;
+                        acceptModalBtn.style.opacity = '1';
+                        acceptModalBtn.style.cursor = 'pointer';
+                    }
+                });
+            }
         });
     </script>
 </body>
