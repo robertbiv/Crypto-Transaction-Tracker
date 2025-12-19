@@ -1879,7 +1879,7 @@ def api_reprocess_all_transactions():
 # ==========================================
 
 def get_accuracy_controller(mode='accurate'):
-    """Initialize accuracy mode controller with Gemma support and error handling"""
+    """Initialize accuracy mode controller with TinyLLaMA support and error handling"""
     try:
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
@@ -2411,11 +2411,11 @@ def api_export_patterns():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/gemma/specs', methods=['GET'])
+@app.route('/api/tinyllama/specs', methods=['GET'])
 @login_required
 @web_security_required
-def api_gemma_specs():
-    """Get Gemma system requirements and local execution info"""
+def api_tinyllama_specs():
+    """Get TinyLLaMA system requirements and local execution info"""
     try:
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
@@ -2578,7 +2578,7 @@ def api_ml_check_dependencies():
             'torch_installed': torch_installed,
             'transformers_installed': transformers_installed,
             'deps_satisfied': torch_installed and transformers_installed,
-            'model_name': 'google/gemma-2b-it',
+            'model_name': 'TinyLLaMA-1.1B-Chat',
             'estimated_download_size_gb': '2-5',
             'cache_location': hf_cache,
             'free_disk_space_gb': round(free_gb, 1) if free_gb else 'Unknown',
@@ -2596,40 +2596,40 @@ def api_ml_check_dependencies():
 @login_required
 @web_security_required
 def api_ml_pre_download_model():
-    """Pre-download Gemma model to avoid delays during first reprocess"""
+    """Pre-download TinyLLaMA model to avoid delays during first reprocess"""
     # Retry logic: after 3 failures, auto-switch to ML fallback mode
     import time
     from src.ml_service import MLService
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # seconds
-    if not hasattr(app, '_gemma_download_failures'):
-        app._gemma_download_failures = 0
+    if not hasattr(app, '_tinyllama_download_failures'):
+        app._tinyllama_download_failures = 0
     try:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                logger.info(f"[ML] Starting pre-download of Gemma model... (Attempt {attempt})")
-                ml_service = MLService(mode='gemma', auto_shutdown_after_inference=False)
+                logger.info(f"[ML] Starting pre-download of TinyLLaMA model... (Attempt {attempt})")
+                ml_service = MLService(mode='tinyllama', auto_shutdown_after_inference=False)
                 ml_service._load_model()
                 if ml_service.pipe is not None:
                     logger.info("[ML] ✅ Model downloaded and cached successfully")
                     ml_service.shutdown()
-                    app._gemma_download_failures = 0
+                    app._tinyllama_download_failures = 0
                     return jsonify({
                         'success': True,
                         'message': 'Model downloaded and ready to use',
-                        'model': 'google/gemma-2b-it',
+                        'model': 'TinyLLaMA-1.1B-Chat',
                         'mode_switched': False
                     })
                 else:
                     raise RuntimeError("Model failed to load (pipe is None)")
             except Exception as e:
                 logger.warning(f"[ML] Download attempt {attempt} failed: {e}")
-                app._gemma_download_failures += 1
+                app._tinyllama_download_failures += 1
                 if attempt < MAX_RETRIES:
                     time.sleep(RETRY_DELAY)
         # If we reach here, all attempts failed
         # Switch config to ML fallback mode
-        logger.warning("[ML] All Gemma download attempts failed. Switching to ML fallback mode.")
+        logger.warning("[ML] All TinyLLaMA download attempts failed. Switching to ML fallback mode.")
         # Load and update config
         config = load_config()
         config['ml_fallback']['enabled'] = True
@@ -2641,15 +2641,15 @@ def api_ml_pre_download_model():
                 import json
                 json.dump(config, f, indent=4)
         except Exception as save_err:
-            logger.error(f"[ML] Failed to update config after Gemma failures: {save_err}")
+            logger.error(f"[ML] Failed to update config after TinyLLaMA failures: {save_err}")
         return jsonify({
             'success': False,
-            'message': f'Gemma model download failed after {MAX_RETRIES} attempts. System automatically switched to ML fallback mode (shim).',
+            'message': f'TinyLLaMA model download failed after {MAX_RETRIES} attempts. System automatically switched to ML fallback mode (shim).',
             'fallback': 'shim',
             'mode_switched': True
         }), 500
     except ImportError as e:
-        logger.warning(f"[ML] Missing dependencies for Gemma: {e}")
+        logger.warning(f"[ML] Missing dependencies for TinyLLaMA: {e}")
         return jsonify({
             'success': False,
             'error': f'Missing dependencies: {e}',
@@ -2666,11 +2666,11 @@ def api_ml_pre_download_model():
             'mode_switched': False
         }), 500
 
-@app.route('/api/ml/delete-gemma-model', methods=['POST'])
+@app.route('/api/ml/delete-tinyllama-model', methods=['POST'])
 @login_required
 @web_security_required
-def api_ml_delete_gemma_model():
-    """Delete cached Gemma model to free up disk space"""
+def api_ml_delete_tinyllama_model():
+    """Delete cached TinyLLaMA model to free up disk space"""
     import os
     import shutil
     
@@ -2679,8 +2679,8 @@ def api_ml_delete_gemma_model():
         hf_cache = os.environ.get('HF_HOME', 
                                   os.path.expanduser('~/.cache/huggingface/hub'))
         
-        # The Gemma model cache location
-        gemma_cache = os.path.join(hf_cache, 'models--google--gemma-2b-it')
+        # The TinyLLaMA model cache location
+        tinyllama_cache = os.path.join(hf_cache, 'models--TheBloke--TinyLlama-1.1B-Chat-v1.0-GGUF')
         
         freed_space_gb = 0
         
@@ -2703,27 +2703,27 @@ def api_ml_delete_gemma_model():
                 
                 return jsonify({
                     'success': True,
-                    'message': 'Gemma model deleted successfully',
+                    'message': 'TinyLLaMA model deleted successfully',
                     'freed_space_gb': freed_space_gb,
-                    'cache_location': gemma_cache
+                    'cache_location': tinyllama_cache
                 })
             except Exception as e:
-                logger.warning(f"[ML] Could not delete Gemma cache: {e}")
+                logger.warning(f"[ML] Could not delete TinyLLaMA cache: {e}")
                 return jsonify({
                     'success': False,
                     'message': f'Could not delete model: {str(e)}',
                     'freed_space_gb': 0
                 }), 400
         else:
-            logger.info("[ML] Gemma model cache not found")
+            logger.info("[ML] TinyLLaMA model cache not found")
             return jsonify({
                 'success': True,
-                'message': 'Gemma model cache not found (already deleted)',
+                'message': 'TinyLLaMA model cache not found (already deleted)',
                 'freed_space_gb': 0
             })
             
     except Exception as e:
-        logger.error(f"[ML] Error deleting Gemma model: {e}")
+        logger.error(f"[ML] Error deleting TinyLLaMA model: {e}")
         return jsonify({
             'success': False,
             'error': str(e),

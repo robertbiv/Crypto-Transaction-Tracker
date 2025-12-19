@@ -1,13 +1,13 @@
 """
-Advanced ML Features - Accuracy Mode with Gemma Integration
-Uses Gemma model for enhanced accuracy on fraud detection, descriptions, patterns, and NLS.
+Advanced ML Features - Accuracy Mode with TinyLLaMA Integration
+Uses TinyLLaMA model for enhanced accuracy on fraud detection, descriptions, patterns, and NLS.
 Falls back to heuristics if model is unavailable or disabled.
 
 Features:
-    - FraudDetectorAccurate: Context-aware fraud detection via Gemma
-    - SmartDescriptionGeneratorAccurate: Creative descriptions via Gemma
-    - PatternLearnerAccurate: Behavioral pattern analysis via Gemma
-    - NaturalLanguageSearchAccurate: True NLP via Gemma
+    - FraudDetectorAccurate: Context-aware fraud detection via TinyLLaMA
+    - SmartDescriptionGeneratorAccurate: Creative descriptions via TinyLLaMA
+    - PatternLearnerAccurate: Behavioral pattern analysis via TinyLLaMA
+    - NaturalLanguageSearchAccurate: True NLP via TinyLLaMA
 
 Author: robertbiv
 Last Modified: December 2025
@@ -25,7 +25,7 @@ from src.advanced_ml_features import (
 
 
 class FraudDetectorAccurate:
-    """Context-aware fraud detection using Gemma + heuristics"""
+    """Context-aware fraud detection using TinyLLaMA + heuristics"""
     
     def __init__(self, ml_service=None):
         self.ml_service = ml_service
@@ -105,7 +105,7 @@ Return JSON with:
 
 
 class SmartDescriptionGeneratorAccurate:
-    """Creative, context-aware descriptions using Gemma + heuristics"""
+    """Creative, context-aware descriptions using TinyLLaMA + heuristics"""
     
     def __init__(self, ml_service=None):
         self.ml_service = ml_service
@@ -173,7 +173,7 @@ Be specific and brief (under 50 chars). Return JSON: {{"description": "..."}}
 
 
 class PatternLearnerAccurate:
-    """Behavioral pattern learning using Gemma + statistical analysis"""
+    """Behavioral pattern learning using TinyLLaMA + statistical analysis"""
     
     def __init__(self, ml_service=None):
         self.ml_service = ml_service
@@ -279,7 +279,7 @@ Return JSON: {{
 
 
 class NaturalLanguageSearchAccurate:
-    """True NLP search using Gemma + regex fallback"""
+    """True NLP search using TinyLLaMA + regex fallback"""
     
     def __init__(self, ml_service=None):
         self.ml_service = ml_service
