@@ -291,6 +291,92 @@ def main():
             "_pattern_deviation_multiplier_INFO": "Pattern learning sensitivity. How many times above learned patterns triggers alert. Default: 2.5x. Adjustable range: 1.5x (stricter) to 4.0x (more lenient).",
             "min_transactions_for_learning": 20,
             "_min_transactions_for_learning_INFO": "Minimum transactions needed before pattern learning activates. Default: 20. Adjustable range: 10 to 100."
+        },
+        "audit_enhancements": {
+            "_INSTRUCTIONS": "ENTERPRISE AUDIT FEATURES (Priority 2 & 3). Enables real-time monitoring, automatic responses, ML detection, and trend analysis. All features require Flask-Limiter and scikit-learn.",
+            "enabled": True,
+            "dashboard_widget": {
+                "_INSTRUCTIONS": "Real-time audit integrity dashboard widget on web UI. Shows system integrity score, recent anomalies, and status.",
+                "enabled": True,
+                "refresh_interval_seconds": 30,
+                "display_anomaly_count": 10
+            },
+            "log_rotation": {
+                "_INSTRUCTIONS": "Automatic audit log rotation with gzip compression and archival. Prevents unbounded log growth.",
+                "enabled": True,
+                "max_file_size_mb": 10,
+                "max_age_days": 30,
+                "retention_days": 365,
+                "compress": True,
+                "archive_dir": "logs/archives",
+                "maintenance_interval_hours": 6
+            },
+            "baseline_learning": {
+                "_INSTRUCTIONS": "Auto-learn normal patterns from historical audit logs. Detects deviations and adapts baselines.",
+                "enabled": True,
+                "learning_period_days": 30,
+                "min_samples_to_train": 100,
+                "auto_update_interval_hours": 24,
+                "drift_threshold": 0.3
+            },
+            "rate_limiting": {
+                "_INSTRUCTIONS": "Rate limit all audit API endpoints to prevent abuse and DoS attacks.",
+                "enabled": True,
+                "dashboard_data_limit": "60 per hour",
+                "rotation_status_limit": "30 per hour",
+                "learn_baseline_limit": "5 per hour",
+                "ml_train_limit": "5 per hour",
+                "ml_detect_limit": "20 per hour"
+            },
+            "signature_verification": {
+                "_INSTRUCTIONS": "HMAC-SHA256 signature verification on all audit log entries. Detects tampering.",
+                "enabled": True,
+                "signing_key": "GENERATE_SECURE_KEY_ON_FIRST_RUN",
+                "algorithm": "SHA256",
+                "verify_on_load": True,
+                "dashboard_widget": True
+            },
+            "ml_anomaly_detection": {
+                "_INSTRUCTIONS": "Machine learning-based anomaly detection using Isolation Forest. Requires scikit-learn.",
+                "enabled": True,
+                "model_type": "IsolationForest",
+                "contamination_rate": 0.05,
+                "training_threshold": 100,
+                "auto_retrain_days": 7,
+                "features": ["hour_of_day", "action_code", "user_code", "status", "details_size", "transaction_count", "anomaly_count"]
+            },
+            "automatic_responses": {
+                "_INSTRUCTIONS": "Automatic incident response system. Locks operations on CRITICAL anomalies, creates incidents, escalates alerts.",
+                "enabled": True,
+                "lock_operations_on_critical": True,
+                "default_lock_duration_minutes": 60,
+                "create_incident_records": True,
+                "escalate_to_admin": True,
+                "create_forensic_snapshots": True,
+                "severity_levels": {
+                    "LOW": "Alert only",
+                    "MEDIUM": "Alert + Snapshot",
+                    "HIGH": "Alert + Escalate + Snapshot",
+                    "CRITICAL": "Lock Operations + Escalate + Admin Notify"
+                }
+            },
+            "comparative_analysis": {
+                "_INSTRUCTIONS": "Historical trend analysis and reporting. Tracks integrity, anomalies, risk scores over time.",
+                "enabled": True,
+                "default_lookback_days": 30,
+                "daily_aggregation": True,
+                "hourly_aggregation": True,
+                "generate_weekly_reports": True,
+                "trend_metrics": ["integrity_score", "anomaly_frequency", "activity_correlation", "risk_score"]
+            },
+            "incident_management": {
+                "_INSTRUCTIONS": "Incident recording, tracking, and forensics.",
+                "incidents_dir": "outputs/incidents",
+                "forensics_dir": "outputs/forensics",
+                "reports_dir": "outputs/reports/comparative",
+                "auto_cleanup_days": 90,
+                "retention_policy": "Archive after 365 days"
+            }
         }
     }
     validate_json(CONFIG_FILE, config_data)

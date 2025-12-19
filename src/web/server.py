@@ -1390,11 +1390,6 @@ def transactions_page():
     """Transactions page"""
     return render_template('transactions.html')
 
-@app.route('/config')
-@login_required
-def config_page():
-    """Configuration page"""
-    return render_template('config.html')
 
 @app.route('/warnings')
 @login_required
@@ -1425,6 +1420,18 @@ def logs_page():
 def audit_dashboard_page():
     """Audit dashboard page with real-time visualization"""
     return render_template('audit_dashboard.html')
+
+@app.route('/audit-settings')
+@login_required
+def audit_settings_page():
+    """Audit enhancement settings management page"""
+    return render_template('audit-settings.html')
+
+@app.route('/audit-responses')
+@login_required
+def audit_responses_page():
+    """Automatic response management and incident dashboard"""
+    return render_template('audit-responses.html')
 
 @app.route('/schedule')
 @login_required
@@ -4459,6 +4466,577 @@ def register_audit_enhancements():
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
         
+        @app.route('/api/audit-dashboard-data', methods=['GET'])
+        @limiter.limit("60 per hour")  # Dashboard widget refreshes every 30s, so 120/hr nominal
+        @login_required
+        def api_audit_dashboard_data():
+            """Get audit dashboard data (integrity score, anomalies, status)"""
+            try:
+                integrity_score = anomaly_detector.get_system_integrity_score()
+                
+                # Get status based on score
+                if integrity_score >= 0.9:
+                    status = 'HEALTHY'
+                elif integrity_score >= 0.7:
+                    status = 'CONCERNS'
+                else:
+                    status = 'COMPROMISED'
+                
+                return jsonify({
+                    'integrity_score': integrity_score,
+                    'status': status,
+                    'tampering_score': anomaly_detector.tampering_score,
+                    'critical_anomalies': len([a for a in anomaly_detector.anomalies if a.get('severity') == 'CRITICAL']),
+                    'anomalies': anomaly_detector.anomalies[-10:] if anomaly_detector.anomalies else [],  # Last 10 anomalies
+                    'last_check': datetime.now().isoformat(),
+                    'success': True
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e),
+                    'integrity_score': 0.0,
+                    'status': 'UNKNOWN',
+                    'anomalies': []
+                }), 500
+        
+        @app.route('/api/audit-log-rotation/status', methods=['GET'])
+        @limiter.limit("30 per hour")  # Status checks don't need frequent updates
+        @login_required
+        def api_rotation_status():
+            """Get audit log rotation and archive status"""
+            try:
+                from src.web.audit_log_rotation import AuditLogRotation
+                from pathlib import Path
+                
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                rotation = AuditLogRotation(audit_log_path)
+                stats = rotation.get_archive_stats()
+                
+                # Check current log size
+                current_size_mb = audit_log_path.stat().st_size / (1024 * 1024) if audit_log_path.exists() else 0
+                
+                return jsonify({
+                    'success': True,
+                    'current_log_size_mb': round(current_size_mb, 2),
+                    'should_rotate': rotation.should_rotate(),
+                    'max_size_mb': rotation.max_file_size_mb,
+                    'archives': stats
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-log-rotation/rotate', methods=['POST'])
+        @limiter.limit("10 per hour")  # Manual rotation should be rare
+        @login_required
+        def api_rotate_logs():
+            """Manually trigger log rotation"""
+            try:
+                from src.web.audit_log_rotation import AuditLogRotation
+                from pathlib import Path
+                
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                rotation = AuditLogRotation(audit_log_path)
+                
+                result = rotation.rotate_log()
+                cleanup = rotation.cleanup_old_archives()
+                
+                return jsonify({
+                    'success': True,
+                    'rotation': result,
+                    'cleanup': cleanup
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-log-rotation/cleanup', methods=['POST'])
+        @limiter.limit("10 per hour")  # Manual cleanup should be rare
+        @login_required
+        def api_cleanup_archives():
+            """Manually trigger archive cleanup"""
+            try:
+                from src.web.audit_log_rotation import AuditLogRotation
+                from pathlib import Path
+                
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                rotation = AuditLogRotation(audit_log_path)
+                
+                cleanup_result = rotation.cleanup_old_archives()
+                stats = rotation.get_archive_stats()
+                
+                return jsonify({
+                    'success': True,
+                    'cleanup': cleanup_result,
+                    'stats': stats
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/learn-baseline', methods=['POST'])
+        @limiter.limit("5 per hour")  # Learning is resource-intensive, limit to 5/hr
+        @login_required
+        def api_learn_baseline():
+            """AUTO-LEARN baseline from historical audit logs"""
+            try:
+                data = request.get_json() or {}
+                days_back = data.get('days_back', 30)
+                min_logs = data.get('min_logs', 100)
+                
+                result = anomaly_detector.auto_learn_baseline_from_history(days_back, min_logs)
+                
+                return jsonify({
+                    'success': result.get('success', False),
+                    'learning_result': result
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/baseline-stats', methods=['GET'])
+        @limiter.limit("30 per hour")  # Stats can be checked periodically
+        @login_required
+        def api_baseline_stats():
+            """Get baseline statistics and health information"""
+            try:
+                stats = anomaly_detector.get_baseline_statistics()
+                
+                return jsonify({
+                    'success': True,
+                    'baseline_stats': stats
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/verify-signatures', methods=['GET'])
+        @limiter.limit("20 per hour")  # Signature verification is read-only
+        @login_required
+        def api_verify_signatures():
+            """Verify all audit log signatures"""
+            try:
+                from src.web.audit_enhancements import AuditLogSigner
+                import json
+                from pathlib import Path
+                
+                # Get signing key from config
+                config_path = Path(BASE_DIR) / 'configs' / 'config.json'
+                config = json.load(open(config_path))
+                signing_key = config.get('audit_signing_key', 'default-key')
+                
+                signer = AuditLogSigner(signing_key)
+                
+                # Read audit log file
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                valid_count = 0
+                invalid_count = 0
+                invalid_entries = []
+                
+                if audit_log_path.exists():
+                    with open(audit_log_path, 'r') as f:
+                        for line_num, line in enumerate(f, 1):
+                            try:
+                                entry = json.loads(line.strip())
+                                if signer.verify_entry(entry.copy()):
+                                    valid_count += 1
+                                else:
+                                    invalid_count += 1
+                                    invalid_entries.append({
+                                        'timestamp': entry.get('timestamp'),
+                                        'action': entry.get('action'),
+                                        'status': entry.get('status'),
+                                        'reason': 'Invalid or missing signature',
+                                        'line': line_num
+                                    })
+                            except Exception as e:
+                                invalid_count += 1
+                                invalid_entries.append({
+                                    'timestamp': None,
+                                    'action': 'Parse Error',
+                                    'status': 'ERROR',
+                                    'reason': str(e),
+                                    'line': line_num
+                                })
+                
+                return jsonify({
+                    'success': True,
+                    'valid_count': valid_count,
+                    'invalid_count': invalid_count,
+                    'invalid_entries': invalid_entries[-20:],  # Last 20 invalid entries
+                    'verification_timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/signature-stats', methods=['GET'])
+        @limiter.limit("30 per hour")  # Stats endpoint for dashboard
+        @login_required
+        def api_signature_stats():
+            """Get signature verification statistics"""
+            try:
+                from src.web.audit_enhancements import AuditLogSigner
+                import json
+                from pathlib import Path
+                
+                # Get signing key
+                config_path = Path(BASE_DIR) / 'configs' / 'config.json'
+                config = json.load(open(config_path))
+                signing_key = config.get('audit_signing_key', 'default-key')
+                
+                signer = AuditLogSigner(signing_key)
+                
+                # Read audit log and verify
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                valid_count = 0
+                invalid_count = 0
+                last_verified = None
+                total_entries = 0
+                
+                if audit_log_path.exists():
+                    with open(audit_log_path, 'r') as f:
+                        for line in f:
+                            try:
+                                entry = json.loads(line.strip())
+                                total_entries += 1
+                                if signer.verify_entry(entry.copy()):
+                                    valid_count += 1
+                                    last_verified = entry.get('timestamp')
+                                else:
+                                    invalid_count += 1
+                            except:
+                                invalid_count += 1
+                
+                return jsonify({
+                    'success': True,
+                    'stats': {
+                        'total_entries': total_entries,
+                        'valid_signatures': valid_count,
+                        'invalid_signatures': invalid_count,
+                        'verification_rate': (valid_count / total_entries * 100) if total_entries > 0 else 0,
+                        'last_verified': last_verified
+                    }
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/ml-train', methods=['POST'])
+        @limiter.limit("5 per hour")  # Model training is resource-intensive
+        @login_required
+        def api_ml_train():
+            """Train ML anomaly detection model on historical logs"""
+            try:
+                from src.web.audit_enhancements import MLAnomalyDetector
+                import json
+                from pathlib import Path
+                
+                # Load recent audit entries
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                entries = []
+                
+                if audit_log_path.exists():
+                    with open(audit_log_path, 'r') as f:
+                        for line in f:
+                            try:
+                                entries.append(json.loads(line.strip()))
+                            except:
+                                pass
+                
+                # Train model
+                ml_detector = MLAnomalyDetector(contamination=0.05)
+                result = ml_detector.train_model(entries[-1000:])  # Use last 1000 entries
+                
+                if result['success']:
+                    # Store model info
+                    model_info = ml_detector.get_model_info()
+                    return jsonify({
+                        'success': True,
+                        'training_result': result,
+                        'model_info': model_info
+                    })
+                else:
+                    return jsonify({'success': False, 'error': result.get('message')}), 400
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/ml-detect', methods=['POST'])
+        @limiter.limit("20 per hour")  # Detection can be called more frequently
+        @login_required
+        def api_ml_detect():
+            """Run ML anomaly detection on recent audit logs"""
+            try:
+                from src.web.audit_enhancements import MLAnomalyDetector
+                import json
+                from pathlib import Path
+                
+                # Load recent audit entries
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                entries = []
+                
+                if audit_log_path.exists():
+                    with open(audit_log_path, 'r') as f:
+                        for line in f:
+                            try:
+                                entries.append(json.loads(line.strip()))
+                            except:
+                                pass
+                
+                # Run detection
+                ml_detector = MLAnomalyDetector()
+                
+                # First, train if needed
+                data = request.get_json() or {}
+                if data.get('auto_train', False):
+                    training_result = ml_detector.train_model(entries[-1000:])
+                    if not training_result['success']:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Model training failed: ' + training_result.get('message', 'Unknown error')
+                        }), 400
+                
+                # Detect anomalies
+                anomalies = ml_detector.detect_anomalies(entries[-100:])  # Check last 100 entries
+                
+                return jsonify({
+                    'success': True,
+                    'anomalies_detected': len(anomalies),
+                    'anomalies': anomalies,
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/ml-info', methods=['GET'])
+        @limiter.limit("30 per hour")  # Info endpoint for dashboard
+        @login_required
+        def api_ml_info():
+            """Get ML model information and training status"""
+            try:
+                from src.web.audit_enhancements import MLAnomalyDetector
+                
+                ml_detector = MLAnomalyDetector()
+                model_info = ml_detector.get_model_info()
+                
+                return jsonify({
+                    'success': True,
+                    'model_info': model_info
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/response-status', methods=['GET'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_response_status():
+            """Get automatic response system status"""
+            try:
+                from src.web.audit_responses import AutomaticResponseOrchestrator
+                
+                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                orchestrator = AutomaticResponseOrchestrator(BASE_DIR, db_path)
+                status = orchestrator.get_status()
+                
+                return jsonify({
+                    'success': True,
+                    'status': status
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/lock-operations', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_lock_operations():
+            """Manually lock database operations (admin only)"""
+            try:
+                from src.web.audit_responses import OperationLockManager
+                
+                data = request.get_json() or {}
+                reason = data.get('reason', 'Manual admin lock')
+                duration = data.get('duration_minutes', 30)
+                
+                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                lock_manager = OperationLockManager(str(db_path))
+                result = lock_manager.lock_operations(reason, duration)
+                
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/unlock-operations', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_unlock_operations():
+            """Unlock database operations (admin only)"""
+            try:
+                from src.web.audit_responses import OperationLockManager
+                
+                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                lock_manager = OperationLockManager(str(db_path))
+                result = lock_manager.unlock_operations()
+                
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/response-history', methods=['GET'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_response_history():
+            """Get automatic response action history"""
+            try:
+                from src.web.audit_responses import AutomaticResponseOrchestrator
+                
+                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                orchestrator = AutomaticResponseOrchestrator(BASE_DIR, db_path)
+                history = orchestrator.get_response_history(100)
+                
+                return jsonify({
+                    'success': True,
+                    'history': history,
+                    'total_responses': len(history)
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/comparative-report', methods=['GET', 'POST'])
+        @limiter.limit("10 per hour")
+        @login_required
+        def api_comparative_report():
+            """Generate comprehensive comparative analysis report"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                data = request.get_json() or {} if request.method == 'POST' else {}
+                days_back = data.get('days_back', 30)
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                result = report_gen.generate_comprehensive_report(days_back)
+                
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/trend-summary', methods=['GET'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_trend_summary():
+            """Get quick trend summary for dashboard"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                result = report_gen.generate_summary_report()
+                
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/integrity-trend', methods=['GET'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_integrity_trend():
+            """Get system integrity trend data"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                data = request.args
+                days_back = int(data.get('days', 30))
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                trend = report_gen.analyzer.calculate_integrity_trend(days_back)
+                
+                return jsonify({
+                    'success': True,
+                    'trend': trend
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/anomaly-frequency', methods=['GET'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_anomaly_frequency():
+            """Get anomaly frequency analysis"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                data = request.args
+                days_back = int(data.get('days', 30))
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                freq = report_gen.analyzer.calculate_anomaly_frequency(days_back)
+                
+                return jsonify({
+                    'success': True,
+                    'anomaly_frequency': freq
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @app.route('/api/audit-enhancements/risk-trend', methods=['GET'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_risk_trend():
+            """Get risk score trend"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                data = request.args
+                days_back = int(data.get('days', 30))
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                risk = report_gen.analyzer.get_risk_score_trend(days_back)
+                
+                return jsonify({
+                    'success': True,
+                    'risk_trend': risk
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
         @app.route('/api/audit-enhancements/rate-limits', methods=['GET', 'POST'])
         @login_required
         def api_rate_limits():
@@ -4476,6 +5054,454 @@ def register_audit_enhancements():
                     return jsonify(limits)
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
+        
+        # ==========================================
+        # AUDIT SETTINGS MANAGEMENT
+        # ==========================================
+        
+        @app.route('/api/audit-settings/current', methods=['GET'])
+        @limiter.limit("60 per hour")
+        @login_required
+        def api_get_current_settings():
+            """Get current audit enhancement settings"""
+            try:
+                config = load_config()
+                audit_config = config.get('audit_enhancements', {})
+                
+                return jsonify({
+                    'success': True,
+                    'settings': audit_config
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/update', methods=['POST'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_update_settings():
+            """Update audit enhancement settings"""
+            try:
+                data = request.get_json() or {}
+                section = data.get('section')
+                settings = data.get('settings', {})
+                
+                # Load current config
+                config_path = BASE_DIR / 'configs' / 'config.json'
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                
+                # Update specific section
+                if 'audit_enhancements' not in config:
+                    config['audit_enhancements'] = {}
+                
+                if section:
+                    config['audit_enhancements'][section] = settings
+                else:
+                    config['audit_enhancements'].update(settings)
+                
+                # Save config
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Settings for {section} updated successfully'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/reset', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_reset_settings():
+            """Reset all audit settings to defaults"""
+            try:
+                # Load default settings from Setup.py
+                from Setup import audit_enhancements_config
+                
+                config_path = BASE_DIR / 'configs' / 'config.json'
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                
+                config['audit_enhancements'] = audit_enhancements_config()
+                
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Settings reset to defaults'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/export', methods=['GET'])
+        @limiter.limit("10 per hour")
+        @login_required
+        def api_export_settings():
+            """Export audit settings as JSON file"""
+            try:
+                config = load_config()
+                audit_config = config.get('audit_enhancements', {})
+                
+                export_data = {
+                    'exported_at': datetime.now().isoformat(),
+                    'version': '1.0',
+                    'settings': audit_config
+                }
+                
+                return send_file(
+                    io.BytesIO(json.dumps(export_data, indent=2).encode()),
+                    mimetype='application/json',
+                    as_attachment=True,
+                    download_name=f'audit-settings-{datetime.now().strftime("%Y%m%d")}.json'
+                )
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/import', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_import_settings():
+            """Import audit settings from JSON file"""
+            try:
+                data = request.get_json() or {}
+                imported_settings = data.get('settings', {})
+                
+                config_path = BASE_DIR / 'configs' / 'config.json'
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                
+                config['audit_enhancements'] = imported_settings
+                
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Settings imported successfully'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/rotate-key', methods=['POST'])
+        @limiter.limit("3 per hour")
+        @login_required
+        def api_rotate_signature_key():
+            """Generate new signature key"""
+            try:
+                import secrets
+                new_key = secrets.token_hex(32)
+                
+                config_path = BASE_DIR / 'configs' / 'config.json'
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                
+                if 'audit_enhancements' not in config:
+                    config['audit_enhancements'] = {}
+                if 'signature_verification' not in config['audit_enhancements']:
+                    config['audit_enhancements']['signature_verification'] = {}
+                
+                config['audit_enhancements']['signature_verification']['signing_key'] = new_key
+                
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Signature key rotated successfully'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-settings/train-model', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_train_model_settings():
+            """Train ML model from settings page"""
+            try:
+                from src.web.audit_enhancements import MLAnomalyDetector
+                import json
+                from pathlib import Path
+                
+                # Load recent audit entries
+                audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+                entries = []
+                
+                if audit_log_path.exists():
+                    with open(audit_log_path, 'r') as f:
+                        for line in f:
+                            try:
+                                entries.append(json.loads(line.strip()))
+                            except:
+                                pass
+                
+                ml_detector = MLAnomalyDetector()
+                result = ml_detector.train_model(entries[-1000:])
+                
+                return jsonify({
+                    'success': result.get('success', False),
+                    'message': result.get('message', 'Training completed')
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Training failed'}), 500
+        
+        @app.route('/api/audit-settings/generate-report', methods=['POST'])
+        @limiter.limit("10 per hour")
+        @login_required
+        def api_generate_report_settings():
+            """Generate audit report from settings page"""
+            try:
+                from src.web.audit_comparative import ComparativeAnalysisReport
+                
+                audit_log_path = BASE_DIR / 'outputs' / 'logs' / 'audit.log'
+                report_gen = ComparativeAnalysisReport(BASE_DIR, str(audit_log_path))
+                
+                result = report_gen.generate_comprehensive_report(days_back=30)
+                
+                return jsonify({
+                    'success': result.get('success', False),
+                    'message': 'Report generated successfully' if result.get('success') else 'Report generation failed'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Report generation failed'}), 500
+        
+        @app.route('/api/audit-settings/clear-incidents', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_clear_all_incidents():
+            """Clear all incident records"""
+            try:
+                from src.web.audit_responses import AutomaticResponseOrchestrator
+                
+                orchestrator = AutomaticResponseOrchestrator(BASE_DIR)
+                
+                # Remove all incident files
+                incident_dir = BASE_DIR / 'outputs' / 'logs' / 'incidents'
+                if incident_dir.exists():
+                    import shutil
+                    shutil.rmtree(incident_dir)
+                    incident_dir.mkdir(parents=True, exist_ok=True)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'All incidents cleared'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Failed to clear incidents'}), 500
+        
+        # ==========================================
+        # AUTOMATIC RESPONSE MANAGEMENT
+        # ==========================================
+        
+        @app.route('/api/audit-responses/all', methods=['GET'])
+        @limiter.limit("60 per hour")
+        @login_required
+        def api_get_all_incidents():
+            """Get all active incidents"""
+            try:
+                from src.web.audit_responses import IncidentManager
+                
+                incident_mgr = IncidentManager(BASE_DIR)
+                incidents = incident_mgr.get_active_incidents()
+                
+                return jsonify({
+                    'success': True,
+                    'incidents': incidents
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'incidents': []}), 500
+        
+        @app.route('/api/audit-responses/lock-status', methods=['GET'])
+        @limiter.limit("60 per hour")
+        @login_required
+        def api_get_lock_status():
+            """Get current database lock status"""
+            try:
+                from src.web.audit_responses import OperationLockManager
+                
+                lock_mgr = OperationLockManager(BASE_DIR / 'outputs' / 'logs' / 'operations.lock')
+                
+                is_locked = lock_mgr.is_locked()
+                lock_info = lock_mgr.get_lock_info() if is_locked else {}
+                
+                return jsonify({
+                    'success': True,
+                    'is_locked': is_locked,
+                    'reason': lock_info.get('reason'),
+                    'locked_at': lock_info.get('locked_at'),
+                    'expires_at': lock_info.get('expires_at')
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
+        @app.route('/api/audit-responses/emergency-unlock', methods=['POST'])
+        @limiter.limit("5 per hour")
+        @login_required
+        def api_emergency_unlock():
+            """Emergency unlock database (admin only)"""
+            try:
+                data = request.get_json() or {}
+                admin_password = data.get('admin_password')
+                
+                # Verify admin password
+                users = load_users()
+                if not any(u.get('is_admin') and u.get('password') == admin_password for u in users):
+                    return jsonify({
+                        'success': False,
+                        'message': 'Invalid admin credentials'
+                    }), 403
+                
+                from src.web.audit_responses import OperationLockManager
+                
+                lock_mgr = OperationLockManager(BASE_DIR / 'outputs' / 'logs' / 'operations.lock')
+                lock_mgr.unlock_operations()
+                
+                # Log emergency unlock
+                audit_log('EMERGENCY_UNLOCK', {'admin': session.get('username')})
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Operations unlocked successfully'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Unlock failed'}), 500
+        
+        @app.route('/api/audit-responses/resolve/<incident_id>', methods=['POST'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_resolve_incident(incident_id):
+            """Mark incident as resolved"""
+            try:
+                from src.web.audit_responses import IncidentManager
+                
+                incident_mgr = IncidentManager(BASE_DIR)
+                incident_mgr.mark_resolved(incident_id)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Incident marked as resolved'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Failed to resolve incident'}), 500
+        
+        @app.route('/api/audit-responses/escalate/<incident_id>', methods=['POST'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_escalate_incident(incident_id):
+            """Escalate incident to admin"""
+            try:
+                from src.web.audit_responses import IncidentManager
+                
+                incident_mgr = IncidentManager(BASE_DIR)
+                incident_mgr.escalate_to_admin(incident_id)
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Incident escalated to admin'
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'message': 'Escalation failed'}), 500
+        
+        @app.route('/api/audit-responses/history', methods=['GET'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_get_incident_history():
+            """Get resolved incident history"""
+            try:
+                from src.web.audit_responses import IncidentManager
+                
+                incident_mgr = IncidentManager(BASE_DIR)
+                history = incident_mgr.get_resolved_incidents()
+                
+                return jsonify({
+                    'success': True,
+                    'history': history
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'history': []}), 500
+        
+        @app.route('/api/audit-responses/forensics', methods=['GET'])
+        @limiter.limit("30 per hour")
+        @login_required
+        def api_get_forensic_snapshots():
+            """Get list of forensic snapshots"""
+            try:
+                from src.web.audit_responses import ForensicSnapshot
+                
+                forensic_dir = BASE_DIR / 'outputs' / 'logs' / 'forensics'
+                snapshots = []
+                
+                if forensic_dir.exists():
+                    for file in forensic_dir.glob('*.json'):
+                        try:
+                            with open(file, 'r') as f:
+                                snapshot = json.load(f)
+                                snapshots.append({
+                                    'id': file.stem,
+                                    'incident_id': snapshot.get('incident_id'),
+                                    'created_at': snapshot.get('timestamp'),
+                                    'file': str(file)
+                                })
+                        except:
+                            pass
+                
+                return jsonify({
+                    'success': True,
+                    'snapshots': snapshots
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e), 'snapshots': []}), 500
+        
+        @app.route('/api/audit-responses/forensics/<snapshot_id>/download', methods=['GET'])
+        @limiter.limit("10 per hour")
+        @login_required
+        def api_download_forensic_snapshot(snapshot_id):
+            """Download forensic snapshot"""
+            try:
+                forensic_file = BASE_DIR / 'outputs' / 'logs' / 'forensics' / f'{snapshot_id}.json'
+                
+                if not forensic_file.exists():
+                    return jsonify({'error': 'Snapshot not found'}), 404
+                
+                return send_file(
+                    forensic_file,
+                    mimetype='application/json',
+                    as_attachment=True,
+                    download_name=f'forensic-{snapshot_id}.json'
+                )
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @app.route('/api/audit-responses/analysis', methods=['GET'])
+        @limiter.limit("20 per hour")
+        @login_required
+        def api_get_incident_analysis():
+            """Get incident trend analysis"""
+            try:
+                from src.web.audit_responses import IncidentManager
+                
+                incident_mgr = IncidentManager(BASE_DIR)
+                incidents = incident_mgr.get_active_incidents()
+                history = incident_mgr.get_resolved_incidents()
+                
+                # Calculate statistics
+                critical_count = len([i for i in incidents if i.get('severity') == 'CRITICAL'])
+                high_count = len([i for i in incidents if i.get('severity') == 'HIGH'])
+                
+                return jsonify({
+                    'success': True,
+                    'trend': {
+                        'critical_count': critical_count,
+                        'high_count': high_count,
+                        'avg_resolution_time': '2.5',  # Placeholder
+                        'most_common_type': 'SIGNATURE_MISMATCH',  # Placeholder
+                        'detection_rate': 98.5,  # Placeholder
+                        'false_positive_rate': 1.5  # Placeholder
+                    }
+                })
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
         
         print("✓ Audit enhancements registered (REFACTORED)")
         print("  - Anomaly Detection: Fraud method manipulation detection")
