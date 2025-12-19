@@ -189,9 +189,9 @@
                     <label style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; cursor: pointer;">
                         <input type="radio" name="ai_strategy" value="ml_only" style="margin-top: 4px;">
                         <div>
-                            <strong>✨ ML Fallback Only (Gemma 3n)</strong>
+                            <strong>✨ ML Fallback with TinyLLaMA</strong>
                             <div style="font-size: 12px; color: var(--md-sys-color-on-surface-variant);">
-                                When rules cannot classify a transaction, Gemma AI suggests a classification. Good balance of accuracy and speed. Model runs locally.
+                                When rules cannot classify a transaction, TinyLLaMA AI suggests a classification. Good balance of accuracy and speed. Model runs locally on your ARM NAS.
                             </div>
                         </div>
                     </label>
@@ -261,10 +261,10 @@
                             </div>
                         </div>
                         
-                        <button type="button" id="configGemmaDownloadBtn" class="btn btn-warning" style="margin-top: 12px; display: none;">
-                            📥 Download Gemma Model Now
+                        <button type="button" id="configTinyLLaMADownloadBtn" class="btn btn-warning" style="margin-top: 12px; display: none;">
+                            📥 Download TinyLLaMA Model Now
                         </button>
-                        <button type="button" id="configGemmaSkipBtn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
+                        <button type="button" id="configTinyLLaMASkipBtn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
                             ⏭️ Skip (Download Later)
                         </button>
                     </div>
@@ -310,7 +310,7 @@
                 </div>
             </div>
             
-            <!-- Gemma System Requirements -->
+            <!-- TinyLLaMA System Requirements -->
             <div style="background-color: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #e0e0e0;">
                 <p style="margin: 0 0 8px 0; font-weight: 500; color: #333;">💻 Recommended System Requirements</p>
                 <div style="font-size: 12px; color: #666; line-height: 1.6;">
@@ -319,7 +319,7 @@
                     <div>📌 <strong>GPU:</strong> 2GB VRAM optional (NVIDIA with CUDA recommended)</div>
                     <div>📌 <strong>Storage:</strong> 5GB free for model cache</div>
                     <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
-                        <strong>🔐 Privacy & Execution:</strong> All data processed locally. Gemma model runs on your machine - nothing sent to external servers.
+                        <strong>🔐 Privacy & Execution:</strong> All data processed locally. TinyLLaMA model runs on your machine - nothing sent to external servers.
                     </div>
                 </div>
             </div>

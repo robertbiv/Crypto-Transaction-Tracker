@@ -255,27 +255,27 @@ def main():
             "_INSTRUCTIONS": "download_warnings_enabled: Set to True to require users to acknowledge a warning before downloading tax reports. Recommended: True. If set to False, a persistent banner will remind users to always double-check all outputs and consult a tax professional."
         },
         "ml_fallback": {
-            "_INSTRUCTIONS": "Optional ML fallback for ambiguous/unclassified transactions. enabled=True activates ML suggestions. model_name: 'shim' (keywords) or 'gemma' (real model). confidence_threshold (0.0-1.0): min score to log. auto_shutdown_after_batch: free model memory after processing each batch. batch_size: transactions per batch (lower = less RAM, higher = faster).",
-            "enabled": False,
-            "model_name": "gemma",
+            "_INSTRUCTIONS": "Optional ML fallback for ambiguous/unclassified transactions. enabled=True activates ML suggestions. model_name: 'shim' (keywords) or 'tinyllama' (real model). confidence_threshold (0.0-1.0): min score to log. auto_shutdown_after_batch: free model memory after processing each batch. batch_size: transactions per batch (lower = less RAM, higher = faster). OPTIMIZED FOR ARM NAS: batch_size=5 recommended for 8GB systems.",
+            "enabled": True,
+            "model_name": "tinyllama",
             "confidence_threshold": 0.85,
             "auto_shutdown_after_batch": True,
-            "batch_size": 10
+            "batch_size": 5
         },
         "accuracy_mode": {
-            "_INSTRUCTIONS": "Enhanced accuracy features using Gemma model. Set enabled=True for context-aware analysis (fraud detection, smart descriptions, pattern learning, NLP). Set to False to use fast heuristics only. Requires ML enabled above. Specs: Intel i5+ / 8GB RAM / 2GB GPU optional (runs on CPU if needed).",
-            "enabled": False,
+            "_INSTRUCTIONS": "Enhanced accuracy features using TinyLLaMA model (1.1B parameters). Set enabled=True for context-aware analysis (fraud detection, smart descriptions, pattern learning). NLP search disabled. Set to False to use fast heuristics only. Requires ML enabled above. OPTIMIZED FOR ARM NAS with 8GB RAM (3-4GB available). Specs: ARM CPU / 8GB RAM minimum / runs on CPU.",
+            "enabled": True,
             "fraud_detection": True,
             "smart_descriptions": True,
             "pattern_learning": True,
-            "natural_language_search": True,
+            "natural_language_search": False,
             "fallback_on_error": True,
             "recommended_specs": {
-                "cpu": "Intel i5 / AMD Ryzen 5 or better",
-                "ram": "8GB minimum (16GB recommended)",
-                "gpu": "2GB VRAM optional (NVIDIA with CUDA recommended)",
-                "storage": "5GB free for model cache",
-                "execution": "Local - All data stays on your machine"
+                "cpu": "ARM or x86 processor (4+ cores recommended)",
+                "ram": "8GB minimum (3-4GB available for TinyLLaMA after OS/processes)",
+                "gpu": "Not required - TinyLLaMA optimized for CPU inference",
+                "storage": "2.5GB for TinyLLaMA model cache",
+                "execution": "Local - All data stays on your machine - ARM NAS compatible"
             }
         },
         "anomaly_detection": {

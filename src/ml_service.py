@@ -1,20 +1,20 @@
-"""Lightweight ML service with optional real Gemma model support.
+"""Lightweight ML service with optional real TinyLLaMA model support.
 
 This module provides classification for crypto transactions. It can run in two modes:
 1. Shim mode: keyword heuristics (fast, no dependencies)
-2. Real mode: Gemma 3n or similar small local model (accurate, requires transformers)
+2. Real mode: TinyLLaMA 1.1B or similar small local model (accurate, requires transformers)
 
 Usage:
     # Shim mode (default, no extra deps)
     svc = MLService(mode="shim")
     
     # Real mode (requires: pip install torch transformers)
-    svc = MLService(mode="gemma", auto_shutdown_after_inference=True)
+    svc = MLService(mode="tinyllama", auto_shutdown_after_inference=True)
     svc.suggest(tx)  # First inference loads model
     svc.shutdown()   # Free memory after use
 
 Environment:
-    ML_MODEL_NAME: Override model (default: "google/gemma-2b-it")
+    ML_MODEL_NAME: Override model (default: "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF")
     ML_DEVICE: "cpu" or "cuda" (default: auto-detect)
 """
 import os
@@ -30,7 +30,7 @@ class MLService:
         """Initialize ML service.
         
         Args:
-            mode: "shim" (keywords) or "gemma" (real model)
+            mode: "shim" (keywords) or "tinyllama" (real model)
             auto_shutdown_after_inference: if True, model unloads after each suggest()
         """
         self.mode = mode
@@ -46,7 +46,7 @@ class MLService:
         if self.model is not None:
             return  # Already loaded
 
-        if self.mode != "gemma":
+        if self.mode != "tinyllama":
             return
 
         try:
