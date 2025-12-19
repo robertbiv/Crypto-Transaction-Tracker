@@ -11,7 +11,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
 from src.decimal_utils import to_decimal
-from src.decimal_utils import to_decimal
+from src.precision_audit_logger import (
+    log_fraud_detection,
+    log_fee_calculation,
+    log_structuring_alert,
+    log_wash_sale_detection
+)
 
 
 class FraudDetector:
@@ -50,7 +55,7 @@ class FraudDetector:
                     
                     days_diff = (sell_date - buy_date).days
                     if 0 < days_diff <= self.wash_sale_threshold:
-                        alerts.append({
+                        alert = {
                             'type': 'wash_sale',
                             'coin': coin,
                             'buy_id': buy['id'],
@@ -58,7 +63,18 @@ class FraudDetector:
                             'days_apart': days_diff,
                             'severity': 'high',
                             'message': f'Possible wash sale: {coin} bought {days_diff} days before sale'
-                        })
+                        }
+                        alerts.append(alert)
+                        try:
+                            log_wash_sale_detection(
+                                tx_id=f"{buy['id']}|{sell['id']}",
+                                coin=coin,
+                                amount=str(buy.get('amount', 0)),
+                                wash_date_range=f"{buy_date.date()} to {sell_date.date()}",
+                                loss_amount=str(abs(to_decimal(sell.get('price_usd', 0)) - to_decimal(buy.get('price_usd', 0))))
+                            )
+                        except Exception:
+                            pass
         
         return alerts
     
@@ -90,7 +106,7 @@ class FraudDetector:
                             price_change = abs(sell_price - buy_price) / buy_price
                             if price_change > Decimal(str(self.pump_dump_threshold)):
                                 price_change_pct = (price_change * Decimal(100)).quantize(Decimal('0.01'))
-                                alerts.append({
+                                alert = {
                                     'type': 'pump_dump',
                                     'coin': coin,
                                     'buy_id': tx['id'],
@@ -98,7 +114,20 @@ class FraudDetector:
                                     'price_change_pct': float(price_change_pct),
                                     'severity': 'medium',
                                     'message': f'{coin} {price_change_pct}% price change between buy and sell'
-                                })
+                                }
+                                alerts.append(alert)
+                                try:
+                                    gain = (sell_price - buy_price) * to_decimal(tx.get('amount', 0))
+                                    log_fraud_detection(
+                                        tx_id=tx['id'],
+                                        coin=coin,
+                                        amount=str(tx.get('amount', 0)),
+                                        alert_type='PUMP_DUMP',
+                                        calculated_gain=str(gain.quantize(Decimal('0.01'))),
+                                        tax_impact=str((gain * Decimal('0.25')).quantize(Decimal('0.01')))
+                                    )
+                                except Exception:
+                                    pass
         
         return alerts
     
@@ -123,7 +152,7 @@ class FraudDetector:
                 amount = to_decimal(tx.get('amount', 0))
                 if amount > 0 and amount > (avg_amount * Decimal(str(self.suspicious_volume_threshold))):
                     multiplier = (amount / avg_amount) if avg_amount else Decimal(0)
-                    alerts.append({
+                    alert = {
                         'type': 'suspicious_volume',
                         'coin': coin,
                         'tx_id': tx['id'],
@@ -132,7 +161,19 @@ class FraudDetector:
                         'multiplier': float(multiplier.quantize(Decimal('0.1'))),
                         'severity': 'low',
                         'message': f'Large {coin} transaction: {amount} ({round(float(multiplier))}x average)'
-                    })
+                    }
+                    alerts.append(alert)
+                    try:
+                        log_fraud_detection(
+                            tx_id=tx['id'],
+                            coin=coin,
+                            amount=str(amount),
+                            alert_type='SUSPICIOUS_VOLUME',
+                            calculated_gain='0.00',
+                            tax_impact='0.00'
+                        )
+                    except Exception:
+                        pass
         
         return alerts
 
@@ -225,12 +266,24 @@ class DeFiClassifier:
             fee_pct = (fee / total_value) * Decimal(100)
             if fee_pct > Decimal(5):  # Flag if > 5%
                 fee_pct_rounded = fee_pct.quantize(Decimal('0.01'))
-                return {
+                alert = {
                     'type': 'high_fee',
                     'fee': float(fee),
                     'fee_pct': float(fee_pct_rounded),
                     'message': f'High fee: {fee_pct_rounded}% of transaction value'
                 }
+                try:
+                    log_fee_calculation(
+                        tx_id=tx.get('id', 'unknown'),
+                        coin=tx.get('coin', 'UNKNOWN'),
+                        amount=str(tx.get('amount', 0)),
+                        fee_amount=str(fee),
+                        fee_pct=str(fee_pct_rounded),
+                        multiplier=str(fee_pct_rounded)
+                    )
+                except Exception:
+                    pass
+                return alert
         
         return None
 
@@ -319,14 +372,26 @@ class AMLDetector:
                 
                 if max_single < (total_value * Decimal('0.3')):  # No single tx is > 30% of total
                     total_value_rounded = total_value.quantize(Decimal('0.01'))
-                    alerts.append({
+                    alert = {
                         'type': 'structuring',
                         'total_value': float(total_value_rounded),
                         'num_transactions': len(txs),
                         'days': days,
                         'severity': 'high',
                         'message': f'Structuring alert: ${total_value_rounded:,.0f} split across {len(txs)} txs in {days} days'
-                    })
+                    }
+                    alerts.append(alert)
+                    try:
+                        log_structuring_alert(
+                            tx_id=f"{key}_batch",
+                            coin=key.split('_')[1] if '_' in key else 'UNKNOWN',
+                            total_amount=str(total_value_rounded),
+                            num_transactions=len(txs),
+                            window_days=days,
+                            threshold=str(Decimal(str(threshold)))
+                        )
+                    except Exception:
+                        pass
         
         return alerts
     

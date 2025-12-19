@@ -1,6 +1,46 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, getcontext
 from typing import Any
 
+
+# ============================================================================
+# PRECISION CONSTANTS (IRS & Crypto Standards)
+# ============================================================================
+
+# Bitcoin precision (satoshi = 1e-8 BTC)
+SATOSHI = Decimal('0.00000001')
+
+# USD/fiat precision (cents)
+USD_PRECISION = Decimal('0.01')
+
+# Fee/tax percentage precision (basis points = 0.01%)
+BASIS_POINT = Decimal('0.0001')
+
+# Large transaction threshold (for structuring detection)
+STRUCTURING_THRESHOLD = Decimal('10000.00')
+
+
+# ============================================================================
+# TAX COMPLIANCE ROUNDING (IRS ROUND_HALF_UP)
+# ============================================================================
+
+def set_tax_rounding_context() -> None:
+    """
+    Set global Decimal context for tax calculations.
+    Uses ROUND_HALF_UP (0.5 always rounds up) per IRS requirements.
+    Call this once at application startup.
+    """
+    ctx = getcontext()
+    ctx.rounding = ROUND_HALF_UP
+    ctx.prec = 28  # Support up to 28 significant digits
+
+
+# Initialize tax rounding on module load
+set_tax_rounding_context()
+
+
+# ============================================================================
+# DECIMAL COERCION HELPER
+# ============================================================================
 
 def to_decimal(value: Any, default: Decimal = Decimal(0)) -> Decimal:
     """
@@ -40,3 +80,4 @@ def to_decimal(value: Any, default: Decimal = Decimal(0)) -> Decimal:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return default
+
