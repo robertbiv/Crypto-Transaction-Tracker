@@ -503,7 +503,6 @@
                 method: 'POST'
             });
             const data = await response.json();
-            
             if (data.success) {
                 downloadStatusText.innerHTML = '✅ Model downloaded successfully! You\'re all set to use Accuracy Mode.';
                 downloadBtn.textContent = '✅ Download Complete';
@@ -512,6 +511,10 @@
                 downloadStatusText.innerHTML = `⚠️ ${data.message}<br><small>${data.fallback}</small>`;
                 downloadBtn.textContent = '📥 Download Gemma Model Now';
                 downloadBtn.disabled = false;
+                if (data.mode_switched) {
+                    // Show notification to user that mode was switched
+                    alert('Gemma model download failed repeatedly. The system has automatically switched to ML fallback mode (shim). You can continue using the app, but advanced features are disabled.');
+                }
             }
         } catch (error) {
             downloadStatusText.innerHTML = `❌ Download failed: ${error.message}`;

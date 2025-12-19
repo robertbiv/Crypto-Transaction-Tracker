@@ -2416,47 +2416,73 @@ def api_ml_check_dependencies():
 @web_security_required
 def api_ml_pre_download_model():
     """Pre-download Gemma model to avoid delays during first reprocess"""
+    # Retry logic: after 3 failures, auto-switch to ML fallback mode
+    import time
+    from src.ml_service import MLService
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # seconds
+    if not hasattr(app, '_gemma_download_failures'):
+        app._gemma_download_failures = 0
     try:
-        from src.ml_service import MLService
-        
-        logger.info("[ML] Starting pre-download of Gemma model...")
-        
-        # Initialize with gemma mode to trigger download
-        ml_service = MLService(mode='gemma', auto_shutdown_after_inference=False)
-        
-        # Load model (this triggers download if not cached)
-        ml_service._load_model()
-        
-        if ml_service.pipe is not None:
-            logger.info("[ML] ✅ Model downloaded and cached successfully")
-            ml_service.shutdown()
-            return jsonify({
-                'success': True,
-                'message': 'Model downloaded and ready to use',
-                'model': 'google/gemma-2b-it'
-            })
-        else:
-            logger.warning("[ML] ⚠️  Model failed to load, will use shim fallback")
-            return jsonify({
-                'success': False,
-                'message': 'Failed to load model. System will use lightweight shim mode.',
-                'fallback': 'shim'
-            }), 400
-        
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info(f"[ML] Starting pre-download of Gemma model... (Attempt {attempt})")
+                ml_service = MLService(mode='gemma', auto_shutdown_after_inference=False)
+                ml_service._load_model()
+                if ml_service.pipe is not None:
+                    logger.info("[ML] ✅ Model downloaded and cached successfully")
+                    ml_service.shutdown()
+                    app._gemma_download_failures = 0
+                    return jsonify({
+                        'success': True,
+                        'message': 'Model downloaded and ready to use',
+                        'model': 'google/gemma-2b-it',
+                        'mode_switched': False
+                    })
+                else:
+                    raise RuntimeError("Model failed to load (pipe is None)")
+            except Exception as e:
+                logger.warning(f"[ML] Download attempt {attempt} failed: {e}")
+                app._gemma_download_failures += 1
+                if attempt < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY)
+        # If we reach here, all attempts failed
+        # Switch config to ML fallback mode
+        logger.warning("[ML] All Gemma download attempts failed. Switching to ML fallback mode.")
+        # Load and update config
+        config = load_config()
+        config['ml_fallback']['enabled'] = True
+        config['ml_fallback']['model_name'] = 'shim'
+        config['accuracy_mode']['enabled'] = False
+        # Save config
+        try:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                import json
+                json.dump(config, f, indent=4)
+        except Exception as save_err:
+            logger.error(f"[ML] Failed to update config after Gemma failures: {save_err}")
+        return jsonify({
+            'success': False,
+            'message': f'Gemma model download failed after {MAX_RETRIES} attempts. System automatically switched to ML fallback mode (shim).',
+            'fallback': 'shim',
+            'mode_switched': True
+        }), 500
     except ImportError as e:
         logger.warning(f"[ML] Missing dependencies for Gemma: {e}")
         return jsonify({
             'success': False,
             'error': f'Missing dependencies: {e}',
             'solution': 'pip install torch transformers',
-            'fallback': 'shim'
+            'fallback': 'shim',
+            'mode_switched': False
         }), 400
     except Exception as e:
         logger.error(f"[ML] Error pre-downloading model: {e}")
         return jsonify({
             'success': False,
             'error': str(e),
-            'fallback': 'shim'
+            'fallback': 'shim',
+            'mode_switched': False
         }), 500
 
 @app.route('/api/ml/delete-gemma-model', methods=['POST'])

@@ -141,13 +141,28 @@
                 document.getElementById('totalReports').textContent = '0';
             }
             
-            // Update system status
+            // Update system status with AI/ML mode
             const dbExists = await checkDatabaseExists();
+            let aiMode = 'Unknown';
+            try {
+                const configResp = await api.get('/api/config');
+                const config = typeof configResp.data === 'string' ? JSON.parse(configResp.data) : configResp.data;
+                if (config.accuracy_mode && config.accuracy_mode.enabled) {
+                    aiMode = 'Accuracy Mode';
+                } else if (config.ml_fallback && config.ml_fallback.enabled) {
+                    aiMode = (config.ml_fallback.model_name === 'gemma') ? 'ML Fallback (Gemma)' : 'ML Fallback (Shim)';
+                } else {
+                    aiMode = 'None (Rules Only)';
+                }
+            } catch (e) {
+                aiMode = 'Unknown';
+            }
             document.getElementById('systemStatus').innerHTML = `
                 <p><strong>Database:</strong> ${dbExists ? 'Connected ✓' : 'Not found - Run setup'}</p>
                 <p><strong>Date Range:</strong> ${stats.date_range && stats.date_range.min ? stats.date_range.min + ' to ' + stats.date_range.max : 'No data yet'}</p>
                 <p><strong>Encryption:</strong> Active 🔒</p>
                 <p><strong>HTTPS:</strong> Enabled ✓</p>
+                <p><strong>AI/ML Mode:</strong> <span id="aiModeStatus">${aiMode}</span></p>
             `;
             
             // Update recent activity
