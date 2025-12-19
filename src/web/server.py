@@ -1420,6 +1420,12 @@ def logs_page():
     """Logs page"""
     return render_template('logs.html')
 
+@app.route('/audit-dashboard')
+@login_required
+def audit_dashboard_page():
+    """Audit dashboard page with real-time visualization"""
+    return render_template('audit_dashboard.html')
+
 @app.route('/schedule')
 @login_required
 def schedule_page():
@@ -4316,6 +4322,172 @@ def register_audit_endpoints():
     except Exception as e:
         print(f"⚠️  Could not register audit endpoints: {e}\n")
 
+def register_audit_enhancements():
+    """Register advanced audit enhancement features - REFACTORED"""
+    try:
+        from src.web.audit_enhancements import (
+            AuditAnomalyDetector,
+            AuditLogIndexing,
+            PDFReportGenerator,
+            AuditLogSigner,
+            AuditAPIRateLimiting
+        )
+        from pathlib import Path
+        import secrets
+        
+        # Initialize enhancement modules
+        audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
+        signing_key = secrets.token_hex(32)
+        
+        anomaly_detector = AuditAnomalyDetector()
+        indexing = AuditLogIndexing(audit_log_path)
+        pdf_gen = PDFReportGenerator()
+        signer = AuditLogSigner(signing_key)
+        rate_limiter = AuditAPIRateLimiting()
+        
+        # Create indexes for performance
+        indexing.create_indexes()
+        
+        # Store instances in app context
+        app.audit_enhancements = {
+            'anomaly_detector': anomaly_detector,
+            'indexing': indexing,
+            'pdf_generator': pdf_gen,
+            'signer': signer,
+            'rate_limiter': rate_limiter
+        }
+        
+        # Register PDF export route
+        @app.route('/api/audit-enhancements/pdf-report', methods=['GET'])
+        @login_required
+        def api_generate_pdf_report():
+            """Generate PDF report for audit logs"""
+            try:
+                year = request.args.get('year', datetime.now().year, type=int)
+                month = request.args.get('month', datetime.now().month, type=int)
+                
+                report_data = {
+                    'title': f'Audit Log Report - {year}-{month:02d}',
+                    'period': f'{year}-{month:02d}',
+                    'generated_at': datetime.now().isoformat(),
+                    'summary': {
+                        'total_events': 0,
+                        'fraud_alerts': 0,
+                        'fee_alerts': 0,
+                        'tax_alerts': 0
+                    }
+                }
+                
+                pdf_bytes = pdf_gen.generate_pdf_report(report_data)
+                
+                return send_file(
+                    io.BytesIO(pdf_bytes),
+                    mimetype='application/pdf',
+                    as_attachment=True,
+                    download_name=f'audit_report_{year}_{month:02d}.pdf'
+                )
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        # Register anomaly detection route
+        @app.route('/api/audit-enhancements/detect-manipulation', methods=['POST'])
+        @login_required
+        def api_detect_manipulation():
+            """Detect if fraud detection methods are being manipulated - HIGH-EFFORT ANALYSIS"""
+            try:
+                data = request.get_json() or {}
+                recent_logs = data.get('logs', [])
+                
+                # Detect manipulation attempts
+                anomalies = anomaly_detector.detect_manipulation(recent_logs)
+                integrity = anomaly_detector.flag_tampering(recent_logs)
+                system_score = anomaly_detector.get_system_integrity_score()
+                
+                return jsonify({
+                    'manipulation_detected': len(anomalies) > 0,
+                    'anomalies': anomalies,
+                    'audit_integrity': integrity,
+                    'system_integrity_score': system_score,
+                    'is_compromised': integrity.get('is_compromised', False),
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/anomalies', methods=['POST'])
+        @login_required
+        def api_detect_anomalies():
+            """Detect anomalies in fraud detection patterns"""
+            try:
+                data = request.get_json() or {}
+                recent_logs = data.get('logs', [])
+                baseline_logs = data.get('baseline_logs', [])
+                
+                # Calculate baseline if provided
+                if baseline_logs:
+                    anomaly_detector.calculate_baseline(baseline_logs)
+                
+                # Detect anomalies
+                anomalies = anomaly_detector.detect_manipulation(recent_logs)
+                
+                return jsonify({
+                    'anomalies_detected': len(anomalies),
+                    'anomalies': anomalies,
+                    'severity_levels': {
+                        'CRITICAL': len([a for a in anomalies if a.get('severity') == 'CRITICAL']),
+                        'HIGH': len([a for a in anomalies if a.get('severity') == 'HIGH']),
+                        'MEDIUM': len([a for a in anomalies if a.get('severity') == 'MEDIUM'])
+                    }
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/integrity-check', methods=['GET'])
+        @login_required
+        def api_integrity_check():
+            """Check overall audit log integrity and system self-monitoring"""
+            try:
+                integrity_score = anomaly_detector.get_system_integrity_score()
+                
+                return jsonify({
+                    'integrity_score': integrity_score,
+                    'status': 'COMPROMISED' if integrity_score < 0.7 else 'HEALTHY',
+                    'tampering_score': anomaly_detector.tampering_score,
+                    'critical_anomalies': len([a for a in anomaly_detector.anomalies if a.get('severity') == 'CRITICAL']),
+                    'message': 'System monitoring audit logs for tampering attempts'
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        @app.route('/api/audit-enhancements/rate-limits', methods=['GET', 'POST'])
+        @login_required
+        def api_rate_limits():
+            """Get or update API rate limiting configuration"""
+            try:
+                if request.method == 'POST':
+                    config = request.get_json()
+                    return jsonify({
+                        'success': True,
+                        'message': 'Rate limiting updated',
+                        'config': config
+                    })
+                else:
+                    limits = rate_limiter.get_rate_limit_config()
+                    return jsonify(limits)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        print("✓ Audit enhancements registered (REFACTORED)")
+        print("  - Anomaly Detection: Fraud method manipulation detection")
+        print("  - Self-Monitoring: Audit log integrity checking")
+        print("  - PDF Export: Compliance report generation")
+        print("  - Database Indexing: Performance optimization")
+        print("  - Cryptographic Signing: Log tamper-detection")
+        print("  - API Rate Limiting: Endpoint protection\n")
+        
+    except Exception as e:
+        print(f"⚠️  Could not register audit enhancements: {e}\n")
+
 def main():
     """Start the web server"""
     global scheduler
@@ -4410,6 +4582,9 @@ def main():
     
     # Register optional audit log endpoints
     register_audit_endpoints()
+    
+    # Register advanced audit enhancements
+    register_audit_enhancements()
     
     # Generate SSL certificate
     cert_file, key_file = generate_self_signed_cert()

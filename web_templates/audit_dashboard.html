@@ -1,0 +1,673 @@
+<!-- Audit Log Dashboard Component -->
+<!-- Add to web_templates/audit_dashboard.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Log Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .control-group input,
+        .control-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-badge {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .severity-high {
+            color: #f56565;
+        }
+
+        .severity-medium {
+            color: #f6ad55;
+        }
+
+        .severity-low {
+            color: #48bb78;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 25px;
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .chart-wrapper {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+            height: 400px;
+        }
+
+        .events-table {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-high {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .badge-medium {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .badge-low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-wash-sale {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .badge-fraud {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .badge-fee {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #742a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #c6f6d5;
+            color: #22543d;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 25px;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .export-section {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .timestamp {
+            color: #999;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
+
+            .header-controls {
+                flex-direction: column;
+            }
+
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            td, th {
+                padding: 8px;
+            }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔍 Precision Audit Log Dashboard</h1>
+            <p>Real-time monitoring of fraud detection, fee analysis, and tax compliance events</p>
+            
+            <div class="header-controls">
+                <div class="control-group">
+                    <label for="dayRange">Days:</label>
+                    <input type="number" id="dayRange" value="7" min="1" max="365">
+                </div>
+                <button class="btn btn-primary" onclick="refreshDashboard()">🔄 Refresh</button>
+                <button class="btn btn-secondary" onclick="exportData()">📥 Export CSV</button>
+                <button class="btn btn-secondary" onclick="downloadReport()">📄 Download Report</button>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="dashboard-grid" id="statsContainer">
+            <div class="card stat-card">
+                <div class="stat-label">Total Events</div>
+                <div class="stat-number" id="totalEvents">-</div>
+                <div class="stat-badge">Last 7 days</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">🚨 Fraud Alerts</div>
+                <div class="stat-number severity-high" id="fraudAlerts">-</div>
+                <div class="stat-badge">Wash Sales, Pump & Dump</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">💰 Fee Alerts</div>
+                <div class="stat-number severity-medium" id="feeAlerts">-</div>
+                <div class="stat-badge">High Fee Detection</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">📊 Tax Impact</div>
+                <div class="stat-number" id="taxImpact">$0</div>
+                <div class="stat-badge">Total Impact</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-row">
+            <div class="chart-wrapper">
+                <div class="chart-title">Events by Type</div>
+                <canvas id="eventTypeChart"></canvas>
+            </div>
+            <div class="chart-wrapper">
+                <div class="chart-title">Events by Severity</div>
+                <canvas id="severityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Timeline - Events Over Time</div>
+            <canvas id="timelineChart" style="max-height: 300px;"></canvas>
+        </div>
+
+        <!-- Recent Events Table -->
+        <div class="chart-container">
+            <div class="chart-title">📋 Recent Events</div>
+            <table id="eventsTable">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Type</th>
+                        <th>Severity</th>
+                        <th>Coin</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsTableBody">
+                    <tr>
+                        <td colspan="6" class="loading"><span class="spinner"></span> Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+
+        async function refreshDashboard() {
+            const dayRange = document.getElementById('dayRange').value;
+            
+            try {
+                // Show loading state
+                document.getElementById('statsContainer').innerHTML = '<div class="loading"><span class="spinner"></span> Loading dashboard data...</div>';
+                
+                const response = await fetch(`/api/audit-logs/dashboard-data?days=${dayRange}`, {
+                    headers: {
+                        'X-CSRF-Token': getCsrfToken()
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    showError(data.error || 'Failed to load dashboard data');
+                    return;
+                }
+
+                updateDashboard(data.dashboard, dayRange);
+                showSuccess('Dashboard updated');
+            } catch (error) {
+                showError(`Error loading dashboard: ${error.message}`);
+            }
+        }
+
+        function updateDashboard(dashboard, dayRange) {
+            // Update statistics cards
+            document.getElementById('totalEvents').textContent = dashboard.summary.total_events;
+            document.getElementById('fraudAlerts').textContent = dashboard.summary.fraud_alerts;
+            document.getElementById('feeAlerts').textContent = dashboard.summary.fee_alerts;
+            document.getElementById('taxImpact').textContent = `$${parseFloat(dashboard.summary.tax_impact).toFixed(2)}`;
+
+            // Update charts
+            updateEventTypeChart(dashboard.events_by_type);
+            updateSeverityChart(dashboard.events_by_severity);
+            updateTimelineChart(dashboard.events_by_date);
+            updateRecentEventsTable(dashboard.recent_events);
+        }
+
+        function updateEventTypeChart(eventsByType) {
+            const ctx = document.getElementById('eventTypeChart').getContext('2d');
+            
+            if (charts.eventType) {
+                charts.eventType.destroy();
+            }
+
+            charts.eventType = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(eventsByType),
+                    datasets: [{
+                        data: Object.values(eventsByType),
+                        backgroundColor: [
+                            '#667eea',
+                            '#764ba2',
+                            '#f093fb',
+                            '#4facfe',
+                            '#00f2fe',
+                            '#43e97b'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        function updateSeverityChart(eventsBySeverity) {
+            const ctx = document.getElementById('severityChart').getContext('2d');
+            
+            if (charts.severity) {
+                charts.severity.destroy();
+            }
+
+            const colors = {
+                'high': '#f56565',
+                'medium': '#f6ad55',
+                'low': '#48bb78'
+            };
+
+            charts.severity = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(eventsBySeverity),
+                    datasets: [{
+                        label: 'Event Count',
+                        data: Object.values(eventsBySeverity),
+                        backgroundColor: Object.keys(eventsBySeverity).map(k => colors[k] || '#667eea')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function updateTimelineChart(eventsByDate) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            if (charts.timeline) {
+                charts.timeline.destroy();
+            }
+
+            const dates = Object.keys(eventsByDate).sort();
+            const datasets = {
+                'WASH_SALE': [],
+                'PUMP_DUMP': [],
+                'FEE_CALCULATION': [],
+                'SUSPICIOUS_VOLUME': [],
+                'STRUCTURING': [],
+                'ANOMALY': []
+            };
+
+            dates.forEach(date => {
+                Object.keys(datasets).forEach(type => {
+                    datasets[type].push(eventsByDate[date][type] || 0);
+                });
+            });
+
+            const colors = {
+                'WASH_SALE': '#667eea',
+                'PUMP_DUMP': '#f56565',
+                'FEE_CALCULATION': '#f6ad55',
+                'SUSPICIOUS_VOLUME': '#48bb78',
+                'STRUCTURING': '#764ba2',
+                'ANOMALY': '#4facfe'
+            };
+
+            charts.timeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: Object.keys(datasets).map(type => ({
+                        label: type,
+                        data: datasets[type],
+                        borderColor: colors[type],
+                        backgroundColor: colors[type] + '20',
+                        tension: 0.4
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function updateRecentEventsTable(recentEvents) {
+            const tbody = document.getElementById('eventsTableBody');
+            
+            if (recentEvents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No events found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = recentEvents.map(event => `
+                <tr>
+                    <td class="timestamp">${new Date(event.timestamp).toLocaleString()}</td>
+                    <td><span class="badge badge-${event.type.toLowerCase()}">${event.type}</span></td>
+                    <td><span class="badge badge-${event.severity}">${event.severity.toUpperCase()}</span></td>
+                    <td><strong>${event.coin}</strong></td>
+                    <td>-</td>
+                    <td>${event.message}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function exportData() {
+            const dayRange = document.getElementById('dayRange').value;
+            window.location.href = `/api/audit-logs/download?days=${dayRange}`;
+        }
+
+        async function downloadReport() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            window.location.href = `/api/audit-logs/compliance-report/download?year=${year}&month=${month}&format=csv`;
+        }
+
+        function getCsrfToken() {
+            const name = 'X-CSRF-Token=';
+            const decodedCookie = decodeURIComponent(document.cookie);
+            const cookieArray = decodedCookie.split(';');
+            for (let cookie of cookieArray) {
+                if (cookie.trim().startsWith(name)) {
+                    return cookie.trim().substring(name.length);
+                }
+            }
+            return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        }
+
+        function showError(message) {
+            const error = document.createElement('div');
+            error.className = 'error';
+            error.textContent = '❌ ' + message;
+            document.querySelector('.header').parentNode.insertBefore(error, document.querySelector('.header').nextSibling);
+            setTimeout(() => error.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const success = document.createElement('div');
+            success.className = 'success';
+            success.textContent = '✅ ' + message;
+            document.querySelector('.header').parentNode.insertBefore(success, document.querySelector('.header').nextSibling);
+            setTimeout(() => success.remove(), 3000);
+        }
+
+        // Load dashboard on page load
+        document.addEventListener('DOMContentLoaded', refreshDashboard);
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshDashboard, 30000);
+    </script>
+</body>
+</html>
