@@ -20,7 +20,7 @@ Exported Functions:
     
     Constants:
         - All system constants via wildcard import
-        - File paths, tax rules, API limits, etc.
+        - File paths, Transaction rules, API limits, etc.
 
 Usage:
     from src.utils import logger, load_config

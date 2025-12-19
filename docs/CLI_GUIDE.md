@@ -1,7 +1,7 @@
-# Crypto Tax Generator - CLI Quick Reference
+# Crypto Transaction Tracker - CLI Quick Reference
 
 ## Overview
-The `cli.py` provides a unified command-line interface for all Crypto Tax Generator features with modern formatting and comprehensive access to the system.
+The `cli.py` provides a unified command-line interface for all Crypto Transaction Tracker features with modern formatting and comprehensive access to the system.
 
 ## Installation
 No additional installation required - uses standard Python libraries.
@@ -16,19 +16,19 @@ Initialize folders and configuration files:
 python cli.py setup
 ```
 
-#### Run Tax Calculation
-Calculate taxes for current year:
+#### Process Activity
+Process and review transactions for the current year:
 ```bash
 python cli.py run
 ```
 
-Calculate taxes for all years (cascade mode):
+Process all years (cascade mode):
 ```bash
 python cli.py run --cascade
 ```
 
 #### Manual Review
-Review audit warnings for current year:
+Review audit and reconciliation warnings for current year:
 ```bash
 python cli.py review
 ```
@@ -78,8 +78,8 @@ python cli.py export --year 2024
 | Command | Description | Arguments |
 |---------|-------------|-----------|
 | `setup` | Run initial setup wizard | None |
-| `run` | Calculate taxes | `--cascade` (optional) |
-| `review` | Fix audit warnings | `[year]` (optional) |
+| `run` | Process transactions | `--cascade` (optional) |
+| `review` | Fix audit and reconciliation warnings | `[year]` (optional) |
 | `web` | Start web UI server | None |
 | `test` | Run tests | `--file <name>` (optional) |
 | `info` | Show system info | None |
@@ -101,7 +101,7 @@ python cli.py web
 
 ### Daily Workflow
 ```bash
-# Calculate taxes for current year
+# Process current-year activity
 python cli.py run
 
 # Review any warnings

@@ -1,7 +1,7 @@
-"""Legacy module shim for Crypto_Tax_Engine.
+"""Legacy module shim for Crypto_Transaction_Engine.
 
 Points to the refactored src.core.engine module for backward compatibility
-with existing code and tests that import Crypto_Tax_Engine directly.
+with existing code and tests that import Crypto_Transaction_Engine directly.
 """
 
 import sys

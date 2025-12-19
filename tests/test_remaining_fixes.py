@@ -33,7 +33,7 @@ import filelock
 # Import modules to test
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.core.engine import TaxEngine, round_decimal, to_decimal, DatabaseManager
+from src.core.engine import TransactionEngine, round_decimal, to_decimal, DatabaseManager
 
 
 class TestFileLocking:
@@ -439,7 +439,7 @@ class TestHIFOResorting:
             if l['a'] <= Decimal('0'):
                 bucket_fifo.pop(0)
         
-        # HIFO should select higher cost basis (beneficial for taxes)
+        # HIFO should select higher cost basis (beneficial for Transactions)
         assert b_hifo > b_fifo
         # HIFO: 1.0 @ 52000 + 0.5 @ 50000 = 77000
         # FIFO: 1.0 @ 50000 + 0.5 @ 45000 = 72500

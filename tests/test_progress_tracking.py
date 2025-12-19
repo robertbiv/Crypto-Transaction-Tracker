@@ -170,11 +170,11 @@ class TestProgressEndpoint(unittest.TestCase):
         print("✓ Progress endpoint returns completed status")
 
 
-class TestTaxCalculationProgress(unittest.TestCase):
-    """Test tax calculation progress tracking"""
+class TestProcessingProgress(unittest.TestCase):
+    """Test Transaction calculation progress tracking"""
     
-    def test_tax_calculation_starts_background_thread(self):
-        """Test tax calculation starts in background thread"""
+    def test_transaction_calculation_starts_background_thread(self):
+        """Test Transaction calculation starts in background thread"""
         progress_store = {}
         task_id = str(uuid.uuid4())
         
@@ -182,7 +182,7 @@ class TestTaxCalculationProgress(unittest.TestCase):
         progress_store[task_id] = {
             'progress': 0,
             'status': 'running',
-            'message': 'Starting tax calculation...'
+            'message': 'Starting Transaction calculation...'
         }
         
         # Simulate thread creation
@@ -196,10 +196,10 @@ class TestTaxCalculationProgress(unittest.TestCase):
         thread.join(timeout=1)
         
         self.assertEqual(progress_store[task_id]['progress'], 10)
-        print("✓ Tax calculation background thread works")
+        print("✓ Transaction calculation background thread works")
     
-    def test_tax_calculation_progress_increments(self):
-        """Test tax calculation progress increments correctly"""
+    def test_transaction_calculation_progress_increments(self):
+        """Test Transaction calculation progress increments correctly"""
         progress_store = {}
         task_id = str(uuid.uuid4())
         
@@ -219,10 +219,10 @@ class TestTaxCalculationProgress(unittest.TestCase):
         
         self.assertEqual(progress_store[task_id]['progress'], 100)
         self.assertEqual(progress_store[task_id]['status'], 'completed')
-        print("✓ Tax calculation progress increments correctly")
+        print("✓ Transaction calculation progress increments correctly")
     
-    def test_tax_calculation_error_handling(self):
-        """Test tax calculation error handling"""
+    def test_transaction_calculation_error_handling(self):
+        """Test Transaction calculation error handling"""
         progress_store = {}
         task_id = str(uuid.uuid4())
         
@@ -237,7 +237,7 @@ class TestTaxCalculationProgress(unittest.TestCase):
         self.assertEqual(progress_store[task_id]['status'], 'error')
         self.assertIn('error', progress_store[task_id])
         self.assertEqual(progress_store[task_id]['progress'], 45)
-        print("✓ Tax calculation error handling works")
+        print("✓ Transaction calculation error handling works")
 
 
 class TestWizardSetupProgress(unittest.TestCase):

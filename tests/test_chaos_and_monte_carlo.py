@@ -25,15 +25,15 @@ class TestChaosEngine(unittest.TestCase):
         self.test_path = Path(self.test_dir)
         
         # Patch globals
-        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
-        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
-        self.archive_patcher = patch('Crypto_Tax_Engine.ARCHIVE_DIR', self.test_path / 'processed_archive')
-        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
-        self.log_patcher = patch('Crypto_Tax_Engine.LOG_DIR', self.test_path / 'outputs' / 'logs')
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'chaos.db')
-        self.keys_patcher = patch('Crypto_Tax_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
-        self.wallets_patcher = patch('Crypto_Tax_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
-        self.config_patcher = patch('Crypto_Tax_Engine.CONFIG_FILE', self.test_path / 'config.json')
+        self.base_patcher = patch('Crypto_Transaction_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Transaction_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.archive_patcher = patch('Crypto_Transaction_Engine.ARCHIVE_DIR', self.test_path / 'processed_archive')
+        self.output_patcher = patch('Crypto_Transaction_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.log_patcher = patch('Crypto_Transaction_Engine.LOG_DIR', self.test_path / 'outputs' / 'logs')
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.test_path / 'chaos.db')
+        self.keys_patcher = patch('Crypto_Transaction_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
+        self.wallets_patcher = patch('Crypto_Transaction_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
+        self.config_patcher = patch('Crypto_Transaction_Engine.CONFIG_FILE', self.test_path / 'config.json')
         
         self.base_patcher.start()
         self.input_patcher.start()
@@ -109,7 +109,7 @@ class TestChaosEngine(unittest.TestCase):
         engine_gains = 0.0
         engine_income = 0.0
         for y in years:
-            eng = app.TaxEngine(self.db, y)
+            eng = app.TransactionEngine(self.db, y)
             eng.run()
             for t in eng.tt: engine_gains += (t['Proceeds'] - t['Cost Basis'])
             for i in eng.inc: engine_income += i['USD']
@@ -179,7 +179,7 @@ class TestRandomScenarioMonteCarloSimulation(unittest.TestCase):
                 balance[coin] = balance.get(coin, 0) - amount
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle any random valid scenario without crashing
@@ -218,7 +218,7 @@ class TestRandomScenarioMonteCarloSimulation(unittest.TestCase):
             })
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             engine.export()
@@ -255,7 +255,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         self.db.commit()
         
         try:
-            engine2023 = app.TaxEngine(self.db, 2023)
+            engine2023 = app.TransactionEngine(self.db, 2023)
             engine2023.run()
             # Should handle combined scenarios
             self.assertTrue(True)
@@ -275,7 +275,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         self.db.save_trade({'id':'6c', 'date':'2023-06-15', 'source':'M', 'action':'SELL', 'coin':'SOL', 'amount':500.0, 'price_usd':30.0, 'fee':0, 'batch_id':'6'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should generate 3 trades with different gains
@@ -295,7 +295,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         self.db.save_trade({'id':'s2', 'date':'2023-05-01', 'source':'M', 'action':'SELL', 'coin':'SOL', 'amount':100.0, 'price_usd':30.0, 'fee':0, 'batch_id':'s2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should have 1 income, 2 trades
@@ -338,7 +338,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify we have the trade
@@ -417,7 +417,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify trade
@@ -461,7 +461,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify trade
@@ -482,7 +482,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
     def test_staking_plus_wash_sale_same_year(self):
         """Test: Staking rewards combined with wash sale in same year"""
         # Staking income
-        self.db.save_trade({'id':'st1', 'date':'2023-03-15', 'source':'STAKETAX', 'action':'INCOME', 'coin':'ETH', 'amount':0.5, 'price_usd':2000.0, 'fee':0, 'batch_id':'st1'})
+        self.db.save_trade({'id':'st1', 'date':'2023-03-15', 'source':'StakeActivity', 'action':'INCOME', 'coin':'ETH', 'amount':0.5, 'price_usd':2000.0, 'fee':0, 'batch_id':'st1'})
         
         # Wash sale sequence
         self.db.save_trade({'id':'wash1', 'date':'2023-05-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':5.0, 'price_usd':2000.0, 'fee':0, 'batch_id':'wash1'})
@@ -490,7 +490,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         self.db.save_trade({'id':'wash3', 'date':'2023-06-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':5.0, 'price_usd':1900.0, 'fee':0, 'batch_id':'wash3'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should have income + trades with wash sale applied
@@ -562,8 +562,8 @@ class TestComplexCombinationScenarios(unittest.TestCase):
         
         self.db.commit()
         
-        # Run tax engine
-        engine = app.TaxEngine(self.db, 2023)
+        # Run Transaction engine
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify the sale was recorded (not rejected due to "insufficient balance")
@@ -659,7 +659,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
     
     def test_runtime_decimal_arithmetic_no_float_conversion(self):
         """
-        GOLD STANDARD FIX #1: Verify that TaxEngine uses Decimal arithmetic throughout,
+        GOLD STANDARD FIX #1: Verify that TransactionEngine uses Decimal arithmetic throughout,
         never converting to float during calculation (only at output).
         
         The bug: Previous implementation did: to_decimal(x) -> float(Decimal) -> calculations
@@ -686,8 +686,8 @@ class TestComplexCombinationScenarios(unittest.TestCase):
             self.assertIsInstance(sample_val, Decimal, 
                 f"Column {col} should be Decimal, but got {type(sample_val).__name__}")
         
-        # Run tax engine: Calculate gains with Decimal arithmetic
-        engine = app.TaxEngine(self.db, 2023)
+        # Run Transaction engine: Calculate gains with Decimal arithmetic
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify: Check that the calculation is exact
@@ -735,8 +735,8 @@ class TestComplexCombinationScenarios(unittest.TestCase):
             self.db.save_trade(t)
         self.db.commit()
         
-        # Run tax engine
-        engine = app.TaxEngine(self.db, 2023)
+        # Run Transaction engine
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify: Wash sale should be detected
@@ -779,7 +779,7 @@ class TestComplexCombinationScenarios(unittest.TestCase):
             self.db.save_trade(t)
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         wash_sales = engine.wash_sale_log

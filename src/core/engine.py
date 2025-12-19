@@ -1,29 +1,29 @@
 """
 ================================================================================
-TAX ENGINE - Core Tax Calculation Engine (2025 US Compliance Edition)
+Transaction ENGINE - Core Transaction Calculation Engine (2025 US Compliance Edition)
 ================================================================================
 
-The main tax calculation engine that processes cryptocurrency transactions
-and generates IRS-compliant tax reports.
+The main Transaction calculation engine that processes cryptocurrency transactions
+and generates IRS-compliant Transaction reports.
 
 Key Components:
     1. Ingestor - Imports data from CSV files and exchange APIs
-    2. StakeTaxCSVManager - Processes staking rewards
+    2. StakeActivityCSVManager - Processes staking rewards
     3. PriceFetcher - Retrieves historical USD prices
     4. WalletAuditor - Validates on-chain balances
-    5. TaxEngine - Calculates capital gains/losses and income
+    5. TransactionEngine - Calculates capital gains/losses and income
 
-Tax Calculation Features:
+Transaction Calculation Features:
     - FIFO/HIFO/LIFO accounting methods
     - Short-term vs long-term capital gains classification
     - Wash sale detection and disallowance (2025 compliance)
     - Strict broker mode for 1099-DA reconciliation
     - Staking rewards as ordinary income
     - DeFi LP token handling (conservative/aggressive modes)
-    - NFT collectibles tracking (28% tax rate)
+    - NFT collectibles tracking (28% Transaction rate)
     - Cross-wallet basis tracking with optional isolation
 
-2025 US Tax Compliance:
+2025 US Transaction Compliance:
     - IRS proposed wash sale rule support
     - Broker reporting (1099-DA) alignment via strict mode
     - Constructive receipt for staking (configurable)
@@ -42,7 +42,7 @@ Output Reports:
     - 1099-DA reconciliation report
     - Wash sale detailed log
     - Holdings snapshots (EOY)
-    - Tax loss carryover analysis
+    - Transaction loss carryover analysis
 
 Author: robertbiv
 Last Modified: December 2025
@@ -94,7 +94,7 @@ from src.core.database import DatabaseManager
 # ==========================================
 # CONSTANTS
 # ==========================================
-# Tax Calculation Constants
+# Transaction Calculation Constants
 WASH_SALE_WINDOW_DAYS = 30  # IRS wash sale rule: 30 days before and after
 DECIMAL_PRECISION = 8  # Crypto precision (satoshi level)
 USD_PRECISION = 2  # USD rounding precision
@@ -137,7 +137,7 @@ ML_FALLBACK_ENABLED = bool(os.environ.get('ML_FALLBACK_ENABLED', '0') == '1')
 ML_CONFIDENCE_THRESHOLD = float(os.environ.get('ML_FALLBACK_THRESHOLD', '0.85'))
 ML_LOG_FILE = LOG_DIR / 'model_suggestions.log'
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 logger.setLevel(logging.INFO)
 RUN_CONTEXT = 'imported'
 
@@ -235,7 +235,7 @@ def get_api_key_cipher():
                 salt = f.read()
             # Try to get password from environment or use fallback
             # In production, password comes from web login; CLI may need env var
-            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            password = os.environ.get('CRYPTO_TRANSACTION_PASSWORD')
             if password:
                 key = DatabaseEncryption.derive_fernet_key(password, salt, 'api_keys')
                 return Fernet(key)
@@ -252,7 +252,7 @@ def get_wallet_cipher():
         try:
             with open(DB_SALT_FILE, 'rb') as f:
                 salt = f.read()
-            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            password = os.environ.get('CRYPTO_TRANSACTION_PASSWORD')
             if password:
                 key = DatabaseEncryption.derive_fernet_key(password, salt, 'wallets')
                 return Fernet(key)
@@ -490,7 +490,7 @@ def load_config():
         "compliance": {
             "strict_broker_mode": True,
             "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-            "staking_taxable_on_receipt": True,
+            "staking_transactionable_on_receipt": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"]
         }
@@ -513,7 +513,7 @@ GLOBAL_CONFIG = load_config()
 
 STRICT_BROKER_MODE = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
 BROKER_SOURCES = set(GLOBAL_CONFIG.get('compliance', {}).get('broker_sources', ['COINBASE','KRAKEN','GEMINI','BINANCE','ROBINHOOD','ETORO']))
-STAKING_TAXABLE_ON_RECEIPT = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+STAKING_transactionABLE_ON_RECEIPT = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_transactionable_on_receipt', True))
 DEFI_LP_CONSERVATIVE = bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True))
 COLLECTIBLE_PREFIXES = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_prefixes', ['NFT-','ART-']))
 COLLECTIBLE_TOKENS = set(GLOBAL_CONFIG.get('compliance', {}).get('collectible_tokens', ['NFT','PUNK','BAYC']))
@@ -533,8 +533,8 @@ DEFI_LP_PATTERNS = ['UNI-V2', 'UNI-V3', 'SUSHI', 'CURVE', 'BALANCER', 'AAVE',
 COMPLIANCE_WARNINGS = {
     'HIFO': '[CONFIG] Accounting method HIFO selected. This is not recommended and may not align with broker 1099-DA reporting.',
     'STRICT_BROKER_DISABLED': '[CONFIG] strict_broker_mode is disabled. Cross-wallet basis fallback can cause 1099-DA mismatches.',
-    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_taxable_on_receipt=False. Constructive receipt deferral is aggressive and may be challenged by IRS.',
-    'DEFI_LP_AGGRESSIVE': '[CONFIG] defi_lp_conservative is False. LP deposits treated as non-taxable. AGGRESSIVE STANCE - IRS may challenge as taxable swaps.'
+    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_transactionable_on_receipt=False. Constructive receipt deferral is aggressive and may be challenged by IRS.',
+    'DEFI_LP_AGGRESSIVE': '[CONFIG] defi_lp_conservative is False. LP deposits treated as non-Reportable. AGGRESSIVE STANCE - IRS may challenge as Reportable swaps.'
 }
 
 # ==========================================
@@ -837,11 +837,11 @@ class Ingestor:
             self.db.remove_safety_backup()
         except: self.db.restore_safety_backup()
 
-class StakeTaxCSVManager:
+class StakeActivityCSVManager:
     def __init__(self, db):
         self.db = db
     def run(self):
-        # Implementation of StakeTax CSV logic (same as previous, omitted for brevity but required)
+        # Implementation of StakeActivity CSV logic (same as previous, omitted for brevity but required)
         pass
     def _get_wallets_from_file(self):
         raw = load_wallets_file()
@@ -969,9 +969,9 @@ class WalletAuditor:
         return total_calls
 
 # ==========================================
-# 5. TAX ENGINE
+# 5. Transaction ENGINE
 # ==========================================
-class TaxEngine:
+class TransactionEngine:
     def __init__(self, db, y):
         self.db, self.year, self.tt, self.inc = db, int(y), [], []
         self.holdings_by_source = {}
@@ -987,7 +987,7 @@ class TaxEngine:
             logger.warning(COMPLIANCE_WARNINGS['HIFO'])
         if not bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True)):
             logger.warning(COMPLIANCE_WARNINGS['STRICT_BROKER_DISABLED'])
-        if not bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True)):
+        if not bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_transactionable_on_receipt', True)):
             logger.warning(COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'])
         if not bool(GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True)):
             logger.warning(COMPLIANCE_WARNINGS['DEFI_LP_AGGRESSIVE'])
@@ -995,7 +995,7 @@ class TaxEngine:
             logger.info("Compliance: Wash Sale Rule ENABLED (Future Law / Conservative)")
 
     def _load_prior_year_data(self):
-        prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_TAX_LOSS_ANALYSIS.csv"
+        prior_file = OUTPUT_DIR / f"Year_{self.year - 1}" / "US_transaction_LOSS_ANALYSIS.csv"
         if prior_file.exists():
             try:
                 df = pd.read_csv(prior_file)
@@ -1011,7 +1011,7 @@ class TaxEngine:
         logger.info(f"--- 5. REPORT ({self.year}) ---")
         # Read dynamic config flags at run time
         strict_mode = bool(GLOBAL_CONFIG.get('compliance', {}).get('strict_broker_mode', True))
-        staking_on_receipt = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_taxable_on_receipt', True))
+        staking_on_receipt = bool(GLOBAL_CONFIG.get('compliance', {}).get('staking_transactionable_on_receipt', True))
         wash_sale_enabled = bool(GLOBAL_CONFIG.get('compliance', {}).get('wash_sale_rule', False))
         acct_method = str(GLOBAL_CONFIG.get('accounting', {}).get('method', 'FIFO')).upper()
         migration_loaded = False
@@ -1076,7 +1076,7 @@ class TaxEngine:
                         self.inc.append({'Date':d.date(),'Coin':t['coin'],'Source':src,'Amt':float(amt),'USD':float(round_decimal(amt*price, 2))})
 
             elif t['action'] == 'DEPOSIT':
-                # Deposits are non-taxable transfers from unknown source (or fiat)
+                # Deposits are non-Reportable transfers from unknown source (or fiat)
                 # Cost basis is generally 0 unless specified, but we track it as a lot
                 # If price_usd is provided, we use it as basis (assuming it was bought elsewhere)
                 # Otherwise 0.
@@ -1131,7 +1131,7 @@ class TaxEngine:
                     self.sale_log.append({'Source':src, 'Coin':t['coin'], 'Proceeds':float(net), 'Cost Basis':float(final_basis), 'Gain':float(rg)})
 
             elif t['action'] == 'TRANSFER':
-                # Fee on transfer = Taxable Disposition (Spend)
+                # Fee on transfer = Reportable Disposition (Spend)
                 # NEW: Uses fee_coin if specified; falls back to transfer coin for backward compatibility
                 amt, fee, price = to_decimal(t['amount']), to_decimal(t['fee']), to_decimal(t['price_usd'])
                 fee_coin = t.get('fee_coin') if pd.notna(t.get('fee_coin')) else t['coin']  # Use fee_coin if present, else transfer coin
@@ -1198,7 +1198,7 @@ class TaxEngine:
             strict = getattr(self, '_strict_mode', False)
             if strict and str(source).upper() in BROKER_SOURCES:
                 # In strict mode, use estimated basis (market price at acquisition) rather than zero
-                # This provides better tax accuracy than zero basis (which = 100% gain)
+                # This provides better Transaction accuracy than zero basis (which = 100% gain)
                 logger.warning(f"MISSING BASIS: {rem} {c} sold from {source}. Using estimated acquisition price.")
                 logger.warning(f"MANUAL REVIEW REQUIRED: Verify cost basis for {rem} {c} from {source}")
                 # Try to estimate basis using average price from same period
@@ -1269,7 +1269,7 @@ class TaxEngine:
                 rr['Wash_Disallowed_By_Broker'] = 'PENDING' if rr['Unmatched_Sell'] == 'YES' else ''
                 detailed_rows.append(rr)
             # Write standard TT
-            pd.DataFrame(self.tt).to_csv(yd/'GENERIC_TAX_CAP_GAINS.csv', index=False)
+            pd.DataFrame(self.tt).to_csv(yd/'CAP_GAINS.csv', index=False)
         if self.inc: pd.DataFrame(self.inc).to_csv(yd/'INCOME_REPORT.csv', index=False)
         if self.sale_log:
             df = pd.DataFrame(self.sale_log)
@@ -1302,7 +1302,7 @@ class TaxEngine:
             {'Item': 'Long-Term Carryover to Next Year', 'Value': carry_long},
             {'Item': 'Total Net Capital Gain/Loss', 'Value': total_net},
         ]
-        pd.DataFrame(loss_rpt).to_csv(yd/'US_TAX_LOSS_ANALYSIS.csv', index=False)
+        pd.DataFrame(loss_rpt).to_csv(yd/'US_transaction_LOSS_ANALYSIS.csv', index=False)
         if self.wash_sale_log: pd.DataFrame(self.wash_sale_log).to_csv(yd/'WASH_SALE_REPORT.csv', index=False)
         
         # Holdings snapshots (current year and end-of-year)
@@ -1315,14 +1315,14 @@ class TaxEngine:
         if holdings_rows:
             pd.DataFrame(holdings_rows).to_csv(yd/'CURRENT_HOLDINGS_DRAFT.csv', index=False)
             pd.DataFrame(holdings_rows).to_csv(yd/'EOY_HOLDINGS_SNAPSHOT.csv', index=False)
-        # Minimal TAX_REPORT presence
-        pd.DataFrame({'Summary':['Generated'], 'Year':[self.year]}).to_csv(yd/'TAX_REPORT.csv', index=False)
+        # Minimal transaction_REPORT presence
+        pd.DataFrame({'Summary':['Generated'], 'Year':[self.year]}).to_csv(yd/'transaction_REPORT.csv', index=False)
     
     def run_manual_review(self, db):
         """Run post-processing review for audit risks"""
         try:
-            from Tax_Reviewer import TaxReviewer
-            reviewer = TaxReviewer(db, self.year, tax_engine=self)
+            from Transaction_Reviewer import TransactionReviewer
+            reviewer = TransactionReviewer(db, self.year, transaction_engine=self)
             report = reviewer.run_review()
             # Export to year folder
             yd = OUTPUT_DIR / f"Year_{self.year}"
@@ -1340,7 +1340,7 @@ class TaxEngine:
 
 if __name__ == "__main__":
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    logger.info("--- CRYPTO TAX MASTER (2025 Compliance Edition) ---")
+    logger.info("--- CRYPTO TRANSACTION TRACKER (2025 Compliance Edition) ---")
     initialize_folders()
     try:
         if not load_api_keys_file(): raise ApiAuthError("Missing keys")
@@ -1348,15 +1348,15 @@ if __name__ == "__main__":
         ingestor = Ingestor(db)
         ingestor.run_csv_scan()
         ingestor.run_api_sync()
-        StakeTaxCSVManager(db).run()
+        StakeActivityCSVManager(db).run()
         bf = PriceFetcher()
         for _, r in db.get_zeros().iterrows():
             p = bf.get_price(r['coin'], pd.to_datetime(r['date'], format='mixed', utc=True))
             if p: db.update_price(r['id'], p)
         db.commit()
-        y = input("\nEnter Tax Year: ")
+        y = input("\nEnter Transaction Year: ")
         if y.isdigit():
-            eng = TaxEngine(db, y)
+            eng = TransactionEngine(db, y)
             eng.run()
             eng.export()
             # Run manual review

@@ -1,6 +1,6 @@
 """
 ================================================================================
-TEST: Tax Reviewer and Interactive Fixer
+TEST: Transaction Reviewer and Interactive Fixer
 ================================================================================
 
 Validates audit risk detection and issue remediation workflows.
@@ -22,8 +22,8 @@ from test_common import *
 import pytest
 from unittest.mock import patch, MagicMock
 
-class TestTaxReviewerHeuristics(unittest.TestCase):
-    """Comprehensive tests for Tax_Reviewer manual review assistant"""
+class TestTransactionReviewerHeuristics(unittest.TestCase):
+    """Comprehensive tests for Transaction_Reviewer manual review assistant"""
     
     def setUp(self):
         """Set up test database for each test"""
@@ -31,7 +31,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         self.db_path = Path(self.test_dir) / 'test_reviewer.db'
         
         # Patch the global DB_FILE in the app module
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.db_path)
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.db_path)
         self.db_patcher.start()
         
         self.db = app.DatabaseManager()
@@ -64,7 +64,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_nft_detection_with_hash_symbol(self):
         """Test NFT detection for assets with # in name"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         self.db.save_trade({
             'id': 'nft1',
@@ -79,7 +79,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Should detect NFT
@@ -89,7 +89,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_nft_detection_with_indicator_words(self):
         """Test NFT detection for assets with indicator words"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         test_nfts = [
             'CRYPTOPUNK#123',
@@ -113,7 +113,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
             })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
@@ -122,7 +122,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_nft_with_proper_prefix_not_flagged(self):
         """Test that NFTs with proper prefix are not flagged"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         self.db.save_trade({
             'id': 'nft1',
@@ -137,7 +137,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         nft_warnings = [w for w in report['warnings'] if w['category'] == 'NFT_COLLECTIBLES']
@@ -145,7 +145,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_btc_wbtc_wash_sale_within_30_days(self):
         """Test BTC/WBTC wash sale detection within 30-day window"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Buy BTC
         self.db.save_trade({
@@ -187,7 +187,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
@@ -197,7 +197,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_eth_steth_wash_sale_prebuy_window(self):
         """Test ETH/STETH wash sale with pre-buy window"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Buy STETH before the loss sale
         self.db.save_trade({
@@ -239,7 +239,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
@@ -250,7 +250,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_wash_sale_outside_30_day_window_not_flagged(self):
         """Test that wash sales outside 30-day window are not flagged"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Sell BTC at loss
         self.db.save_trade({
@@ -279,7 +279,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
@@ -287,7 +287,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_same_coin_wash_sale_not_flagged(self):
         """Test that same-coin wash sales are not flagged (handled by main engine)"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Sell BTC at loss
         self.db.save_trade({
@@ -316,7 +316,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Should not flag same-coin wash sales (main engine handles these)
@@ -325,7 +325,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_defi_lp_token_detection(self):
         """Test DeFi/LP token detection"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         lp_tokens = [
             'UNI-V2-ETH-USDC-LP',
@@ -349,7 +349,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
             })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         defi_warnings = [w for w in report['warnings'] if w['category'] == 'DEFI_LP_DEPOSITS']
@@ -358,7 +358,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_missing_price_detection(self):
         """Test missing price detection"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Transaction with zero price
         self.db.save_trade({
@@ -387,7 +387,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         price_warnings = [w for w in report['warnings'] if w['category'] == 'MISSING_PRICES']
@@ -396,7 +396,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_constructive_sales_same_day_offsetting_trades(self):
         """Test constructive sales detection for same-day offsetting trades"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Buy 10 BTC in morning
         self.db.save_trade({
@@ -425,7 +425,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         constructive_suggestions = [s for s in report['suggestions'] if s['category'] == 'CONSTRUCTIVE_SALES']
@@ -433,7 +433,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_no_warnings_for_clean_portfolio(self):
         """Test that clean portfolio generates no warnings"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Normal buy/sell with proper prices
         self.db.save_trade({
@@ -462,7 +462,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         self.assertEqual(report['summary']['total_warnings'], 0)
@@ -470,7 +470,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_multiple_issues_in_single_portfolio(self):
         """Test detection of multiple different issues simultaneously"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Issue 1: NFT without prefix
         self.db.save_trade({
@@ -537,15 +537,15 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Should detect all 4 categories as warnings
         self.assertGreaterEqual(report['summary']['total_warnings'], 4)  # NFT, Wash Sale, DeFi, Missing Price
     
     def test_wrong_year_not_flagged(self):
-        """Test that issues in different tax year are not flagged"""
-        from Tax_Reviewer import TaxReviewer
+        """Test that issues in different Transaction year are not flagged"""
+        from Transaction_Reviewer import TransactionReviewer
         
         # NFT in 2023
         self.db.save_trade({
@@ -562,7 +562,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         self.db.commit()
         
         # Review 2024
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Should not flag 2023 trades
@@ -571,7 +571,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_export_report_creates_csv_files(self):
         """Test that export creates CSV files"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         import tempfile
         
         # Create issue to export
@@ -588,7 +588,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Export to temp directory
@@ -604,7 +604,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
     
     def test_usdc_variant_wash_sale(self):
         """Test USDC/USDC.E wash sale detection"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Sell USDC at loss (unlikely but possible if bought at premium)
         self.db.save_trade({
@@ -633,7 +633,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         wash_warnings = [w for w in report['warnings'] if w['category'] == 'SUBSTANTIALLY_IDENTICAL_WASH_SALES']
@@ -642,7 +642,7 @@ class TestTaxReviewerHeuristics(unittest.TestCase):
 
 
 
-class TestTaxReviewerAdvanced(unittest.TestCase):
+class TestTransactionReviewerAdvanced(unittest.TestCase):
     """Test advanced heuristics: High Fee, Spam, Duplicates"""
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -657,7 +657,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_high_fee_detection(self):
         """Test: Fees > $100 are flagged"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Populate mock engine TT with a high fee event
         self.mock_engine.tt = [
@@ -669,7 +669,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         self.db.save_trade({'id':'1','date':'2024-01-01','source':'M','action':'BUY','coin':'BTC','amount':1,'price_usd':100,'fee':0,'batch_id':'1'})
         self.db.commit()
 
-        reviewer = TaxReviewer(self.db, 2024, tax_engine=self.mock_engine)
+        reviewer = TransactionReviewer(self.db, 2024, transaction_engine=self.mock_engine)
         report = reviewer.run_review()
         
         warnings = [w for w in report['warnings'] if w['category'] == 'HIGH_FEES']
@@ -678,7 +678,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_spam_token_detection(self):
         """Test: High quantity + Near-zero price = Spam Warning"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         self.db.save_trade({
             'id': 'spam1', 'date': '2024-06-01', 'source': 'AIRDROP', 
@@ -687,7 +687,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         suggestions = [s for s in report['suggestions'] if s['category'] == 'SPAM_TOKENS']
@@ -696,7 +696,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_duplicate_transaction_suspects(self):
         """Test: Same Date/Coin/Amount/Action = Duplicate Warning"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Trade 1 (API Import)
         self.db.save_trade({
@@ -711,7 +711,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         warnings = [w for w in report['warnings'] if w['category'] == 'DUPLICATE_TRANSACTIONS']
@@ -722,7 +722,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_reviewer_works_without_engine_access(self):
         """Test that reviewer still works when engine.tt is not available"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Add data that should trigger basic warnings (not requiring engine.tt)
         # Use unique dates/amounts to avoid duplicate detection
@@ -745,7 +745,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         self.db.commit()
         
         # Create reviewer WITHOUT engine (or with engine that has no tt)
-        reviewer = TaxReviewer(self.db, 2024, tax_engine=None)
+        reviewer = TransactionReviewer(self.db, 2024, transaction_engine=None)
         report = reviewer.run_review()
         
         # Should still detect NFT and missing price warnings
@@ -760,7 +760,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_price_anomaly_detection(self):
         """Test: Price Per Unit that looks like Total Value is flagged"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Scenario 1: User enters $5,000 as price for 0.1 BTC
         # Should be flagged because it's suspiciously high relative to tiny amount
@@ -794,7 +794,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         # Check for price anomaly warnings
@@ -813,7 +813,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
 
     def test_price_anomaly_comprehensive_edge_cases(self):
         """Test: Price anomaly detection with edge cases"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Edge case 1: Price is 0 (missing) - should NOT trigger anomaly
         self.db.save_trade({
@@ -852,7 +852,7 @@ class TestTaxReviewerAdvanced(unittest.TestCase):
         
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2024)
+        reviewer = TransactionReviewer(self.db, 2024)
         report = reviewer.run_review()
         
         anomaly_warnings = [w for w in report['warnings'] if w['category'] == 'PRICE_ANOMALIES']
@@ -1908,7 +1908,7 @@ class TestInteractiveFixerImports(unittest.TestCase):
         app.BASE_DIR = self.test_path
         app.INPUT_DIR = self.test_path / 'inputs'
         app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'fixer_imports_tax.db'
+        app.DB_FILE = self.test_path / 'fixer_imports_transaction.db'
         app.KEYS_FILE = self.test_path / 'api_keys.json'
         app.WALLETS_FILE = self.test_path / 'wallets.json'
         app.CONFIG_FILE = self.test_path / 'config.json'

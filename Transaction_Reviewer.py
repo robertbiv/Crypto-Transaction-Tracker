@@ -1,7 +1,7 @@
-"""Legacy module shim for Tax_Reviewer.
+"""Legacy module shim for Transaction_Reviewer.
 
 Points to the src.core.reviewer module for backward compatibility 
-with tests that import Tax_Reviewer directly.
+with tests that import Transaction_Reviewer directly.
 """
 
 import sys

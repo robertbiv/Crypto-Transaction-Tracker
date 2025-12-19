@@ -3,7 +3,7 @@
 TEST: Cascade Mode Recalculation
 ================================================================================
 
-Validates multi-year sequential tax calculation workflow.
+Validates multi-year sequential Transaction calculation workflow.
 
 Test Coverage:
     - Sequential year processing
@@ -87,7 +87,7 @@ class TestCascadeMode(unittest.TestCase):
         
         # Configure current year as 2025
         with open(app.CONFIG_FILE, 'w') as f:
-            json.dump({'tax_year': 2025}, f)
+            json.dump({'transaction_year': 2025}, f)
 
         # 2. Run Auto_Runner with --cascade
         # We need to patch sys.argv to simulate the command line flag
@@ -100,12 +100,12 @@ class TestCascadeMode(unittest.TestCase):
         self.assertTrue((app.OUTPUT_DIR / 'Year_2024').exists(), "Year 2024 folder missing")
         self.assertTrue((app.OUTPUT_DIR / 'Year_2025').exists(), "Year 2025 folder missing")
 
-        # 4. Verify Tax Logic Integrity
+        # 4. Verify Transaction Logic Integrity
         # Check 2024 Report for correct gain
         # Cost basis for 0.5 BTC should be 5000 (half of 10k)
         # Proceeds: 10000 (0.5 * 20k)
         # Gain: 5000
-        report_2024 = app.OUTPUT_DIR / 'Year_2024' / 'GENERIC_TAX_CAP_GAINS.csv'
+        report_2024 = app.OUTPUT_DIR / 'Year_2024' / 'CAP_GAINS.csv'
         self.assertTrue(report_2024.exists(), "2024 Capital Gains report missing")
         
         df_2024 = pd.read_csv(report_2024)
@@ -118,7 +118,7 @@ class TestCascadeMode(unittest.TestCase):
         # Cost basis for remaining 0.5 BTC should be 5000
         # Proceeds: 15000 (0.5 * 30k)
         # Gain: 10000
-        report_2025 = app.OUTPUT_DIR / 'Year_2025' / 'GENERIC_TAX_CAP_GAINS.csv'
+        report_2025 = app.OUTPUT_DIR / 'Year_2025' / 'CAP_GAINS.csv'
         self.assertTrue(report_2025.exists(), "2025 Capital Gains report missing")
         
         df_2025 = pd.read_csv(report_2025)
@@ -138,7 +138,7 @@ class TestCascadeMode(unittest.TestCase):
         
         # Configure current year as 2025
         with open(app.CONFIG_FILE, 'w') as f:
-            json.dump({'tax_year': 2025}, f)
+            json.dump({'transaction_year': 2025}, f)
 
         # Fake a finalized 2024 snapshot so it skips 2024
         year_2024_dir = app.OUTPUT_DIR / 'Year_2024'

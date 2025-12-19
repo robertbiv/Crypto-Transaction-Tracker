@@ -24,10 +24,10 @@ class TestCSVParsingAndIngestion(unittest.TestCase):
         self.test_path = Path(self.test_dir)
         
         # Patch globals
-        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
-        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
-        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'csv_test.db')
+        self.base_patcher = patch('Crypto_Transaction_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Transaction_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Transaction_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.test_path / 'csv_test.db')
         
         self.base_patcher.start()
         self.input_patcher.start()
@@ -171,7 +171,7 @@ class TestSmartIngestor(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
-    @patch('Crypto_Tax_Engine.PriceFetcher.get_price')
+    @patch('Crypto_Transaction_Engine.PriceFetcher.get_price')
     def test_missing_price_backfill(self, mock_get_price):
         mock_get_price.return_value = 1500.0
         # Ensure the ingestor uses the patched getter even if earlier tests modified the class
@@ -323,7 +323,7 @@ class TestLargeScaleDataIngestion(unittest.TestCase):
         self.db.commit()
         
         try:
-            engine = app.TaxEngine(self.db, 2023)
+            engine = app.TransactionEngine(self.db, 2023)
             engine.run()
             # Should process large portfolio
             self.assertTrue(True)

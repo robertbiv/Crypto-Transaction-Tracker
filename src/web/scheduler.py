@@ -1,9 +1,9 @@
 """
 ================================================================================
-SCHEDULER - Automated Tax Calculation Scheduling
+SCHEDULER - Automated Transaction Calculation Scheduling
 ================================================================================
 
-Background task scheduler for automated, unattended tax processing.
+Background task scheduler for automated, unattended Transaction processing.
 
 Scheduling Features:
     - Daily calculations at specified time
@@ -95,7 +95,7 @@ import logging
 logger = logging.getLogger("scheduler")
 
 class ScheduleManager:
-    """Manages automated scheduling of tax calculations"""
+    """Manages automated scheduling of Transaction calculations"""
     
     def __init__(self, base_dir: Path, auto_runner_path: Path):
         self.base_dir = base_dir
@@ -131,10 +131,10 @@ class ScheduleManager:
             logger.error(f"Failed to save schedule config: {e}")
             raise
     
-    def run_tax_calculation(self, cascade: bool = False):
-        """Execute tax calculation (called by scheduler)"""
+    def run_transaction_calculation(self, cascade: bool = False):
+        """Execute Transaction calculation (called by scheduler)"""
         try:
-            logger.info(f"Running scheduled tax calculation (cascade={cascade})")
+            logger.info(f"Running scheduled Transaction calculation (cascade={cascade})")
             cmd = [sys.executable, str(self.auto_runner_path)]
             if cascade:
                 cmd.append('--cascade')
@@ -142,12 +142,12 @@ class ScheduleManager:
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
-                logger.info("Scheduled tax calculation completed successfully")
+                logger.info("Scheduled Transaction calculation completed successfully")
             else:
-                logger.error(f"Scheduled tax calculation failed: {result.stderr}")
+                logger.error(f"Scheduled Transaction calculation failed: {result.stderr}")
                 
         except Exception as e:
-            logger.error(f"Error running scheduled tax calculation: {e}")
+            logger.error(f"Error running scheduled Transaction calculation: {e}")
     
     def add_schedule(self, schedule_id: str, frequency: str, time_str: str = None, 
                     day_of_week: str = None, cascade: bool = False):
@@ -194,7 +194,7 @@ class ScheduleManager:
         
         # Add job to scheduler
         self.scheduler.add_job(
-            func=self.run_tax_calculation,
+            func=self.run_transaction_calculation,
             trigger=trigger,
             id=schedule_id,
             kwargs={'cascade': cascade},

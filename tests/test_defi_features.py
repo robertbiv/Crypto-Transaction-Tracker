@@ -35,17 +35,17 @@ class TestDeFiInteractions(unittest.TestCase):
         app.BASE_DIR = self.orig_base
     
     def test_lp_token_add_remove(self):
-        """Test: LP token add/remove (DEPOSIT/WITHDRAWAL non-taxable)"""
+        """Test: LP token add/remove (DEPOSIT/WITHDRAWAL non-Reportable)"""
         # Deposit into pool
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'UNISWAP', 'action':'DEPOSIT', 'coin':'UNI-V3-LP', 'amount':100.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
         # Withdraw from pool
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'UNISWAP', 'action':'WITHDRAWAL', 'coin':'UNI-V3-LP', 'amount':100.0, 'price_usd':1200.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
-        # LP tokens are non-taxable unless explicitly sold
+        # LP tokens are non-Reportable unless explicitly sold
         self.assertEqual(len(engine.tt), 0)
     
     def test_yield_farming_rewards(self):
@@ -53,7 +53,7 @@ class TestDeFiInteractions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'AAVE', 'action':'INCOME', 'coin':'AAVE', 'amount':1.0, 'price_usd':100.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should be classified as income
@@ -65,7 +65,7 @@ class TestDeFiInteractions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'GOVERNANCE', 'action':'INCOME', 'coin':'COMP', 'amount':10.0, 'price_usd':50.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(len(engine.inc), 1)
@@ -211,39 +211,39 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
     
-    def test_fiat_deposit_nontaxable(self):
-        """Test: Fiat deposits don't create tax events"""
+    def test_fiat_deposit_nonReportable(self):
+        """Test: Fiat deposits don't create Transaction events"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'DEPOSIT', 'action':'DEPOSIT', 'coin':'USD', 'amount':10000.0, 'price_usd':1.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(len(engine.tt), 0)
         self.assertEqual(len(engine.inc), 0)
     
-    def test_crypto_deposit_from_wallet_nontaxable(self):
-        """Test: Crypto deposits from external wallets are non-taxable"""
+    def test_crypto_deposit_from_wallet_nonReportable(self):
+        """Test: Crypto deposits from external wallets are non-Reportable"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'DEPOSIT', 'action':'DEPOSIT', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should not count as income
         self.assertEqual(len(engine.inc), 0)
     
-    def test_internal_transfer_nontaxable(self):
-        """Test: Transfers between personal wallets are non-taxable"""
+    def test_internal_transfer_nonReportable(self):
+        """Test: Transfers between personal wallets are non-Reportable"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'WALLET_A', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
-        # Transfer 1 BTC from WALLET_A -> WALLET_B (should move basis, no tax)
+        # Transfer 1 BTC from WALLET_A -> WALLET_B (should move basis, no Transaction)
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'WALLET_A', 'destination':'WALLET_B', 'action':'TRANSFER', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
-        # Transfer should not create tax event
+        # Transfer should not create Transaction event
         self.assertEqual(len(engine.tt), 0)
 
     def test_per_wallet_cost_basis_isolated(self):
@@ -255,10 +255,10 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         # Sell 1 BTC only from COINBASE @ 20k
         self.db.save_trade({'id':'3', 'date':'2023-02-01', 'source':'COINBASE', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
-        tt_file = app.OUTPUT_DIR / "Year_2023" / "GENERIC_TAX_CAP_GAINS.csv"
+        tt_file = app.OUTPUT_DIR / "Year_2023" / "CAP_GAINS.csv"
         df_tt = pd.read_csv(tt_file)
         gain = df_tt['Proceeds'].sum() - df_tt['Cost Basis'].sum()
         # Should use 10k basis from COINBASE bucket, not mix with cheaper LEDGER lot
@@ -273,10 +273,10 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         # Sell 0.4 BTC from WALLET_B @ 12k
         self.db.save_trade({'id':'3', 'date':'2023-03-01', 'source':'WALLET_B', 'action':'SELL', 'coin':'BTC', 'amount':0.4, 'price_usd':12000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
-        tt_file = app.OUTPUT_DIR / "Year_2023" / "GENERIC_TAX_CAP_GAINS.csv"
+        tt_file = app.OUTPUT_DIR / "Year_2023" / "CAP_GAINS.csv"
         df_tt = pd.read_csv(tt_file)
         gain = df_tt['Proceeds'].sum() - df_tt['Cost Basis'].sum()
         # Basis should be 0.4 * 10k = 4k; proceeds 0.4 * 12k = 4.8k; gain = 800
@@ -289,7 +289,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-01-03', 'source':'KRAKEN', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':900.0, 'fee':0, 'batch_id':'3'})
         self.db.save_trade({'id':'4', 'date':'2023-01-04', 'source':'KRAKEN', 'action':'SELL', 'coin':'ETH', 'amount':0.5, 'price_usd':1100.0, 'fee':0, 'batch_id':'4'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
         recon = app.OUTPUT_DIR / "Year_2023" / "1099_RECONCILIATION.csv"
@@ -309,7 +309,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         self.db.save_trade({'id':'s3', 'date':'2023-04-01', 'source':'LEDGER', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':1200.0, 'fee':0, 'batch_id':'s3'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
 
@@ -335,7 +335,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-03-01', 'source':'WALLET_B', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':12000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(len(engine.tt), 1)
         sale = engine.tt[0]
@@ -349,7 +349,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-03-01', 'source':'WALLET_B', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':11000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         sale = engine.tt[0]
         self.assertEqual(sale['Term'], 'Long')
@@ -367,7 +367,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
             self.db.save_trade({'id':'4', 'date':'2023-04-01', 'source':'WALLET_B', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':12000.0, 'fee':0, 'batch_id':'4'})
             self.db.commit()
 
-            engine = app.TaxEngine(self.db, 2023)
+            engine = app.TransactionEngine(self.db, 2023)
             engine.run()
             sale = engine.tt[0]
             self.assertAlmostEqual(sale['Cost Basis'], 10000.0, delta=0.01)
@@ -383,7 +383,7 @@ class TestDepositWithdrawalScenarios(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-02-01', 'source':'WALLET_A', 'destination':'WALLET_B', 'action':'TRANSFER', 'coin':'BTC', 'amount':0.25, 'price_usd':0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
 
@@ -422,7 +422,7 @@ class TestReturnRefundTransactions(unittest.TestCase):
         self.db.commit()
         
         try:
-            engine = app.TaxEngine(self.db, 2023)
+            engine = app.TransactionEngine(self.db, 2023)
             engine.run()
             # Should handle gracefully
             self.assertTrue(True)
@@ -436,7 +436,7 @@ class TestReturnRefundTransactions(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-01-02', 'source':'M', 'action':'REFUND', 'coin':'USD', 'amount':100.0, 'price_usd':1.0, 'fee':-100, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertTrue(True)
@@ -457,7 +457,7 @@ class TestDeFiLPConservativeMode(unittest.TestCase):
         app.BASE_DIR = self.test_path
         app.INPUT_DIR = self.test_path / 'inputs'
         app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'defi_lp_tax.db'
+        app.DB_FILE = self.test_path / 'defi_lp_transaction.db'
         app.KEYS_FILE = self.test_path / 'api_keys.json'
         app.WALLETS_FILE = self.test_path / 'wallets.json'
         app.CONFIG_FILE = self.test_path / 'config.json'

@@ -109,7 +109,7 @@ class AuditLogManager:
             'events_by_severity': defaultdict(int),
             'fraud_alerts': 0,
             'fee_alerts': 0,
-            'tax_impact_total': Decimal('0'),
+            'transaction_impact_total': Decimal('0'),
             'most_common_coin': None,
             'date_range': {}
         }
@@ -132,11 +132,11 @@ class AuditLogManager:
             if alert_type == 'FEE_CALCULATION':
                 summary['fee_alerts'] += 1
             
-            # Tax impact
-            if 'tax_impact' in log:
+            # Transaction impact
+            if 'transaction_impact' in log:
                 try:
-                    impact = Decimal(str(log['tax_impact']))
-                    summary['tax_impact_total'] += impact
+                    impact = Decimal(str(log['transaction_impact']))
+                    summary['transaction_impact_total'] += impact
                 except:
                     pass
             
@@ -192,7 +192,7 @@ class AuditLogManager:
             'fee_alerts': summary['fee_alerts'],
             'events_by_type': dict(summary['events_by_type']),
             'events_by_severity': dict(summary['events_by_severity']),
-            'tax_impact': str(summary['tax_impact_total']),
+            'transaction_impact': str(summary['transaction_impact_total']),
             'most_common_coin': summary['most_common_coin']
         }
         
@@ -270,7 +270,7 @@ def create_audit_endpoints(app, base_dir):
             summary = audit_manager.get_summary_statistics(logs)
             
             # Convert Decimal to string for JSON serialization
-            summary['tax_impact_total'] = str(summary['tax_impact_total'])
+            summary['transaction_impact_total'] = str(summary['transaction_impact_total'])
             summary['events_by_type'] = dict(summary['events_by_type'])
             summary['events_by_severity'] = dict(summary['events_by_severity'])
             
@@ -358,7 +358,7 @@ def create_audit_endpoints(app, base_dir):
             report = audit_manager.generate_monthly_report(year=year, month=month)
             
             # Convert Decimal values to strings
-            report['tax_impact'] = str(report['tax_impact'])
+            report['transaction_impact'] = str(report['transaction_impact'])
             
             return jsonify({
                 'success': True,
@@ -400,7 +400,7 @@ def create_audit_endpoints(app, base_dir):
                 writer.writerow(['Total Audit Events', report['audit_events']])
                 writer.writerow(['Fraud Alerts', report['fraud_alerts']])
                 writer.writerow(['Fee Alerts', report['fee_alerts']])
-                writer.writerow(['Total Tax Impact', report['tax_impact']])
+                writer.writerow(['Total Transaction Impact', report['transaction_impact']])
                 writer.writerow(['Most Common Coin', report['most_common_coin'] or 'N/A'])
                 
                 writer.writerow([''])
@@ -480,7 +480,7 @@ def create_audit_endpoints(app, base_dir):
                     'total_events': summary['total_events'],
                     'fraud_alerts': summary['fraud_alerts'],
                     'fee_alerts': summary['fee_alerts'],
-                    'tax_impact': str(summary['tax_impact_total']),
+                    'transaction_impact': str(summary['transaction_impact_total']),
                     'most_common_coin': summary['most_common_coin']
                 },
                 'events_by_date': dict(events_by_date),

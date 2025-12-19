@@ -4,7 +4,7 @@
 WEB SERVER - Self-Hosted Web UI with Authentication
 ================================================================================
 
-Flask-based web interface providing browser access to all tax engine features.
+Flask-based web interface providing browser access to all Transaction engine features.
 
 Key Features:
     - HTTPS/SSL with self-signed certificates
@@ -41,8 +41,8 @@ API Endpoints:
         POST /api/delete-transaction - Remove transaction
         POST /api/sync-api - Trigger exchange API sync
     
-    Tax Operations:
-        POST /api/calculate - Run tax calculation
+    Transaction Operations:
+        POST /api/calculate - Run Transaction calculation
         GET /api/reports - List available reports
         GET /api/download/<file> - Download report
         GET /api/status - Calculation progress
@@ -127,7 +127,7 @@ import threading
 import time as _time
 import tempfile
 import uuid
-import src.core.engine as tax_app  # Import for status updates
+import src.core.engine as txn_app  # Import for status updates
 from src.core.engine import DatabaseManager  # For unified CSV ingestion
 from src.processors import Ingestor
 from src.web.scheduler import ScheduleManager
@@ -585,7 +585,7 @@ def generate_self_signed_cert():
             x509.NameAttribute(NameOID.COUNTRY_NAME, u"US"),
             x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"State"),
             x509.NameAttribute(NameOID.LOCALITY_NAME, u"City"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Crypto Tax Generator"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Crypto Transaction Tracker"),
             x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
         ])
         
@@ -989,7 +989,7 @@ def download_full_backup():
             memory_file,
             mimetype='application/zip',
             as_attachment=True,
-            download_name=f'crypto_tax_db_export_{timestamp}.zip'
+            download_name=f'crypto_transaction_db_export_{timestamp}.zip'
         )
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1077,7 +1077,7 @@ def api_wizard_restore_backup():
 
             # Decrypt backup using the provided password (user's web account password)
             # The backup contains .db_key and .db_salt files encrypted with their web password
-            from Crypto_Tax_Engine import DatabaseEncryption
+            from Crypto_Transaction_Engine import DatabaseEncryption
             
             # First try to extract .db_key and .db_salt from the encrypted backup
             # We need to decrypt the backup first to get these files
@@ -1583,7 +1583,7 @@ def api_create_transaction():
         conn.commit()
         conn.close()
         # Mark data as changed
-        tax_app.mark_data_changed()
+        txn_app.mark_data_changed()
         return jsonify({'status': 'success', 'message': 'Transaction created', 'id': tx_id, 'anomalies': anomaly_results}), 200
     except Exception as e:
         if conn:
@@ -1611,7 +1611,7 @@ def api_upload_transactions():
 
         summary = _ingest_csv_with_engine(saved_path)
         try:
-            tax_app.mark_data_changed()
+            txn_app.mark_data_changed()
         except Exception:
             pass
 
@@ -1717,7 +1717,7 @@ def api_update_transaction(transaction_id):
         conn.close()
         
         # Mark data as changed
-        tax_app.mark_data_changed()
+        txn_app.mark_data_changed()
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction updated'})
         # return jsonify({'data': encrypted_response})
@@ -1739,7 +1739,7 @@ def api_delete_transaction(transaction_id):
         conn.close()
         
         # Mark data as changed
-        tax_app.mark_data_changed()
+        txn_app.mark_data_changed()
         
         # encrypted_response = encrypt_data({'success': True, 'message': 'Transaction deleted'})
         # return jsonify({'data': encrypted_response})
@@ -1870,7 +1870,7 @@ def api_reprocess_all_transactions():
                 pass
         
         # Mark data as changed
-        tax_app.mark_data_changed()
+        txn_app.mark_data_changed()
         
         return jsonify({
             'success': True,
@@ -2269,7 +2269,7 @@ def api_update_transaction_with_history():
         conn.close()
         
         # Mark data as changed
-        tax_app.mark_data_changed()
+        txn_app.mark_data_changed()
         
         return jsonify({
             'success': True,
@@ -3144,7 +3144,7 @@ def api_get_stats():
             year_folders = [f for f in OUTPUT_DIR.iterdir() if f.is_dir() and f.name.startswith('Year_')]
             if year_folders:
                 latest_year = max(year_folders, key=lambda x: x.name)
-                loss_analysis_file = latest_year / 'US_TAX_LOSS_ANALYSIS.csv'
+                loss_analysis_file = latest_year / 'US_transaction_LOSS_ANALYSIS.csv'
                 
                 if loss_analysis_file.exists():
                     import pandas as pd
@@ -3191,7 +3191,7 @@ def api_upload_csv():
 
         summary = _ingest_csv_with_engine(saved_path)
         try:
-            tax_app.mark_data_changed()
+            txn_app.mark_data_changed()
         except Exception:
             pass
 
@@ -3223,8 +3223,8 @@ def api_get_progress(task_id):
 @app.route('/api/run', methods=['POST'])
 @login_required
 @web_security_required
-def api_run_tax_calculation():
-    """Start tax calculation"""
+def api_run_transaction_calculation():
+    """Start Transaction calculation"""
     try:
         # Check if there are transactions
         conn = get_db_connection()
@@ -3243,13 +3243,13 @@ def api_run_tax_calculation():
             return jsonify({'error': 'auto_runner.py not found'}), 404
         
         # Generate task ID
-        task_id = f"tax_calc_{secrets.token_hex(8)}"
+        task_id = f"transaction_calc_{secrets.token_hex(8)}"
         
         # Initialize progress
         progress_store[task_id] = {
             'status': 'running',
             'progress': 0,
-            'message': 'Starting tax calculation...',
+            'message': 'Starting Transaction calculation...',
             'started_at': datetime.now(timezone.utc).isoformat()
         }
         
@@ -3263,7 +3263,7 @@ def api_run_tax_calculation():
         def run_with_progress():
             try:
                 progress_store[task_id]['progress'] = 10
-                progress_store[task_id]['message'] = 'Running tax calculation...'
+                progress_store[task_id]['message'] = 'Running Transaction calculation...'
                 
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 
@@ -3279,7 +3279,7 @@ def api_run_tax_calculation():
                 if process.returncode == 0:
                     progress_store[task_id]['status'] = 'completed'
                     progress_store[task_id]['progress'] = 100
-                    progress_store[task_id]['message'] = 'Tax calculation completed successfully'
+                    progress_store[task_id]['message'] = 'Transaction calculation completed successfully'
                 else:
                     progress_store[task_id]['status'] = 'error'
                     error_msg = stderr[:500] if stderr else 'Unknown error'
@@ -3290,7 +3290,7 @@ def api_run_tax_calculation():
                     elif 'api' in error_msg.lower() and ('timeout' in error_msg.lower() or 'connection' in error_msg.lower()):
                         progress_store[task_id]['message'] = 'API connection error. Check your internet connection and try again.'
                     else:
-                        progress_store[task_id]['message'] = f'Tax calculation failed: {error_msg}'
+                        progress_store[task_id]['message'] = f'Transaction calculation failed: {error_msg}'
                     
             except Exception as e:
                 progress_store[task_id]['status'] = 'error'
@@ -3302,7 +3302,7 @@ def api_run_tax_calculation():
         result = {
             'success': True,
             'task_id': task_id,
-            'message': 'Tax calculation started. Progress will be tracked.'
+            'message': 'Transaction calculation started. Progress will be tracked.'
         }
         
         # encrypted_response = encrypt_data(result)
@@ -3773,7 +3773,7 @@ def api_diagnostics_unlock():
         if app.config.get('DB_ENCRYPTION_KEY') is not None:
             return jsonify({'success': True, 'message': 'Database already unlocked'})
 
-        from Crypto_Tax_Engine import DatabaseEncryption
+        from Crypto_Transaction_Engine import DatabaseEncryption
         db_key = DatabaseEncryption.initialize_encryption(password)
         app.config['DB_ENCRYPTION_KEY'] = db_key
         audit_log('DB_UNLOCK', 'Database unlocked via diagnostics', session.get('username'))
@@ -3990,7 +3990,7 @@ def api_system_health():
             })
         
         # Check 3: Core scripts existence
-        core_scripts = ['Crypto_Tax_Engine.py', 'auto_runner.py', 'src/tools/setup.py']
+        core_scripts = ['Crypto_Transaction_Engine.py', 'auto_runner.py', 'src/tools/setup.py']
         missing_scripts = []
         for script in core_scripts:
             if not (BASE_DIR / script).exists():
@@ -4085,7 +4085,7 @@ def api_system_health():
 def api_get_status():
     """Get system status (timestamps)"""
     try:
-        status = tax_app.get_status()
+        status = txn_app.get_status()
         return jsonify({'data': json.dumps(status)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -4306,7 +4306,7 @@ def api_test_schedule():
 
         # Run calculation in background thread
         def run_test():
-            scheduler.run_tax_calculation(cascade=cascade)
+            scheduler.run_transaction_calculation(cascade=cascade)
 
         thread = threading.Thread(target=run_test, daemon=True)
         thread.start()
@@ -4349,7 +4349,7 @@ def register_audit_enhancements():
         
         # Initialize enhancement modules
         audit_log_path = Path(BASE_DIR) / 'outputs' / 'logs' / 'audit.log'
-        db_file = Path(BASE_DIR) / 'crypto_taxes.db'
+        db_file = Path(BASE_DIR) / 'crypto_transactiones.db'
         signing_key = secrets.token_hex(32)
         
         anomaly_detector = AuditAnomalyDetector()
@@ -4385,7 +4385,7 @@ def register_audit_enhancements():
                         'total_events': 0,
                         'fraud_alerts': 0,
                         'fee_alerts': 0,
-                        'tax_alerts': 0
+                        'transaction_alerts': 0
                     }
                 }
                 
@@ -4847,7 +4847,7 @@ def register_audit_enhancements():
             try:
                 from src.web.audit_responses import AutomaticResponseOrchestrator
                 
-                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                db_path = BASE_DIR / 'outputs' / 'crypto_transaction.db'
                 orchestrator = AutomaticResponseOrchestrator(BASE_DIR, db_path)
                 status = orchestrator.get_status()
                 
@@ -4873,7 +4873,7 @@ def register_audit_enhancements():
                 reason = data.get('reason', 'Manual admin lock')
                 duration = data.get('duration_minutes', 30)
                 
-                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                db_path = BASE_DIR / 'outputs' / 'crypto_transaction.db'
                 lock_manager = OperationLockManager(str(db_path))
                 result = lock_manager.lock_operations(reason, duration)
                 
@@ -4889,7 +4889,7 @@ def register_audit_enhancements():
             try:
                 from src.web.audit_responses import OperationLockManager
                 
-                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                db_path = BASE_DIR / 'outputs' / 'crypto_transaction.db'
                 lock_manager = OperationLockManager(str(db_path))
                 result = lock_manager.unlock_operations()
                 
@@ -4905,7 +4905,7 @@ def register_audit_enhancements():
             try:
                 from src.web.audit_responses import AutomaticResponseOrchestrator
                 
-                db_path = BASE_DIR / 'outputs' / 'crypto_tax.db'
+                db_path = BASE_DIR / 'outputs' / 'crypto_transaction.db'
                 orchestrator = AutomaticResponseOrchestrator(BASE_DIR, db_path)
                 history = orchestrator.get_response_history(100)
                 
@@ -5527,7 +5527,7 @@ def main():
     check_and_prompt_tos()
 
     print("=" * 60)
-    print("Crypto Tax Generator - Web UI Server")
+    print("Crypto Transaction Tracker - Web UI Server")
 
     # Initialize scheduler
     auto_runner_path = BASE_DIR / 'auto_runner.py'

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Reports - Crypto Tax Generator{% endblock %}
+{% block title %}Reports - Crypto Transaction Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -243,7 +243,7 @@
 {% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom: 24px;">Tax Reports & Downloads</h1>
+<h1 style="margin-bottom: 24px;">Transaction Reports & Downloads</h1>
 
 <div id="warningsDisabledNotice" class="alert alert-danger" style="display: none; margin-bottom: 24px; border: 2px solid #d9534f;">
     <span class="material-icons" style="margin-right: 12px; vertical-align: middle;">warning</span>
@@ -252,16 +252,16 @@
 
 <div id="updateNotice" class="alert alert-warning" style="display: none; margin-bottom: 24px;">
     <span class="material-icons" style="margin-right: 12px;">info</span>
-    <span><strong>New Data Detected:</strong> You have added or modified transactions since the last report generation. Please run the tax calculation to update your reports.</span>
+    <span><strong>New Data Detected:</strong> You have added or modified transactions since the last report generation. Please run the Transaction calculation to update your reports.</span>
 </div>
 
 <div class="card">
     <h2 class="card-title">Generate New Reports</h2>
-    <p style="margin-bottom: 16px;">Start a new tax calculation run to generate updated reports.</p>
+    <p style="margin-bottom: 16px;">Start a new Transaction calculation run to generate updated reports.</p>
     <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <button id="runTaxCalcBtn" class="btn btn-primary">
+        <button id="runProcessingCalcBtn" class="btn btn-primary">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
-            Run Tax Calculation
+            Run Transaction Calculation
         </button>
         <button id="runCascadeBtn" class="btn btn-secondary" style="background-color: #FF9800; color: white;">
             <span class="material-icons" style="vertical-align: middle;">history</span>
@@ -357,7 +357,7 @@
             const container = document.getElementById('reportsContainer');
             
             if (years.length === 0) {
-                container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No reports generated yet. Run tax calculation to generate reports.</p>';
+                container.innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No reports generated yet. Run Transaction calculation to generate reports.</p>';
                 return;
             }
             
@@ -399,7 +399,7 @@
             const stats = JSON.parse(response.data);
             
             if (!stats.gains_losses) {
-                document.getElementById('chartContainer').innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No gains/losses data available. Run tax calculation first.</p>';
+                document.getElementById('chartContainer').innerHTML = '<p style="color: var(--md-sys-color-on-surface-variant);">No gains/losses data available. Run Transaction calculation first.</p>';
                 return;
             }
             
@@ -585,8 +585,8 @@
         });
     }
     
-    async function runTaxCalculation() {
-        if (!confirm('Start tax calculation? This may take several minutes.')) {
+    async function runProcessingCalculation() {
+        if (!confirm('Start Transaction calculation? This may take several minutes.')) {
             return;
         }
         
@@ -607,7 +607,7 @@
     }
 
     async function runCascadeCalculation() {
-        if (!confirm('WARNING: Cascade Recalculation will re-process ALL years starting from your first transaction.\n\nThis will overwrite previous reports and may change your tax liability for past years.\n\nAre you sure you want to continue?')) {
+        if (!confirm('WARNING: Cascade Recalculation will re-process ALL years starting from your first transaction.\n\nThis will overwrite previous reports and may change your Transaction liability for past years.\n\nAre you sure you want to continue?')) {
             return;
         }
         
@@ -704,8 +704,8 @@
 
     // Bind events and load data on page load
     document.addEventListener('DOMContentLoaded', () => {
-        const runBtn = document.getElementById('runTaxCalcBtn');
-        if (runBtn) runBtn.addEventListener('click', runTaxCalculation);
+        const runBtn = document.getElementById('runProcessingCalcBtn');
+        if (runBtn) runBtn.addEventListener('click', runProcessingCalculation);
         const cascadeBtn = document.getElementById('runCascadeBtn');
         if (cascadeBtn) cascadeBtn.addEventListener('click', runCascadeCalculation);
         const uploadBtn = document.getElementById('uploadCsvBtn');

@@ -4,7 +4,7 @@ REVIEW FIXER - Interactive Issue Remediation Tool
 ================================================================================
 
 Guided workflow tool for fixing audit risks and compliance issues
-identified by the Tax Reviewer.
+identified by the Transaction Reviewer.
 
 Fixable Issue Types:
     1. Missing Prices - Fetch from CoinGecko/CoinMarketCap APIs
@@ -43,10 +43,10 @@ Usage:
     python cli.py fix-review
 
 Workflow:
-    1. Run tax calculations (generates warnings)
-    2. Run Tax Reviewer (identifies issues)
+    1. Run Transaction calculations (generates warnings)
+    2. Run Transaction Reviewer (identifies issues)
     3. Run Review Fixer (guided remediation)
-    4. Re-run tax calculations (verify fixes)
+    4. Re-run Transaction calculations (verify fixes)
 
 Author: robertbiv
 Last Modified: December 2025
@@ -127,7 +127,7 @@ def _parse_date_flexible(date_str):
         raise ValueError(f"Unable to parse date: {date_str}")
 
 class InteractiveReviewFixer:
-    """Interactive tool to fix issues detected by Tax Reviewer"""
+    """Interactive tool to fix issues detected by Transaction Reviewer"""
     
     def __init__(self, db, year):
         self.db = db
@@ -217,7 +217,7 @@ class InteractiveReviewFixer:
             print(f"Error: No reports found for year {self.year}")
             return None
         
-        review_files = list(year_dir.glob("tax_review_*.json"))
+        review_files = list(year_dir.glob("transaction_review_*.json"))
         if not review_files:
             print(f"Error: No review reports found in {year_dir}")
             return None
@@ -533,7 +533,7 @@ class InteractiveReviewFixer:
     def _guided_fix_high_fees(self, warning):
         """Guided fix for high fee warnings - show details for manual review"""
         print("\n--- GUIDED FIX: HIGH FEES ---")
-        print("High fees in processed tax data can't be modified here.")
+        print("High fees in processed Transaction data can't be modified here.")
         print("Review these transactions and fix in your source CSV if needed:\n")
         
         for item in warning['items']:
@@ -1495,7 +1495,7 @@ class InteractiveReviewFixer:
                 print(f"\n✓ Successfully saved {len(self.fixes_applied)} change(s) to database!")
                 print(f"\n✓ Backup still available at: {self.backup_file.name}")
                 print("\nNext steps:")
-                print("  1. Re-run tax calculations: python Auto_Runner.py")
+                print("  1. Re-run Transaction calculations: python Auto_Runner.py")
                 print("  2. Review updated reports in outputs/Year_XXXX/")
                 break
             
@@ -1524,7 +1524,7 @@ def main():
         year = sys.argv[1]
     else:
         from datetime import datetime
-        year = input(f"\nEnter tax year [{datetime.now().year}]: ").strip() or str(datetime.now().year)
+        year = input(f"\nEnter Transaction year [{datetime.now().year}]: ").strip() or str(datetime.now().year)
     
     # Initialize
     app.initialize_folders()

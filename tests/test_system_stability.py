@@ -20,17 +20,17 @@ from test_common import *
 
 class TestArchitectureStability(unittest.TestCase):
     def test_import_order_resilience(self):
-        for module in ['Crypto_Tax_Engine', 'auto_runner']:
+        for module in ['Crypto_Transaction_Engine', 'auto_runner']:
             if module in sys.modules: del sys.modules[module]
-        modules_to_load = ['Crypto_Tax_Engine', 'auto_runner']
+        modules_to_load = ['Crypto_Transaction_Engine', 'auto_runner']
         random.shuffle(modules_to_load)
         print(f"\n--- TESTING IMPORT ORDER: {modules_to_load} ---")
         try:
             for m in modules_to_load: importlib.import_module(m)
         except ImportError as e: self.fail(f"Circular dependency: {e}")
         except Exception as e: self.fail(f"Module crashed: {e}")
-        re_app = sys.modules['Crypto_Tax_Engine']
-        self.assertTrue(hasattr(re_app, 'TaxEngine'))
+        re_app = sys.modules['Crypto_Transaction_Engine']
+        self.assertTrue(hasattr(re_app, 'TransactionEngine'))
 
 
 

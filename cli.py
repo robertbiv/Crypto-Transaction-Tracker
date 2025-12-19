@@ -4,8 +4,8 @@
 CLI - Command Line Interface
 ================================================================================
 
-Provides unified command-line access to all tax engine features:
-    - Tax calculation and report generation
+Provides unified command-line access to all tracker features:
+    - Transaction processing and report generation
     - Setup and configuration management
     - Database backup/restore operations
     - Web UI launcher
@@ -21,7 +21,7 @@ Usage:
     python cli.py [command] [options]
     python cli.py --help
 
-Author: Crypto Tax Generator Team
+Author: Crypto Transaction Tracker Team
 Last Modified: December 2025
 ================================================================================
 """
@@ -98,8 +98,8 @@ def cmd_setup(args):
     return run_python_script('setup.py')
 
 def cmd_run(args):
-    """Run tax calculation"""
-    print_header("TAX CALCULATION")
+    """Process transactions"""
+    print_header("TRANSACTION PROCESSING")
     
     # Check for cascade mode
     script_args = []
@@ -118,7 +118,7 @@ def cmd_review(args):
     
     # Get year
     year = args.year if args.year else str(datetime.now().year)
-    print_info(f"Reviewing tax year: {year}")
+    print_info(f"Reviewing activity year: {year}")
     
     return run_python_script('review_fixer.py', year)
 
@@ -224,22 +224,22 @@ def cmd_export(args):
 
 def main():
     """Main CLI entry point"""
-    parser = argparse.ArgumentParser(
-        description='Crypto Tax Generator - Professional Tax Calculation Suite',
+        parser = argparse.ArgumentParser(
+                description='Crypto Transaction Tracker - Self-Hosted Activity Suite',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
   %(prog)s setup              # Run initial setup wizard
-  %(prog)s run                # Calculate taxes for current year
-  %(prog)s run --cascade      # Calculate taxes for all years
+    %(prog)s run                # Process current-year activity
+    %(prog)s run --cascade      # Process all years
   %(prog)s review             # Review and fix audit warnings
   %(prog)s review 2024        # Review specific year
   %(prog)s web                # Start web UI
   %(prog)s test               # Run full test suite
   %(prog)s test --file test_setup_wizard.py  # Run specific test
   %(prog)s info               # Display system info
-  %(prog)s export             # Export reports for current year
-  %(prog)s export --year 2024 # Export reports for specific year
+    %(prog)s export             # Export reports for current year
+    %(prog)s export --year 2024 # Export reports for specific year
 
 For more information, see README.md or visit the web UI.
         '''
@@ -252,7 +252,7 @@ For more information, see README.md or visit the web UI.
     parser_setup.set_defaults(func=cmd_setup)
     
     # Run command
-    parser_run = subparsers.add_parser('run', help='Run tax calculation')
+    parser_run = subparsers.add_parser('run', help='Process transactions')
     parser_run.add_argument('--cascade', action='store_true', 
                           help='Process all years (cascade mode)')
     parser_run.set_defaults(func=cmd_run)
@@ -260,7 +260,7 @@ For more information, see README.md or visit the web UI.
     # Review command
     parser_review = subparsers.add_parser('review', help='Run manual review assistant')
     parser_review.add_argument('year', nargs='?', 
-                             help='Tax year to review (default: current year)')
+                             help='Year to review (default: current year)')
     parser_review.set_defaults(func=cmd_review)
     
     # Web command
@@ -278,7 +278,7 @@ For more information, see README.md or visit the web UI.
     
     # Export command
     parser_export = subparsers.add_parser('export', help='List/export generated reports')
-    parser_export.add_argument('--year', help='Tax year (default: current year)')
+    parser_export.add_argument('--year', help='Year (default: current year)')
     parser_export.set_defaults(func=cmd_export)
     
     # Parse arguments

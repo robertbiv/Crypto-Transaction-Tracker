@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Crypto Tax Generator{% endblock %}
+{% block title %}Dashboard - Crypto Transaction Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -90,9 +90,9 @@
 <div class="card">
     <h2 class="card-title">Quick Actions</h2>
     <div class="action-buttons">
-        <button class="btn btn-primary" id="btnRunTax">
+        <button class="btn btn-primary" id="btnrunProcessing">
             <span class="material-icons" style="vertical-align: middle;">play_arrow</span>
-            Run Tax Calculation
+            Run Transaction Calculation
         </button>
         <button class="btn btn-secondary" id="diagnosticsBtn" onclick="openDiagnostics()">
             <span class="material-icons" style="vertical-align: middle;">build</span>
@@ -351,8 +351,8 @@
         }
     }
     
-    async function runTaxCalculation() {
-        if (!confirm('Start tax calculation? This may take several minutes.')) {
+    async function runProcessingCalculation() {
+        if (!confirm('Start Transaction calculation? This may take several minutes.')) {
             return;
         }
         
@@ -362,7 +362,7 @@
             
             // Start tracking progress
             if (result.task_id) {
-                progressTracker.trackTask(result.task_id, 'Running Tax Calculation');
+                progressTracker.trackTask(result.task_id, 'Running Transaction Calculation');
             } else {
                 showAlert(result.message, 'success');
             }
@@ -755,8 +755,8 @@ Signature Statistics:
     setInterval(loadSignatureVerification, 60000);  // Refresh signatures every 60 seconds
     setInterval(checkSecurityIncidents, 5000);  // Check incidents every 5 seconds
         
-        const btnRunTax = document.getElementById('btnRunTax');
-        if (btnRunTax) btnRunTax.addEventListener('click', runTaxCalculation);
+        const btnrunProcessing = document.getElementById('btnrunProcessing');
+        if (btnrunProcessing) btnrunProcessing.addEventListener('click', runProcessingCalculation);
         
         const btnViewTransactions = document.getElementById('btnViewTransactions');
         if (btnViewTransactions) btnViewTransactions.addEventListener('click', () => window.location.href='/transactions');

@@ -40,7 +40,7 @@ class TestFeeHandling(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':150, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Proceeds should be 15000 - 150 = 14850
@@ -52,7 +52,7 @@ class TestFeeHandling(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':100, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertTrue(len(engine.tt) > 0)
     
@@ -62,11 +62,11 @@ class TestFeeHandling(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(engine.tt[0]['Proceeds'], 15000.0)
 
-# --- 17. DEPOSIT/WITHDRAWAL NON-TAXABLE TESTS ---
+# --- 17. DEPOSIT/WITHDRAWAL NON-Reportable TESTS ---
 
 
 class TestMultiCoinFeeHandling(unittest.TestCase):
@@ -151,10 +151,10 @@ class TestMultiCoinFeeHandling(unittest.TestCase):
         })
         self.db.commit()
         
-        # Process with tax engine
-        engine = app.TaxEngine(self.db, 2024)
+        # Process with Transaction engine
+        engine = app.TransactionEngine(self.db, 2024)
         engine.pf = app.PriceFetcher()  # Inject price fetcher
-        with patch('Crypto_Tax_Engine.logger'):
+        with patch('Crypto_Transaction_Engine.logger'):
             engine.run()
         
         # Verify:
@@ -207,9 +207,9 @@ class TestMultiCoinFeeHandling(unittest.TestCase):
         self.db.commit()
         
         # Process
-        engine = app.TaxEngine(self.db, 2024)
+        engine = app.TransactionEngine(self.db, 2024)
         engine.pf = app.PriceFetcher()  # Inject price fetcher
-        with patch('Crypto_Tax_Engine.logger'):
+        with patch('Crypto_Transaction_Engine.logger'):
             engine.run()
         
         # Should treat 1.0 USDC as fee (old behavior)
@@ -255,7 +255,7 @@ class TestExtremePrecisionAndRounding(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.3, 'price_usd':15000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify we have one trade result
@@ -285,11 +285,11 @@ class TestExtremePrecisionAndRounding(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.666666, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine1 = app.TaxEngine(self.db, 2023)
+        engine1 = app.TransactionEngine(self.db, 2023)
         engine1.run()
         result1 = engine1.tt[0]['Cost Basis'] if len(engine1.tt) > 0 else 0
         
-        engine2 = app.TaxEngine(self.db, 2023)
+        engine2 = app.TransactionEngine(self.db, 2023)
         engine2.run()
         result2 = engine2.tt[0]['Cost Basis'] if len(engine2.tt) > 0 else 0
         

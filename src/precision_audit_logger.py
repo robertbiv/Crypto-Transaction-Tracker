@@ -1,6 +1,6 @@
 """
-Precision audit logging for tax-critical operations.
-Logs all fraud detection, fee calculations, and tax-sensitive computations
+Precision audit logging for Transaction-critical operations.
+Logs all fraud detection, fee calculations, and Transaction-sensitive computations
 with full Decimal precision for audit trails and debugging.
 """
 
@@ -67,7 +67,7 @@ def log_fee_calculation(
     )
 
 
-def log_tax_calculation(
+def log_transaction_calculation(
     tx_id: str,
     action: str,
     coin: str,
@@ -77,9 +77,9 @@ def log_tax_calculation(
     cost_basis: Decimal,
     capital_gain: Decimal
 ) -> None:
-    """Log tax calculation with full precision."""
+    """Log Transaction calculation with full precision."""
     precision_logger.info(
-        f"TAX_CALC | tx_id={tx_id} | action={action} | "
+        f"transaction_CALC | tx_id={tx_id} | action={action} | "
         f"coin={coin} | amount={amount} | price_usd={price_usd} | "
         f"proceeds={proceeds} | cost_basis={cost_basis} | "
         f"capital_gain={capital_gain}"

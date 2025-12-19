@@ -466,7 +466,7 @@ class TestWebUISetupWizard(unittest.TestCase):
         # Test settings configuration structure
         settings = {
             'accounting_method': 'HIFO',
-            'tax_year': 2024,
+            'transaction_year': 2024,
             'long_term_benefit': True,
             'include_fees': True
         }
@@ -731,7 +731,7 @@ class TestWebUIHealthChecks(unittest.TestCase):
     
     def test_core_scripts_check(self):
         """Test core scripts existence check"""
-        required_scripts = ['Crypto_Tax_Engine.py', 'Auto_Runner.py', 'Setup.py']
+        required_scripts = ['Crypto_Transaction_Engine.py', 'Auto_Runner.py', 'Setup.py']
         self.assertEqual(len(required_scripts), 3)
         print("✓ Core scripts check defined")
     
@@ -1008,7 +1008,7 @@ def run_tests():
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("CRYPTO TAX ENGINE - WEB UI SECURITY & FUNCTIONALITY TESTS")
+    print("CRYPTO TRANSACTION TRACKER - WEB UI SECURITY & FUNCTIONALITY TESTS")
     print("="*70)
     print("Testing:")
     print("  • Core web UI functionality")

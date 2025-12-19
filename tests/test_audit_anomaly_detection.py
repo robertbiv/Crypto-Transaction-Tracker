@@ -452,7 +452,7 @@ class TestPDFReportGenerator:
                 'total_events': 150,
                 'fraud_alerts': 5,
                 'fee_alerts': 12,
-                'tax_alerts': 8,
+                'transaction_alerts': 8,
                 'integrity_score': 0.95,
                 'status': 'HEALTHY'
             },

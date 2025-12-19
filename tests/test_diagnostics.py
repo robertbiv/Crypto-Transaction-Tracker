@@ -102,7 +102,7 @@ class TestDiagnostics(unittest.TestCase):
     
     def test_diagnostics_unlock_success(self):
         # Mock encryption initialize
-        with patch('Crypto_Tax_Engine.DatabaseEncryption.initialize_encryption', return_value=b'fakekey'):
+        with patch('Crypto_Transaction_Engine.DatabaseEncryption.initialize_encryption', return_value=b'fakekey'):
             payload = {'password': 'webpw'}
             resp = self.client.post(
                 '/api/diagnostics/unlock',

@@ -1,19 +1,19 @@
 """\n================================================================================
-AUTO RUNNER - Automated Tax Processing Workflow
+AUTO RUNNER - Automated Transaction Processing Workflow
 ================================================================================
 
-Autopilot orchestrator for end-to-end tax calculation workflows.
+Autopilot orchestrator for end-to-end transaction processing and reporting.
 Designed for unattended operation and batch processing.
 
 Workflow Stages:
     1. Data Ingestion - Import trades from CSV files and API sources
     2. Staking Processing - Integrate staking rewards data
     3. Price Validation - Fetch missing USD prices from external APIs
-    4. Tax Calculation - Generate tax reports using configured method
-    5. Export Generation - Create Export-compatible CSV outputs
+    4. Gain/Loss Calculation - Generate reports using configured method
+    5. Export Generation - Create review-ready CSV outputs
 
 Features:
-    - Cascade mode for multi-year calculations
+    - Cascade mode for multi-year processing
     - Configurable year range processing
     - Automatic backup before processing
     - Comprehensive error logging
@@ -24,7 +24,7 @@ Usage:
     python auto_runner.py --cascade
     python auto_runner.py --years 2023,2024,2025
 
-Author: Crypto Tax Generator Team
+Author: Crypto Transaction Tracker Team
 Last Modified: December 2025
 ================================================================================
 """
@@ -40,10 +40,10 @@ check_and_prompt_tos()
 
 # Import the main engine module
 try:
-    import src.core.engine as tax_app
+    import src.core.engine as txn_app
 except ImportError:
     # Fallback for direct execution
-    import Crypto_Tax_Engine as tax_app
+    import Crypto_Transaction_Engine as txn_app
 
 # LOG_DIR will be set at runtime to allow safe imports by Test Suite
 LOG_DIR = None
@@ -51,23 +51,23 @@ LOG_DIR = None
 def _ensure_log_dir():
     global LOG_DIR
     if LOG_DIR is None:
-        LOG_DIR = tax_app.OUTPUT_DIR / "logs"
+        LOG_DIR = txn_app.OUTPUT_DIR / "logs"
     return LOG_DIR
 
 # Mark run context so engine logs show this was started via Auto_Runner
 try:
-    tax_app.set_run_context('autorunner')
+    txn_app.set_run_context('autorunner')
 except Exception:
-    try: tax_app.RUN_CONTEXT = 'autorunner'
+    try: txn_app.RUN_CONTEXT = 'autorunner'
     except Exception: pass
 
 def log(message, level="info"):
-    """Centralized logging for the Auto Runner using `tax_app.logger`."""
+    """Centralized logging for the Auto Runner using `txn_app.logger`."""
     try:
-        if level == "info": tax_app.logger.info(message)
-        elif level == "warning": tax_app.logger.warning(message)
-        elif level == "error": tax_app.logger.error(message)
-        else: tax_app.logger.info(message)
+        if level == "info": txn_app.logger.info(message)
+        elif level == "warning": txn_app.logger.warning(message)
+        elif level == "error": txn_app.logger.error(message)
+        else: txn_app.logger.info(message)
     except Exception:
         ts_prefix = datetime.now().strftime("[%H:%M:%S] ")
         print(f"{ts_prefix}{message}")
@@ -77,17 +77,17 @@ def run_automation():
     CASCADE_MODE = "--cascade" in sys.argv
     
     # SAFETY: Ensure folders exist before starting (Safe because called at runtime, not import)
-    tax_app.initialize_folders()
+    txn_app.initialize_folders()
     
     log("=========================================")
-    log(f"   CRYPTO TAX AUTO-PILOT: STARTED {'(CASCADE MODE)' if CASCADE_MODE else ''}")
+    log(f"   CRYPTO TRANSACTION TRACKER AUTO-PILOT: STARTED {'(CASCADE MODE)' if CASCADE_MODE else ''}")
     log("=========================================")
 
     db = None
     try:
         # 1. INITIALIZE DATABASE
-        db = tax_app.DatabaseManager()
-        ingest = tax_app.Ingestor(db)
+        db = txn_app.DatabaseManager()
+        ingest = txn_app.Ingestor(db)
         
         # 2. SYNC DATA
         log(">>> STEP 1: SYNCING DATA SOURCES")
@@ -95,9 +95,9 @@ def run_automation():
         ingest.run_api_sync()
         log("   -> Sync process completed.")
         
-        # 2B. STAKING REWARDS (StakeTaxCSV Integration)
-        log(">>> STEP 1B: PROCESSING STAKING REWARDS (StakeTax CSV)")
-        stake_mgr = tax_app.StakeTaxCSVManager(db)
+        # 2B. STAKING REWARDS (StakeActivityCSV Integration)
+        log(">>> STEP 1B: PROCESSING STAKING REWARDS (StakeActivity CSV)")
+        stake_mgr = txn_app.StakeActivityCSVManager(db)
         stake_mgr.run()
         log("   -> Staking rewards processed.")
         
@@ -114,22 +114,22 @@ def run_automation():
         now = datetime.now()
         current_year = now.year
         
-        # Try to load tax_year from config
+        # Try to load transaction_year from config
         try:
-            if tax_app.CONFIG_FILE.exists():
-                with open(tax_app.CONFIG_FILE, 'r') as f:
+            if txn_app.CONFIG_FILE.exists():
+                with open(txn_app.CONFIG_FILE, 'r') as f:
                     config = json.load(f)
-                    if 'tax_year' in config:
-                        current_year = int(config['tax_year'])
-                        log(f">>> CONFIG: Using configured tax year: {current_year}")
+                    if 'transaction_year' in config:
+                        current_year = int(config['transaction_year'])
+                        log(f">>> CONFIG: Using configured Transaction year: {current_year}")
         except Exception as e:
             log(f">>> CONFIG: Could not load config.json, using system year: {current_year} ({e})", level="warning")
             
         # Allow tests to control snapshot naming without touching global clock
         try:
-            tax_app.CURRENT_YEAR_OVERRIDE = current_year
+            txn_app.CURRENT_YEAR_OVERRIDE = current_year
         except Exception:
-            tax_app.CURRENT_YEAR_OVERRIDE = None
+            txn_app.CURRENT_YEAR_OVERRIDE = None
 
         # ====================================================================================
         # CASCADE MODE LOGIC
@@ -154,7 +154,7 @@ def run_automation():
             engine_curr = None
             for year in range(start_year, current_year + 1):
                 log(f">>> PROCESSING YEAR {year}...")
-                engine = tax_app.TaxEngine(db, year)
+                engine = txn_app.TransactionEngine(db, year)
                 engine.run()
                 engine.export()
                 log(f"   [SUCCESS] Completed {year}")
@@ -168,23 +168,23 @@ def run_automation():
             prev_year = current_year - 1
             
             # 5. CHECK PREVIOUS YEAR (The "Final Run")
-            prev_folder = tax_app.OUTPUT_DIR / f"Year_{prev_year}"
+            prev_folder = txn_app.OUTPUT_DIR / f"Year_{prev_year}"
             snapshot_file = prev_folder / "EOY_HOLDINGS_SNAPSHOT.csv"
             
-            log(f">>> STEP 3: CHECKING PREVIOUS TAX YEAR ({prev_year})")
+            log(f">>> STEP 3: CHECKING PREVIOUS Transaction YEAR ({prev_year})")
             
             if snapshot_file.exists():
                 log(f"   [SKIP] Year {prev_year} is already finalized.")
             else:
                 log(f"   [ACTION] Year {prev_year} not finalized. Running Report...")
-                engine_prev = tax_app.TaxEngine(db, prev_year)
+                engine_prev = txn_app.TransactionEngine(db, prev_year)
                 engine_prev.run()
                 engine_prev.export()
                 log(f"   [SUCCESS] Finalized {prev_year} and created Snapshot.")
 
             # 6. RUN CURRENT YEAR (The "Live Tracker")
             log(f">>> STEP 4: UPDATING LIVE TRACKER FOR CURRENT YEAR ({current_year})")
-            engine_curr = tax_app.TaxEngine(db, current_year)
+            engine_curr = txn_app.TransactionEngine(db, current_year)
             engine_curr.run()
             engine_curr.export()
             log(f"   [SUCCESS] Updated 'Draft' reports for {current_year}.")
@@ -198,14 +198,14 @@ def run_automation():
             log(f"   [SKIP] Review assistant not available: {e}", level="warning")
 
         # Mark run as complete
-        tax_app.mark_run_complete(success=True)
+        txn_app.mark_run_complete(success=True)
         
         log("=========================================")
         log("   AUTO-PILOT: COMPLETED SUCCESSFULLY")
         log("=========================================\n") 
 
     except Exception as e:
-        tax_app.mark_run_complete(success=False)
+        txn_app.mark_run_complete(success=False)
         log(f"[CRITICAL ERROR] Automation Failed: {e}")
         raise e
     finally:

@@ -1,9 +1,9 @@
 """
 ================================================================================
-TEST: 2025 US Tax Compliance
+TEST: 2025 US Transaction Compliance
 ================================================================================
 
-Validates compliance with 2025 US tax regulations for digital assets.
+Validates compliance with 2025 US Transaction regulations for digital assets.
 
 Regulatory Coverage:
     1. Rev. Proc. 2024-28 - Wallet-Based Cost Tracking
@@ -22,14 +22,14 @@ Regulatory Coverage:
         - Unmatched sell flagging
     
     4. Constructive Receipt
-        - Staking rewards taxed at receipt
+        - Staking rewards recognized at receipt
         - Mining income recognition
         - Conservative vs aggressive treatment
 
 Compliance Modes Tested:
     - strict_broker_mode: True/False
     - wash_sale_rule: True/False
-    - staking_taxable_on_receipt: True/False
+    - staking_transactionable_on_receipt: True/False
     - defi_lp_conservative: True/False
 
 Expected Outcomes:
@@ -87,7 +87,7 @@ class TestCompliance2025(unittest.TestCase):
         self.db.commit()
 
         # Default Config (Wash Sale = False)
-        engine = app.TaxEngine(self.db, 2025)
+        engine = app.TransactionEngine(self.db, 2025)
         engine.run()
         
         sale = engine.tt[0]
@@ -109,7 +109,7 @@ class TestCompliance2025(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2025-01-16', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2025)
+        engine = app.TransactionEngine(self.db, 2025)
         engine.run()
         
         sale = engine.tt[0]
@@ -125,7 +125,7 @@ class TestCompliance2025(unittest.TestCase):
         """
         Verify Rev. Proc. 2024-28 / 1099-DA Compliance.
         Sales on a Broker (e.g. Coinbase) MUST NOT use basis from a private wallet (Ledger).
-        This ensures the user's 1099-DA matches their tax report.
+        This ensures the user's 1099-DA matches their Transaction report.
         """
         app.GLOBAL_CONFIG['compliance'] = {
             'strict_broker_mode': True,
@@ -141,7 +141,7 @@ class TestCompliance2025(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'COINBASE', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':3000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2025)
+        engine = app.TransactionEngine(self.db, 2025)
         engine.run()
         
         sale = engine.tt[0]
@@ -162,7 +162,7 @@ class TestCompliance2025(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'M', 'action':'SELL', 'coin':'BAYC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
 
-        engine = app.TaxEngine(self.db, 2025)
+        engine = app.TransactionEngine(self.db, 2025)
         engine.run()
         
         sale = engine.tt[0]

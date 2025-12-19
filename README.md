@@ -1,8 +1,8 @@
-# **🛡️ Crypto Tax Automation Engine**
+# **🛡️ Crypto Transaction Tracker**
 
-Personal, self-hosted Python tooling I built to track my own crypto activity. It is **designed to follow 2025 US tax guidelines (IRS Pub 544)** but **not guaranteed correct or complete**. I have **no tax training**—this is a personal project for simple transaction tracking. Always review every result and consult a qualified tax professional.
+Personal, self-hosted tooling to aggregate and review your crypto activity with a strong focus on privacy, safety, and rich visibility. It runs locally, ships with a modern web UI, and includes ML/AI helpers for smarter descriptions and anomaly spotting. Use it to centralize trades, transfers, staking rewards, and holdings across exchanges and chains.
 
-**Privacy First:** Intended to run locally only; do **not** expose it to the internet. No telemetry is sent to the developer. API keys and wallet data are stored encrypted at rest; you are responsible for host security and access control.
+**Privacy & Safety First:** Local-only by design—do **not** expose it to the internet. No telemetry. API keys and wallet data are stored encrypted at rest, but host security, access control, and backups are your responsibility.
 
 ## **🌐 Web UI**
 
@@ -14,97 +14,73 @@ Personal, self-hosted Python tooling I built to track my own crypto activity. It
 - 📱 **Mobile-Ready**: Responsive design for all devices
 - 🎨 **Modern UI**: Google Material Design 3
 
-**Quick Start:**
+**Quick Start (Web UI):**
 ```bash
-pip install Flask Flask-CORS bcrypt PyJWT cryptography
-python3 start_web_ui.py
+pip install -r requirements.txt
+python Setup.py                # Creates configs/, wallets, api keys placeholders
+python start_web_ui.py         # Launches HTTPS web UI + first-time setup wizard
 ```
 
-Access at **https://localhost:5000**
+Access at **https://localhost:5000**. On first launch you will:
+- Create the admin account (stored locally)
+- Review and accept the Terms of Service in-app
+- Optionally add API keys and wallets (read-only keys only)
 
 See [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) for command-line usage; the Web UI includes inline help and onboarding.
 
-## **🌟 Key Features**
+## **🌟 What It’s Good At**
 
-### **🇺🇸 US Tax Compliance**
+- **Full Transaction Tracking:** Ingest trades, transfers, staking rewards, and holdings across exchanges and wallets; consolidate into a single view with audit-friendly CSVs.
+- **Modern Web UI:** Material Design 3, mobile-friendly, HTTPS (self-signed), request signing, CSRF protection, onboarding wizard, download safety prompts.
+- **ML / AI Helpers:** Optional classifiers and description generators to make transaction labels clearer; anomaly detection to highlight unusual patterns. (Install `requirements-ml.txt` for these.)
+- **Privacy by Default:** Local-only, no telemetry, keys encrypted at rest. You own your data; keep it on machines you control.
+- **Safety Rails:** Backup-before-write patterns, rate limiting, request signing, and reminders to use read-only API keys. Designed for localhost/LAN—never expose to the public internet.
 
-Designed to follow 2025 guidance but not guaranteed correct—verify with a tax professional.
+### **Reporting & Analysis**
+- Unified CSV exports for transactions, holdings snapshots, and review warnings.
+- Wallet/API health checks and basic reconciliation aids.
+- Optional FBAR-style max-balance view and wash-sale/warning heuristics for review.
 
-* **FIFO/HIFO Accounting:** Uses FIFO by default, with optional HIFO. HIFO sorts lots by highest price for sells.  
-* **Wash Sale Rule:** Detects buys within 30 days before and after a loss sale. Disallows the proportional loss and flags affected TT rows.  
-* **Annual Loss Limit:** Caps net capital loss deductions at **$3,000** against ordinary income.  
-* **Auto-Carryover:** Imports prior-year carryovers and computes next-year carryover fields.  
-* **Holding Periods:** Distinguishes between **Short-Term** (< 1 year) and **Long-Term** (> 1 year) capital gains.
-* **Collectibles Reporting:** Splits long-term collectibles (28%) in loss analysis.
+### **Basic Transaction Outputs (Small Footprint)**
+- Provides FIFO/HIFO cost basis options and produces CSVs compatible with common Transaction workflows.
+- Aligned loosely to 2025 US guidance but **not guaranteed accurate or complete**. Treat results as a starting point and validate with a qualified tax professional.
 
-### **💼 Advanced Reporting**
+## **⚠️ Limitations & Responsibilities**
 
-* **FBAR Report:** Tracks the **maximum USD value** held on foreign exchanges (e.g., Binance, KuCoin) at any point in the year to assist with FinCEN Form 114 filing.  
-* **Income Classification:** Separates Mining, Staking, Airdrops, Gifts (IN) and Hard Forks as **Ordinary Income** (not Capital Gains). Constructive receipt toggle supported.  
-* **Multi-Coin Fees:** Supports `fee_coin` field for transfers with fees in different coins (e.g., ERC-20 token transfers with ETH gas fees). Backward compatible with legacy single-coin fees.
-* **1099 Reconciliation:** Aggregates proceeds, basis, net gain, and transaction counts per source/coin. Detailed CSV includes unmatched and wash placeholders.
-* **Snapshots:** Exports per-source holdings with a `Holdings` column and minimal `TAX_REPORT.csv` marker.
-* **Manual Review Assistant:** Automatic heuristic-based scan that flags potential audit risks including:
-  - NFTs without collectible prefixes (28% tax rate risk)
-  - Substantially identical wash sales (BTC/WBTC)
-  - Potential constructive sales patterns
-  - Complex DeFi/LP transactions needing verification
-  - Missing prices or unmatched sells
+- Not a CPA or Transaction authority. All outputs (including any Transaction-oriented CSVs) must be reviewed and validated by you and a qualified professional.
+- Complex edge cases (constructive sales, nuanced DeFi/NFT flows, specific-ID lot selection) are not fully automated; manual review is required.
+- ML/AI features can misclassify—treat suggestions as hints, not truth.
+- Data safety still depends on your host: enforce OS-level access controls, backups, and network isolation. Do not expose the app to the public internet.
 
-### **🛡️ Reliability (Tested in Theory, Not Guaranteed)**
+### **HIFO Note (Optional, Higher Risk)**
+- FIFO is the safer default. HIFO is available but requires specific identification records. If you cannot produce them, Transaction recalculation risk increases.
 
-* **Simulation Tested:** Run against scripted scenarios and random-volatility simulations. Results can still be wrong—review outputs manually.
-* **Backups Implemented:** Creates .bak files before writes, but corruption/data loss can still occur.
-* **Retry Logic:** Includes basic retry/backoff for network calls; failures can still happen.
-* **Data Checks:** Attempts to detect bad inputs or corruption, but may miss issues.
+## **⚠️ Risky Settings & Warnings**
 
-## **⚠️ Weaknesses & Limitations**
+The app flags settings that raise reconciliation or audit risk. Use defaults unless you know why you’re changing them:
 
-While helpful, this engine is software, not a CPA. Be aware of these limitations and verify all outputs with a tax professional:
+- **strict_broker_mode (keep enabled):** Prevents cross-wallet basis borrowing that can create broker mismatches.
+- **staking_transactionable_on_receipt (keep enabled):** Turning off defers recognition and increases Transaction-position risk.
+- **HIFO (optional, riskier):** Needs specific-ID evidence; otherwise FIFO is safer.
 
-1. **Constructive Sales:** The engine does **not** detect "Constructive Sales" (e.g., shorting-against-the-box). If you hold a long position and open an offsetting short position to lock in gains without selling, this software will not trigger a tax event.  
-2. **Specific Identification:** The engine assumes **FIFO** (or HIFO if configured). It does not support "Specific Identification" of lots (picking exactly which Bitcoin utxo to sell) unless you manually manipulate the input data.  
-3. **Complex DeFi (LP Tokens):** Liquidity Pool (LP) tokens are generally treated as DEPOSIT (non-taxable) or SWAP depending on the CSV input. It does not automatically calculate "Impermanent Loss" unless you explicitly record the exit as a sale.  
-4. **NFTs:** Non-Fungible Tokens are treated as generic assets. It does not handle complex NFT minting gas logic automatically unless imported as a standard trade.  
-5. **Gift Basis:** For received gifts, the engine relies on **you** entering the correct "Donor's Basis" in the manual CSV. If you enter the market price instead, your tax liability may be calculated incorrectly.
-
-6. **Error Risk:** Calculations, price fetches, and imports can be wrong or incomplete. Always inspect the generated CSVs.
-7. **No Liability:** Use at your own risk. The author assumes no responsibility for errors, omissions, or compliance outcomes.
-
-### **⚠️ Important Note on HIFO Accounting**
-
-The engine supports **HIFO** (Highest-In, First-Out) via configuration, but be warned:
-
-* **Audit Risk:** To use HIFO legally, the IRS requires "Specific Identification" of the units sold. This means you must have a record showing exactly *which* lot (date and price) you sold.  
-* **Compliance:** While this software generates logs that *can* serve as these records, relying on HIFO is riskier than FIFO. If you cannot produce the specific logs during an audit, the IRS may force you to recalculate everything using FIFO, potentially leading to back taxes and penalties.  
-* **Default:** We strongly recommend sticking to the default **FIFO** method unless you are an advanced user prepared to maintain detailed records.
-
-## **⚠️ Compliance Controls & Non‑Recommended Options**
-
-Certain configuration options can increase audit risk or create mismatches with broker 1099‑DA reporting. The engine will warn at runtime when these are enabled:
-
-- **strict_broker_mode (Recommended=True):** When disabled, the engine may borrow cost basis across wallets to satisfy sales from custodial sources (e.g., Coinbase). This can cause Form 8949 to diverge from broker‑issued Form 1099‑DA. Keep this enabled for 2025+ compliance. When enabled, unmatched sells are flagged in the detailed reconciliation CSV.
-- **staking_taxable_on_receipt (Recommended=True):** Setting this to False applies a “constructive receipt” deferral for staking/mining rewards (no income recorded until sale). This is an aggressive position and may be challenged by the IRS under Rev. Rul. 2023‑14. Use only if you understand the risks.
-- **HIFO (Not Recommended):** While supported, HIFO increases audit friction unless you maintain specific identification records. FIFO remains the safest default.
-
-See `config.json` for detailed instructions. The setup script annotates non‑recommended options and the engine logs a warning when they are enabled.
+See `config.json` for inline notes. The setup wizard and engine emit warnings when risky options are enabled.
 
 ## **📂 The Ecosystem**
 
 The repo layout (post-setup) looks like this:
 
 ```
-/Crypto Taxes
+/Crypto Transactions
 │
 ├── README.md                       # Project overview and operations guide
 ├── requirements.txt                # Python dependencies
 ├── Setup.py                        # Initialize folders/files
 ├── cli.py                          # CLI entry point for common tasks
-├── auto_runner.py                  # Sync, process, and generate tax reports
+├── auto_runner.py                  # Sync, process, and generate Transaction reports
 ├── start_web_ui.py                 # Launch self-hosted web UI
 ├── web_server.py                   # Legacy web server entrypoint
-├── Crypto_Tax_Engine.py            # Core tax engine (imported by scripts)
-├── Tax_Reviewer.py                 # Manual review assistant entrypoint
+├── Crypto_Transaction_Engine.py            # Core Transaction engine (imported by scripts)
+├── Transaction_Reviewer.py                 # Manual review assistant entrypoint
 ├── docs/
 │   ├── CLI_GUIDE.md                # Command-line usage guide
 │   └── CODING_STANDARDS.md         # Project-wide documentation/header standards
@@ -144,13 +120,13 @@ This program sends no telemetry data. All network traffic consists of direct req
 1. **CCXT** (Used to sync exchange trades and ledgers)  
    * **Why:** CCXT is a unified library that connects to 100+ exchanges (Binance, Kraken, Coinbase, etc.) to fetch your trading history and staking ledgers.  
    * [Privacy Policy](https://docs.ccxt.com/en/latest/manual/exchanges.html)  
-2. **StakeTaxCSV** (Used to auto-generate and import staking rewards)  
-   * **Why:** StakeTaxCSV is a tool that connects to 20+ staking protocols (Lido, Aave, Compound, exchange staking, etc.) to automatically fetch your staking rewards and generate tax-ready CSVs.  
+2. **staketaxcsv** (Used to auto-generate and import staking rewards)  
+   * **Why:** staketaxcsv is a tool that connects to 20+ staking protocols (Lido, Aave, Compound, exchange staking, etc.) to automatically fetch your staking rewards and generate transaction-ready CSVs.  
    * **Install:** `pip install staketaxcsv`  
    * [GitHub Repository](https://github.com/macrominerd/staketaxcsv)  
    * [Privacy Policy](https://github.com/macrominerd/staketaxcsv#privacy)  
 3. **Moralis** (Used for auditing EVM & Solana chains)  
-   * **Why:** To fetch real-time token balances and verify your portfolio matches the tax engine's calculations.  
+   * **Why:** To fetch real-time token balances and verify your portfolio matches the Transaction engine's calculations.  
    * [Privacy Policy](https://www.google.com/search?q=https://moralis.com/privacy-policy)  
 4. **Blockchair** (Used for auditing Bitcoin & UTXO chains)  
    * **Why:** To fetch balances for non-EVM chains like Bitcoin, Litecoin, and Dogecoin.  
@@ -165,7 +141,7 @@ This program sends no telemetry data. All network traffic consists of direct req
 ## **⚠️ Critical Disclaimer (Read First)**
 
 - Designed to follow 2025 US tax guidelines but **not warranted accurate or complete**. Results can be wrong; always review with a qualified tax professional.
-- I have **no tax training**. This was built for my own simple transaction tracking.
+- I have **no Transaction training**. This was built for my own simple transaction tracking.
 - **No liability** is accepted for errors, omissions, data loss, or compliance outcomes. Use at your own risk.
 - Intended for **local use only**. Do not expose the app or APIs to the internet; HTTPS uses self-signed certs and is not hardened for public access.
 - Secrets are stored in encrypted files, but you are responsible for host security, key management, and backups.
@@ -176,18 +152,21 @@ This program sends no telemetry data. All network traffic consists of direct req
 
 > ⚠️ **BEFORE YOU FILE:** Review every CSV output with a qualified tax professional. Do not file based solely on this tool's output. Cryptocurrency tax reporting is complex and changing; errors here could result in audit, penalties, or misstatement. **This is your responsibility.**
 
+### **First-Time Setup Wizard (Web UI)**
+- Launch `python start_web_ui.py` and go to https://localhost:5000
+- Step 1: Create admin account (local only)
+- Step 2: Accept the Terms of Service in the modal (required to continue)
+- Step 3: Optional backup restore/import
+- Step 4/5: Add API keys (read-only) and wallets, then review settings
+
+After setup, you can log in with the admin account and run imports/reports from the UI.
+
 ### **1. Install Requirements**
 
 Install core Python dependencies:
 
 ```bash
 pip install -r requirements.txt
-```
-
-Or install core dependencies manually:
-
-```bash
-pip install pandas ccxt yfinance requests Flask
 ```
 
 **Optional - ML/AI Features:** If you want to use ML-based transaction classification and Accuracy Mode, install the optional ML dependencies:
@@ -198,7 +177,7 @@ pip install -r requirements-ml.txt
 
 This installs PyTorch, Transformers, and related ML libraries. These are only needed if you enable AI/ML features in the configuration. The system works fine without them - they're completely optional.
 
-**Optional - Staking Rewards:** For automatic staking rewards import, also install StakeTaxCSV:
+**Optional - Staking Rewards:** For automatic staking rewards import, also install staketaxcsv:
 
 ```bash
 pip install staketaxcsv
@@ -242,12 +221,12 @@ python Setup.py
 
 * **configs/config.json:** (Optional) Configure staking rewards auto-import and other settings:
   - `accounting.method`: Switch to "HIFO" if desired (Defaults to "FIFO")
-  - `staking.enabled`: Enable/disable StakeTaxCSV auto-import (requires StakeTaxCSV installed)
+  - `staking.enabled`: Enable/disable staketaxcsv auto-import (requires staketaxcsv installed)
   - `staking.protocols_to_sync`: Which protocols to sync (e.g., `["lido", "aave"]` or `["all"]`)
 
 ### **4. Run**
 
-To sync data, calculate taxes, and generate reports:
+To sync data, calculate Transactions, and generate reports:
 
 ```bash
 python auto_runner.py
@@ -279,9 +258,9 @@ python tests/verify_stress_test.py
 
 | File Name | Description |
 | :---- | :---- |
-| **CAP_GAINS_REPORT.csv** | Capital gains detail for Schedule D; generic CSV compatible with tax software. |
+| **CAP_GAINS_REPORT.csv** | Capital gains detail for Schedule D; generic CSV compatible with Transaction software. |
 | **INCOME_REPORT.csv** | Total value of Staking, Mining, Forks, and Airdrops (Ordinary Income). |
-| **US_TAX_LOSS_ANALYSIS.csv** | Summary of Net Short/Long positions, Allowable Deduction ($3k), and Carryovers. |
+| **US_transaction_LOSS_ANALYSIS.csv** | Summary of Net Short/Long positions, Allowable Deduction ($3k), and Carryovers. |
 | **WASH_SALE_REPORT.csv** | Detailed list of losses disallowed due to the Wash Sale rule. |
 | **FBAR_MAX_VALUE_REPORT.csv** | Shows the peak USD balance for every exchange to help with FBAR filing. |
 | **REVIEW_WARNINGS.csv** | High-priority audit risks (NFTs, missing prices, unmatched sells). |
@@ -290,16 +269,16 @@ python tests/verify_stress_test.py
 
 ## **🔍 Manual Review Assistant (Heuristic Scanner)**
 
-After generating tax reports, the system automatically runs a **heuristic-based manual review** that flags potential audit risks. These heuristics can miss issues or produce false positives—treat them as prompts to review, not guarantees.
+After generating Transaction reports, the system automatically runs a **heuristic-based manual review** that flags potential audit risks. These heuristics can miss issues or produce false positives—treat them as prompts to review, not guarantees.
 
 ### **What It Detects**
 
 The reviewer scans for:
 
 1. **NFTs Without Collectible Prefixes** (🚨 HIGH)
-   - Finds assets like "BAYC#1234" or "CRYPTOPUNK" that aren't marked with NFT- prefix
-   - **Risk:** Long-term NFT gains should be taxed at 28% (collectibles rate), not 20%
-   - **Action:** Rename assets with NFT- prefix or add to config.json collectible list
+  - Finds assets like "BAYC#1234" or "CRYPTOPUNK" that aren't marked with NFT- prefix
+  - **Risk:** Long-term NFT gains may be treated as collectibles with higher rates
+  - **Action:** Rename assets with NFT- prefix or add to config.json collectible list
 
 2. **Substantially Identical Wash Sales** (⚠️ MEDIUM)
    - Detects trades between wrapped assets (BTC → WBTC, ETH → WETH) within 30-day window
@@ -307,13 +286,13 @@ The reviewer scans for:
    - **Action:** Review these trades; consider adjusting cost basis if selling at loss
 
 3. **Potential Constructive Sales** (💡 LOW)
-   - Flags same-day offsetting trades (buy + sell) that could be hedging strategies
-   - **Risk:** "Shorting against the box" triggers immediate taxation under IRC § 1259
-   - **Action:** Rare for most users; review if you use advanced trading strategies
+  - Flags same-day offsetting trades (buy + sell) that could be hedging strategies
+  - **Risk:** "Shorting against the box" can trigger immediate recognition under IRC § 1259
+  - **Action:** Rare for most users; review if you use advanced trading strategies
 
 4. **DeFi/LP Token Complexity** (💡 MEDIUM)
    - Identifies liquidity pool tokens (UNI-V2, CURVE-LP) and DeFi protocol tokens
-   - **Risk:** LP deposits may be taxable swaps; impermanent loss not auto-calculated
+   - **Risk:** LP deposits may be Reportable swaps; impermanent loss not auto-calculated
    - **Action:** Verify deposits/withdrawals; ensure yield is marked as INCOME
 
 5. **Missing Prices or Unmatched Sells** (🚨 HIGH)
@@ -332,7 +311,7 @@ python auto_runner.py
 Or when running the main engine directly:
 
 ```bash
-python Crypto_Tax_Engine.py
+python Crypto_Transaction_Engine.py
 ```
 
 **Review output appears:**
@@ -341,11 +320,11 @@ python Crypto_Tax_Engine.py
 
 ### **Interactive Review Fixer**
 
-After the Tax Reviewer detects issues, use the **Interactive Review Fixer** (src/tools/review_fixer.py) to address them through a guided, transaction-by-transaction workflow.
+After the Transaction Reviewer detects issues, use the **Interactive Review Fixer** (src/tools/review_fixer.py) to address them through a guided, transaction-by-transaction workflow.
 
 #### **How to Use**
 
-Run the fixer for a specific tax year:
+Run the fixer for a specific Transaction year:
 
 ```bash
 # Direct invocation
@@ -454,7 +433,7 @@ Applied 15 fixes:
 ✓ All changes saved!
 ✓ Backup still available at: trades_backup_before_fix_20251211_143022.db
 
-Re-run tax calculations to see updated results:
+Re-run Transaction calculations to see updated results:
   python auto_runner.py
 ```
 
@@ -485,14 +464,14 @@ Re-run tax calculations to see updated results:
 
 - **Guided Fix Types**:
   - **Missing Prices**: Shows suggested prices from available sources
-  - **NFT/Collectibles**: Rename for proper 28% collectibles tax treatment
+  - **NFT/Collectibles**: Rename for proper 28% collectibles Transaction treatment
   - **Duplicates**: Choose which transaction to keep per group
   - **Wash Sales**: Rename coins to distinguish wallets/exchanges
   - **High Fees**: Display details for manual source CSV correction
 
 #### **After Fixing**
 
-Once you've fixed issues, re-run the tax calculation:
+Once you've fixed issues, re-run the Transaction calculation:
 
 ```bash
 python auto_runner.py
@@ -504,7 +483,7 @@ The reviewer will run again. Successfully fixed items won't appear. Skipped item
 
 ```
 ================================================================================
-TAX REVIEW REPORT - MANUAL VERIFICATION REQUIRED
+Transaction REVIEW REPORT - MANUAL VERIFICATION REQUIRED
 ================================================================================
 
 📊 SUMMARY:
@@ -517,7 +496,7 @@ TAX REVIEW REPORT - MANUAL VERIFICATION REQUIRED
 ================================================================================
 Count: 3 items
 Found assets that appear to be NFTs but are not prefixed with NFT-, ART-, or
-COLLECTIBLE-. If these are collectibles, they should be taxed at 28% long-term
+COLLECTIBLE-. If these are collectibles, they may face higher long-term rates (28%)
 rate (not 20%).
 
 📋 Sample Items:
@@ -529,17 +508,17 @@ rate (not 20%).
 Review these assets. If they are NFTs:
   1. Edit your CSV to rename them with NFT- prefix (e.g., "BAYC#1234" → "NFT-BAYC#1234")
   2. Or add them to config.json "collectible_tokens" list
-  3. Re-run the tax calculation
+  3. Re-run the Transaction calculation
 ```
 
 ## **⚖️ Disclaimer**
 
 I am a script, not a tax professional.  
-This software is provided "as is". Cryptocurrency tax laws (e.g., IRC § 1091 Wash Sales) are subject to interpretation and change. You are solely responsible for reviewing these reports and consulting with a qualified CPA or tax attorney before filing with the IRS.
+This software is provided "as is". Cryptocurrency Transaction laws (e.g., IRC § 1091 Wash Sales) are subject to interpretation and change. You are solely responsible for reviewing these reports and consulting with a qualified CPA or Transaction attorney before filing with the IRS.
 
-## **💰 Staking Rewards (StakeTaxCSV Integration)**
+## **💰 Staking Rewards (staketaxcsv Integration)**
 
-The engine integrates with **StakeTaxCSV** to automatically import staking rewards from all major protocols. This feature is **optional** and requires the StakeTaxCSV CLI.
+The engine integrates with **staketaxcsv** to automatically import staking rewards from all major protocols. This feature is **optional** and requires the staketaxcsv CLI.
 
 ### **Supported Staking Protocols**
 
@@ -553,9 +532,9 @@ The engine integrates with **StakeTaxCSV** to automatically import staking rewar
 
 ### **Setup & Configuration**
 
-#### **1. Install StakeTaxCSV**
+#### **1. Install staketaxcsv**
 
-StakeTaxCSV is a separate Python package. Install it alongside the main engine:
+staketaxcsv is a separate Python package. Install it alongside the main engine:
 
 ```bash
 pip install staketaxcsv
@@ -575,21 +554,21 @@ Edit your `config.json` file and enable the staking section. Wallet addresses ar
 ```
 
 **Configuration Fields:**
-- `enabled` (bool): Enable/disable StakeTaxCSV auto-import
+- `enabled` (bool): Enable/disable staketaxcsv auto-import
 - `protocols_to_sync` (array): Which protocols to sync. Use `["all"]` for all protocols, or specify specific ones like `["lido", "aave", "compound"]`
 
 **Note:** Wallet addresses are automatically read from `wallets_encrypted.json` — no separate configuration needed!
 
 #### **3. Run auto_runner.py**
 
-The StakeTaxCSV manager runs automatically:
+The staketaxcsv manager runs automatically:
 
 ```bash
 python auto_runner.py
 ```
 
 **Output:**
-- Staking CSV is generated in `inputs/staketax_generated/`
+- Staking CSV is generated in `inputs/staketransaction_generated/`
 - Records are imported into the database with **deduplication**
 - CSV is archived to `processed_archive/`
 
@@ -611,7 +590,7 @@ Example:
 * Date: 2024-01-15
 * Received: 0.5 ETH from Lido staking
 * ETH Price on 2024-01-15: $2,500
-* **Taxable Income:** 0.5 × $2,500 = **$1,250** (ordinary income)
+* **Reportable Income:** 0.5 × $2,500 = **$1,250** (ordinary income)
 
 When you later sell that 0.5 ETH, the cost basis is $2,500, and any gain/loss is treated as a **Capital Gain/Loss**.
 
@@ -620,15 +599,15 @@ When you later sell that 0.5 ETH, the cost basis is $2,500, and any gain/loss is
 * **Ethereum Addresses:** `0x...` (EVM-compatible)
 * **Solana Addresses:** Standard Solana pubkeys
 * **Bitcoin Addresses:** `bc1...` (Segwit) or `1...` (Legacy)
-* **Multi-Chain:** StakeTaxCSV auto-detects wallet types
+* **Multi-Chain:** staketaxcsv auto-detects wallet types
 
 ### **Manual Fallback for Unsupported Staking Services**
 
-If your staking service (e.g., custom validators, or niche protocols) is not automatically detected by StakeTaxCSV, you can manually import staking rewards via CSV.
+If your staking service (e.g., custom validators, or niche protocols) is not automatically detected by staketaxcsv, you can manually import staking rewards via CSV.
 
 #### **Why Use Manual Import?**
 
-* StakeTaxCSV doesn't support your specific staking service
+* staketaxcsv doesn't support your specific staking service
 * You have custom staking arrangements or validator delegations
 * You want to audit specific staking transactions
 
@@ -665,11 +644,11 @@ date,coin,amount,protocol,usd_value_at_time
 2. Get the USD price for each date (CoinGecko, Yahoo Finance, etc.)
 3. Create `inputs/figment_staking.csv` with the data
 4. Run `python auto_runner.py`
-5. The rewards are imported with deduplication (same as StakeTaxCSV)
+5. The rewards are imported with deduplication (same as staketaxcsv)
 
-#### **Tax Treatment**
+#### **Transaction Treatment**
 
-Manual staking imports are treated identically to StakeTaxCSV imports:
+Manual staking imports are treated identically to staketaxcsv imports:
 - Classified as **Ordinary Income** on receipt date
 - Recorded in INCOME_REPORT.csv
 - Proper cost basis set for future sales
@@ -694,7 +673,7 @@ To run the full test suite (recommended):
 
 ```bash
 # Windows
-& ".venv\Scripts\python.exe" -m pytest -q
+python -m pytest -q
 
 # Linux/Mac
 python3 -m pytest -q

@@ -41,7 +41,7 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         """Edge case: zero amount transaction should gracefully skip or handle"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should not crash
@@ -52,7 +52,7 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         """Edge case: negative amount should be handled gracefully"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':-1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should not crash, should skip invalid row
@@ -64,7 +64,7 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1000000.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1000000.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(engine.tt[0]['Proceeds'], 20000000000.0)
         self.assertEqual(engine.tt[0]['Cost Basis'], 10000000000.0)
@@ -73,7 +73,7 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.00000001, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.00000001, 'price_usd':20000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Proceeds = 0.00000001 * 20000.0 = 0.0002
         # Cost Basis = 0.00000001 * 10000.0 = 0.0001
@@ -84,14 +84,14 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         """Edge case: Zero price (fork/airdrop scenario)"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':1.0, 'price_usd':0.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(engine.inc[0]['USD'], 0.0)
     def test_negative_price_graceful_handling(self):
         """Edge case: Negative price should be handled gracefully"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':-10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should not crash
@@ -103,7 +103,7 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'SHIB', 'amount':1000000.0, 'price_usd':0.000001, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'SHIB', 'amount':1000000.0, 'price_usd':0.00001, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Proceeds = 1000000 * 0.00001 = $10.00
         self.assertAlmostEqual(engine.tt[0]['Proceeds'], 10.0, delta=0.01)
@@ -111,22 +111,22 @@ class TestEdgeCasesExtremeValues(unittest.TestCase):
         """Edge case: Transaction dated 50 years in future"""
         self.db.save_trade({'id':'1', 'date':'2073-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2073)
+        engine = app.TransactionEngine(self.db, 2073)
         engine.run()
-        self.assertEqual(len(engine.tt), 0)  # No sale, should have 0 tax transactions
+        self.assertEqual(len(engine.tt), 0)  # No sale, should have 0 Transaction transactions
     def test_date_far_in_past(self):
         """Edge case: Transaction dated 50 years in past"""
         self.db.save_trade({'id':'1', 'date':'1973-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':1.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'1973-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 1973)
+        engine = app.TransactionEngine(self.db, 1973)
         engine.run()
         self.assertEqual(engine.tt[0]['Cost Basis'], 1.0)
     def test_fractional_satoshi_handling(self):
         """Edge case: Amount smaller than 1 satoshi"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.0000000001, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertTrue(True)
@@ -158,7 +158,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         """Edge case: NULL values in critical fields"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':None, 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should skip or handle gracefully
@@ -170,7 +170,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         """Edge case: Empty strings instead of values"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertTrue(True)
@@ -180,7 +180,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         """Edge case: Unknown action type"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'UNKNOWN_ACTION', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle unknown action gracefully (skip it)
@@ -192,7 +192,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'btc', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.5, 'price_usd':20000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Should normalize and match both
         self.assertGreater(len(engine.tt), 0)
@@ -211,7 +211,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
             except:
                 pass  # Some formats may fail in DB layer, that's OK
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertTrue(True)
@@ -221,7 +221,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         """Edge case: Special characters in coin names"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'USDC-e', 'amount':100.0, 'price_usd':1.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertTrue(True)
@@ -231,7 +231,7 @@ class TestEdgeCasesMalformedData(unittest.TestCase):
         """Edge case: Unicode characters in descriptions"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1', 'note':'Test™ © ® 🎉'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             engine.export()
@@ -265,7 +265,7 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01T12:00:00', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-01-02T12:00:00', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':19000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle gracefully (insufficient basis)
@@ -277,7 +277,7 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'DOGE', 'amount':1000000.0, 'price_usd':0.0001, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-01-02', 'source':'M', 'action':'SELL', 'coin':'DOGE', 'amount':1000000.0, 'price_usd':10.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         gain = engine.tt[0]['Proceeds'] - engine.tt[0]['Cost Basis']
         self.assertGreater(gain, 9000000.0)
@@ -286,7 +286,7 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'KRAKEN', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':10, 'batch_id':'1'})
         self.db.save_trade({'id':'1_DUP', 'date':'2023-01-01', 'source':'KRAKEN', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':10, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Should either skip duplicates or engine handles it
         self.assertTrue(True)
@@ -298,15 +298,15 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
         self.db.save_trade({'id':'4', 'date':'2023-01-04', 'source':'SWAP', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'4'})
         self.db.save_trade({'id':'5', 'date':'2023-01-05', 'source':'M', 'action':'BUY', 'coin':'USDC', 'amount':20000.0, 'price_usd':1.0, 'fee':0, 'batch_id':'5'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
-        # All should be recognized as taxable events
+        # All should be recognized as Reportable events
         self.assertEqual(len(engine.tt), 2)
     def test_negative_income(self):
         """Unlikely: Negative income (refund or reversal)"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':-0.1, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should skip or handle gracefully
@@ -318,7 +318,7 @@ class TestUnlikelyButValidTransactions(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'USDC', 'amount':100.0, 'price_usd':1.0, 'fee':1, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-12-31', 'source':'M', 'action':'SELL', 'coin':'USDC', 'amount':100.0, 'price_usd':1.0, 'fee':1, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Should show loss due to fees
         gain = engine.tt[0]['Proceeds'] - engine.tt[0]['Cost Basis']
@@ -352,7 +352,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
     def test_no_transactions_produces_empty_output(self):
         """Extreme: Database is empty (no transactions)"""
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             self.assertEqual(len(engine.tt), 0)
@@ -374,10 +374,10 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
                 'batch_id': f'{year}_buy'
             })
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Should only process 2023 transactions
-        self.assertEqual(len(engine.tt), 0)  # No sales in 2023, so no tax transactions
+        self.assertEqual(len(engine.tt), 0)  # No sales in 2023, so no Transaction transactions
     def test_corrupted_float_parsing(self):
         """Extreme: Try to parse amount as "1.0.0" (malformed float)"""
         # This test depends on DB layer accepting the value
@@ -393,7 +393,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
             'batch_id': '1'
         })
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle gracefully or skip
@@ -414,7 +414,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
             'batch_id': '1'
         })
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should skip NaN entries
@@ -436,7 +436,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
             'batch_id': '1'
         })
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle gracefully (0 cost basis or skip)
@@ -463,7 +463,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
             })
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Should handle large portfolio without crashing
@@ -471,7 +471,7 @@ class TestExtremeErrorScenariosGracefulDegradation(unittest.TestCase):
         except Exception as e:
             self.fail(f"10K transaction portfolio crashed: {e}")
 
-# --- 11. STAKETAXCSV INTEGRATION TESTS ---
+# --- 11. StakeActivityCSV INTEGRATION TESTS ---
 
 
 class TestLargePortfolios(unittest.TestCase):

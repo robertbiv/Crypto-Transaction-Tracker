@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Crypto Tax Generator{% endblock %}</title>
+    <title>{% block title %}Crypto Transaction Tracker{% endblock %}</title>
     
     <!-- Material Design 3 -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -412,7 +412,7 @@
     {% set show_nav = (session.username and request.endpoint not in hidden_endpoints and not hide_nav) %}
     {% if show_nav %}
     <nav class="nav-bar">
-        <h1>💰 Crypto Tax Generator</h1>
+        <h1>💰 Crypto Transaction Tracker</h1>
         <div class="nav-menu">
             <a href="/dashboard" class="nav-link">Dashboard</a>
             <a href="/transactions" class="nav-link">Transactions</a>

@@ -64,7 +64,7 @@ class TestAuditLogManager:
                     "tx_id": "buy_2",
                     "amount": "1.0",
                     "calculated_gain": "5000.00",
-                    "tax_impact": "1250.00",
+                    "transaction_impact": "1250.00",
                     "description": "Pump and dump pattern detected"
                 },
                 {
@@ -183,14 +183,14 @@ class TestAuditLogManager:
         
         assert summary['most_common_coin'] == 'BTC'  # BTC appears twice
     
-    def test_summary_tax_impact_total(self, temp_audit_log):
-        """Test tax impact total calculation"""
+    def test_summary_transaction_impact_total(self, temp_audit_log):
+        """Test Transaction impact total calculation"""
         manager = AuditLogManager(temp_audit_log)
         logs = manager.read_audit_logs()
         summary = manager.get_summary_statistics(logs)
         
-        # Should have tax_impact from PUMP_DUMP entry
-        assert summary['tax_impact_total'] == Decimal('1250.00')
+        # Should have transaction_impact from PUMP_DUMP entry
+        assert summary['transaction_impact_total'] == Decimal('1250.00')
     
     def test_generate_monthly_report(self, temp_audit_log):
         """Test monthly compliance report generation"""
@@ -216,7 +216,7 @@ class TestAuditLogManager:
         required_fields = [
             'title', 'generated_at', 'period', 'summary',
             'audit_events', 'fraud_alerts', 'fee_alerts',
-            'events_by_type', 'events_by_severity', 'tax_impact'
+            'events_by_type', 'events_by_severity', 'transaction_impact'
         ]
         
         for field in required_fields:
@@ -301,7 +301,7 @@ class TestAuditLogIntegration:
                         "coin": "BTC",
                         "amount": "1.0",
                         "calculated_gain": "5000.00",
-                        "tax_impact": "1250.00"
+                        "transaction_impact": "1250.00"
                     })
             
             for entry in entries:

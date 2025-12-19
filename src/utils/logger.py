@@ -41,7 +41,7 @@ Usage:
     from src.core.engine import logger
     
     set_run_context('cli')
-    logger.info('Starting tax calculation')
+    logger.info('Starting Transaction calculation')
 
 Configuration:
     Logger settings respect LOG_DIR from constants.py
@@ -58,7 +58,7 @@ from pathlib import Path
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 logger.setLevel(logging.INFO)
 
 # Global run context state

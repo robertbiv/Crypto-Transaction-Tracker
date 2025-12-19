@@ -65,7 +65,7 @@ class TestPortableBackups(unittest.TestCase):
         cte.DB_SALT_FILE.write_bytes(salt)
         
         # Set password in environment
-        os.environ['CRYPTO_TAX_PASSWORD'] = self.password
+        os.environ['CRYPTO_TRANSACTION_PASSWORD'] = self.password
         
         try:
             # Derive keys twice
@@ -81,8 +81,8 @@ class TestPortableBackups(unittest.TestCase):
             
             self.assertNotEqual(key_api, key_wallets)
         finally:
-            if 'CRYPTO_TAX_PASSWORD' in os.environ:
-                del os.environ['CRYPTO_TAX_PASSWORD']
+            if 'CRYPTO_TRANSACTION_PASSWORD' in os.environ:
+                del os.environ['CRYPTO_TRANSACTION_PASSWORD']
 
     def test_portable_backup_encryption(self):
         """Test that data encrypted with password-derived key can be restored on different machine"""
@@ -91,7 +91,7 @@ class TestPortableBackups(unittest.TestCase):
         # Simulate machine 1: create salt and encrypt data
         salt = os.urandom(16)
         cte.DB_SALT_FILE.write_bytes(salt)
-        os.environ['CRYPTO_TAX_PASSWORD'] = self.password
+        os.environ['CRYPTO_TRANSACTION_PASSWORD'] = self.password
         
         try:
             api_keys_data = {
@@ -137,16 +137,16 @@ class TestPortableBackups(unittest.TestCase):
             finally:
                 shutil.rmtree(tmpdir2, ignore_errors=True)
         finally:
-            if 'CRYPTO_TAX_PASSWORD' in os.environ:
-                del os.environ['CRYPTO_TAX_PASSWORD']
+            if 'CRYPTO_TRANSACTION_PASSWORD' in os.environ:
+                del os.environ['CRYPTO_TRANSACTION_PASSWORD']
 
     def test_fallback_to_file_keys_when_no_password(self):
         """Test that system falls back to file-based keys when password unavailable"""
         import os
         
         # No password set, no salt file
-        if 'CRYPTO_TAX_PASSWORD' in os.environ:
-            del os.environ['CRYPTO_TAX_PASSWORD']
+        if 'CRYPTO_TRANSACTION_PASSWORD' in os.environ:
+            del os.environ['CRYPTO_TRANSACTION_PASSWORD']
         
         api_keys_data = {'test': {'apiKey': 'key', 'secret': 'secret'}}
         

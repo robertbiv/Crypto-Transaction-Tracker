@@ -25,13 +25,13 @@ class TestConfigHandling(unittest.TestCase):
         self.test_path = Path(self.test_dir)
         
         # Patch globals
-        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
-        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
-        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'config_test.db')
-        self.keys_patcher = patch('Crypto_Tax_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
-        self.wallets_patcher = patch('Crypto_Tax_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
-        self.config_patcher = patch('Crypto_Tax_Engine.CONFIG_FILE', self.test_path / 'config.json')
+        self.base_patcher = patch('Crypto_Transaction_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Transaction_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Transaction_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.test_path / 'config_test.db')
+        self.keys_patcher = patch('Crypto_Transaction_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
+        self.wallets_patcher = patch('Crypto_Transaction_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
+        self.config_patcher = patch('Crypto_Transaction_Engine.CONFIG_FILE', self.test_path / 'config.json')
         
         self.base_patcher.start()
         self.input_patcher.start()
@@ -64,7 +64,7 @@ class TestConfigHandling(unittest.TestCase):
         with open(app.WALLETS_FILE, 'w') as f: json.dump({"BTC": ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"]}, f)
         auditor = app.WalletAuditor(self.db)
         with patch.object(auditor, 'check_blockchair') as mock_bc:
-            with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
+            with self.assertLogs('Crypto_Transaction_Engine', level='INFO') as cm:
                 auditor.run_audit()
             self.assertTrue(any("AUDIT SKIPPED" in log for log in cm.output))
             mock_bc.assert_not_called()
@@ -74,7 +74,7 @@ class TestConfigHandling(unittest.TestCase):
             json.dump({"moralis": {"apiKey": "PASTE_KEY"}, "blockchair": {"apiKey": ""}}, f)
         with open(app.WALLETS_FILE, 'w') as f: json.dump({"ETH": ["0x123"]}, f)
         auditor = app.WalletAuditor(self.db)
-        with self.assertLogs('crypto_tax_engine', level='INFO') as cm:
+        with self.assertLogs('Crypto_Transaction_Engine', level='INFO') as cm:
             auditor.run_audit()
         self.assertTrue(any("RUNNING AUDIT" in log for log in cm.output))
     def test_throttling_respects_config(self):
@@ -217,7 +217,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
             "compliance": {
                 "strict_broker_mode": True,
                 "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-                "staking_taxable_on_receipt": True,
+                "staking_transactionable_on_receipt": True,
                 "collectible_prefixes": ["NFT-", "ART-"],
                 "collectible_tokens": ["NFT", "PUNK", "BAYC"]
             },
@@ -236,7 +236,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
         self.assertIn('compliance', cfg)
         self.assertIn('strict_broker_mode', cfg['compliance'])
         self.assertIn('broker_sources', cfg['compliance'])
-        self.assertIn('staking_taxable_on_receipt', cfg['compliance'])
+        self.assertIn('staking_transactionable_on_receipt', cfg['compliance'])
         self.assertIn('collectible_prefixes', cfg['compliance'])
         self.assertIn('collectible_tokens', cfg['compliance'])
 
@@ -257,7 +257,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
             "compliance": {
                 "strict_broker_mode": True,
                 "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-                "staking_taxable_on_receipt": True,
+                "staking_transactionable_on_receipt": True,
                 "collectible_prefixes": ["NFT-", "ART-"],
                 "collectible_tokens": ["NFT", "PUNK", "BAYC"]
             },
@@ -275,7 +275,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
         self.assertIn('compliance', cfg)
         self.assertTrue(cfg['compliance']['strict_broker_mode'])
         self.assertIsInstance(cfg['compliance']['broker_sources'], list)
-        self.assertTrue(cfg['compliance']['staking_taxable_on_receipt'])
+        self.assertTrue(cfg['compliance']['staking_transactionable_on_receipt'])
 
     def test_setup_instructions_contain_recommendation_labels(self):
         # Verify Setup.py config_data contains clear recommendation labels
@@ -286,10 +286,10 @@ class TestSetupConfigCompliance(unittest.TestCase):
             "performance": {"respect_free_tier_limits": True, "api_timeout_seconds": 30},
             "logging": {"compress_older_than_days": 30},
             "compliance": {
-                "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_taxable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. collectibles can be flagged via prefixes/tokens.",
+                "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_transactionable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. collectibles can be flagged via prefixes/tokens.",
                 "strict_broker_mode": True,
                 "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-                "staking_taxable_on_receipt": True,
+                "staking_transactionable_on_receipt": True,
                 "collectible_prefixes": ["NFT-", "ART-"],
                 "collectible_tokens": ["NFT", "PUNK", "BAYC"]
             },
@@ -300,7 +300,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
         comp_instructions = config_defaults['compliance']['_INSTRUCTIONS']
         self.assertIn('Recommended=True', comp_instructions, "Compliance instructions should mark recommended settings")
         self.assertIn('strict_broker_mode', comp_instructions)
-        self.assertIn('staking_taxable_on_receipt', comp_instructions)
+        self.assertIn('staking_transactionable_on_receipt', comp_instructions)
         self.assertIn('aggressive', comp_instructions, "Should warn that False is aggressive")
         self.assertIn('1099-DA', comp_instructions, "Should mention 1099-DA alignment")
 
@@ -314,7 +314,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
             "compliance": {
                 "strict_broker_mode": True,
                 "broker_sources": ["COINBASE"],
-                "staking_taxable_on_receipt": True,
+                "staking_transactionable_on_receipt": True,
                 "collectible_prefixes": ["NFT-"],
                 "collectible_tokens": ["PUNK"]
             }
@@ -347,7 +347,7 @@ class TestSetupConfigCompliance(unittest.TestCase):
             db.save_trade({'id':'1', 'date':'2025-01-01', 'source':'LEDGER', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':50000.0, 'fee':0, 'batch_id':'1'})
             db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'COINBASE', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'2'})
             db.commit()
-            eng = app.TaxEngine(db, 2025)
+            eng = app.TransactionEngine(db, 2025)
             eng.run()
             # Just verify the engine ran without errors
             self.assertIsNotNone(eng.tt)
@@ -421,7 +421,7 @@ class TestAutoRunner(unittest.TestCase):
         db.close()
 
         with patch.object(app, 'Ingestor', self._stub_ingestor()), \
-             patch.object(app, 'StakeTaxCSVManager', self._stub_stake_mgr()), \
+             patch.object(app, 'StakeActivityCSVManager', self._stub_stake_mgr()), \
              patch.object(app, 'PriceFetcher', self._stub_price_fetcher()), \
              patch.object(Auto_Runner, 'datetime', self._fixed_datetime(2023)):
             Auto_Runner.run_automation()
@@ -453,19 +453,19 @@ class TestAutoRunner(unittest.TestCase):
             return FakeEngine(db, year)
 
         with patch.object(app, 'Ingestor', self._stub_ingestor()), \
-             patch.object(app, 'StakeTaxCSVManager', self._stub_stake_mgr()), \
+             patch.object(app, 'StakeActivityCSVManager', self._stub_stake_mgr()), \
              patch.object(app, 'PriceFetcher', self._stub_price_fetcher()), \
              patch.object(Auto_Runner, 'datetime', fixed_dt), \
-             patch.object(app, 'TaxEngine', side_effect=fake_engine):
+             patch.object(app, 'TransactionEngine', side_effect=fake_engine):
             Auto_Runner.run_automation()
 
-        # Should only instantiate TaxEngine for current year (2024), not prev_year (2023)
+        # Should only instantiate TransactionEngine for current year (2024), not prev_year (2023)
         self.assertIn(2024, created_engines)
         self.assertNotIn(prev_year, created_engines)
 
     def test_auto_runner_triggers_manual_review_with_warnings(self):
-        """Test that Auto Runner invokes Tax Reviewer and detects issues"""
-        from Tax_Reviewer import TaxReviewer
+        """Test that Auto Runner invokes Transaction Reviewer and detects issues"""
+        from Transaction_Reviewer import TransactionReviewer
         
         # Seed database with problematic data that should trigger warnings
         db = app.DatabaseManager()
@@ -506,7 +506,7 @@ class TestAutoRunner(unittest.TestCase):
         
         # Capture review output
         review_called = []
-        original_run_review = TaxReviewer.run_review
+        original_run_review = TransactionReviewer.run_review
         
         def mock_run_review(self):
             result = original_run_review(self)
@@ -514,10 +514,10 @@ class TestAutoRunner(unittest.TestCase):
             return result
         
         with patch.object(app, 'Ingestor', self._stub_ingestor()), \
-             patch.object(app, 'StakeTaxCSVManager', self._stub_stake_mgr()), \
+             patch.object(app, 'StakeActivityCSVManager', self._stub_stake_mgr()), \
              patch.object(app, 'PriceFetcher', self._stub_price_fetcher()), \
              patch.object(Auto_Runner, 'datetime', self._fixed_datetime(2024)), \
-             patch.object(TaxReviewer, 'run_review', mock_run_review):
+             patch.object(TransactionReviewer, 'run_review', mock_run_review):
             Auto_Runner.run_automation()
         
         # Verify review was called

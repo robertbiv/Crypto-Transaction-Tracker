@@ -3,7 +3,7 @@
 SETUP WIZARD - First-Time Configuration and Project Initialization
 ================================================================================
 
-Interactive setup wizard that initializes the tax engine for first-time use.
+Interactive setup wizard that initializes the Transaction engine for first-time use.
 
 Setup Workflow:
     1. Dependency Validation - Check Python packages and versions
@@ -23,7 +23,7 @@ Created Files:
 
 Created Folders:
     - inputs/ - CSV import staging
-    - outputs/ - Generated tax reports
+    - outputs/ - Generated Transaction reports
     - outputs/logs/ - Application logs
     - outputs/backups/ - Database backups
     - processed_archive/ - Processed CSV archive
@@ -32,10 +32,10 @@ Created Folders:
 
 2025 Compliance Defaults:
     - strict_broker_mode: Enabled (1099-DA alignment)
-    - staking_taxable_on_receipt: Enabled (constructive receipt)
+    - staking_transactionable_on_receipt: Enabled (constructive receipt)
     - wash_sale_rule: Disabled (future law not yet enacted)
     - accounting_method: FIFO (IRS default)
-    - defi_lp_conservative: Enabled (taxable swaps)
+    - defi_lp_conservative: Enabled (Reportable swaps)
 
 Usage:
     python src/tools/setup.py
@@ -123,7 +123,7 @@ def validate_json(fp, default):
     print(f"   [CREATED] {fp.name}")
 
 def main():
-    print("--- SETUP (V30: US Tax Compliance + HIFO Support) ---\n")
+    print("--- SETUP (V30: US Transaction Compliance + HIFO Support) ---\n")
     check_dependencies()
     check_folders()
     
@@ -266,22 +266,22 @@ def main():
             "compress_older_than_days": 30
         },
         "compliance": {
-            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_taxable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. defi_lp_conservative (Recommended=True) treats LP deposits as taxable swaps (conservative); setting False marks them as non-taxable deposits (aggressive, IRS may challenge). collectibles can be flagged via prefixes/tokens.",
+            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_transactionable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. defi_lp_conservative (Recommended=True) treats LP deposits as Reportable swaps (conservative); setting False marks them as non-Reportable deposits (aggressive, IRS may challenge). collectibles can be flagged via prefixes/tokens.",
             "strict_broker_mode": True,
             "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-            "staking_taxable_on_receipt": True,
+            "staking_transactionable_on_receipt": True,
             "defi_lp_conservative": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"]
         },
         "staking": {
-            "_INSTRUCTIONS": "StakeTax CSV auto-import. Set enabled=True to auto-generate staking reward CSVs from all wallets in wallets.json, import into DB, and archive. Requires StakeTax CLI installed (pip install staketaxcsv). Supports all major staking protocols.",
+            "_INSTRUCTIONS": "staketaxcsv auto-import. Set enabled=True to auto-generate staking reward CSVs from all wallets in wallets.json, import into DB, and archive. Requires staketaxcsv CLI installed (pip install staketaxcsv). Supports all major staking protocols.",
             "enabled": False,
             "protocols_to_sync": ["all"]
         },
         "ui": {
             "download_warnings_enabled": True,
-            "_INSTRUCTIONS": "Recommended: keep download_warnings_enabled=True. Consult a tax professional before disabling."
+            "_INSTRUCTIONS": "Recommended: keep download_warnings_enabled=True. Consult a Transaction professional before disabling."
         }
     }
     validate_json(CONFIG_FILE, config_data)

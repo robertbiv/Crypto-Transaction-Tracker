@@ -1,9 +1,9 @@
 """
 ================================================================================
-TEST: Core US Tax Compliance
+TEST: Core US Transaction Compliance
 ================================================================================
 
-Validates fundamental US tax law compliance for cryptocurrency transactions.
+Validates fundamental US Transaction law compliance for cryptocurrency transactions.
 
 Compliance Areas:
     - FIFO/HIFO/LIFO accounting methods
@@ -25,13 +25,13 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.test_path = Path(self.test_dir)
         
         # Patch globals
-        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
-        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
-        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'advanced_tax.db')
-        self.keys_patcher = patch('Crypto_Tax_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
-        self.wallets_patcher = patch('Crypto_Tax_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
-        self.config_patcher = patch('Crypto_Tax_Engine.CONFIG_FILE', self.test_path / 'config.json')
+        self.base_patcher = patch('Crypto_Transaction_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Transaction_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Transaction_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.test_path / 'advanced_transaction.db')
+        self.keys_patcher = patch('Crypto_Transaction_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
+        self.wallets_patcher = patch('Crypto_Transaction_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
+        self.config_patcher = patch('Crypto_Transaction_Engine.CONFIG_FILE', self.test_path / 'config.json')
         
         self.base_patcher.start()
         self.input_patcher.start()
@@ -62,7 +62,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         shutil.rmtree(self.test_dir)
         # Reset compliance toggles to defaults to avoid cross-test contamination
         app.GLOBAL_CONFIG.setdefault('compliance', {})
-        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = True
+        app.GLOBAL_CONFIG['compliance']['staking_transactionable_on_receipt'] = True
         app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
 
     def test_hifo_accounting_method(self):
@@ -73,7 +73,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         3. Sell 1 BTC @ $60k (Mar 1)
         
         FIFO Result: Basis $10k (Jan lot). Gain $50k.
-        HIFO Result: Basis $50k (Feb lot). Gain $10k. (Tax Minimization)
+        HIFO Result: Basis $50k (Feb lot). Gain $10k. (Transaction Minimization)
         """
         # Enable HIFO
         app.GLOBAL_CONFIG['accounting'] = {'method': 'HIFO'}
@@ -83,7 +83,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-03-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         sale = engine.tt[0]
@@ -107,7 +107,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-03-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         sale = engine.tt[0]
@@ -128,7 +128,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'GIFT_IN', 'coin':'BTC', 'amount':1.0, 'price_usd':5000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':3000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         # Note: Current engine treats GIFT_IN as INCOME/BUY at FMV.
         # This matches the conservative Dual Basis rule for losses (using FMV).
@@ -142,7 +142,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2017-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2017-08-01', 'source':'M', 'action':'INCOME', 'coin':'BCH', 'amount':1.0, 'price_usd':500.0, 'fee':0, 'batch_id':'FORK'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2017)
+        engine = app.TransactionEngine(self.db, 2017)
         engine.run()
         self.assertEqual(len(engine.inc), 1)
         self.assertEqual(engine.inc[0]['Coin'], 'BCH')
@@ -160,7 +160,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2025-01-01', 'source':'LEDGER', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':50000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'COINBASE', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':60000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        eng = app.TaxEngine(self.db, 2025)
+        eng = app.TransactionEngine(self.db, 2025)
         eng.run()
         sale = eng.tt[0]
         # Basis should be 0.0 (no cross-wallet fallback) and proceeds 60000
@@ -175,10 +175,10 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'PUNK', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2024-02-02', 'source':'M', 'action':'SELL', 'coin':'PUNK', 'amount':1.0, 'price_usd':20000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        eng = app.TaxEngine(self.db, 2024)
+        eng = app.TransactionEngine(self.db, 2024)
         eng.run()
         eng.export()
-        loss_csv = app.OUTPUT_DIR / 'Year_2024' / 'US_TAX_LOSS_ANALYSIS.csv'
+        loss_csv = app.OUTPUT_DIR / 'Year_2024' / 'US_transaction_LOSS_ANALYSIS.csv'
         self.assertTrue(loss_csv.exists())
         df = pd.read_csv(loss_csv)
         val_collectible = float(df[df['Item']=='Current Year Long-Term (Collectibles 28%)']['Value'].iloc[0])
@@ -192,7 +192,7 @@ class TestAdvancedUSCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2025-01-01', 'source':'LEDGER', 'action':'BUY', 'coin':'ETH', 'amount':2.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'KRAKEN', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':1500.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        eng = app.TaxEngine(self.db, 2025)
+        eng = app.TransactionEngine(self.db, 2025)
         eng.run()
         eng.export()
         detailed = app.OUTPUT_DIR / 'Year_2025' / '1099_RECONCILIATION_DETAILED.csv'
@@ -205,23 +205,23 @@ class TestAdvancedUSCompliance(unittest.TestCase):
     def test_staking_constructive_receipt_toggle(self):
         # When disabled, staking income should not be logged; lot added at zero basis
         app.GLOBAL_CONFIG.setdefault('compliance', {})
-        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = False
+        app.GLOBAL_CONFIG['compliance']['staking_transactionable_on_receipt'] = False
         self.db.save_trade({'id':'1', 'date':'2025-03-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':0.1, 'price_usd':30000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        eng = app.TaxEngine(self.db, 2025)
+        eng = app.TransactionEngine(self.db, 2025)
         eng.run()
         # No income rows recorded
         self.assertEqual(len(eng.inc), 0)
         # Selling the reward should realize full proceeds as gain (zero basis)
         self.db.save_trade({'id':'2', 'date':'2025-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.1, 'price_usd':35000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        eng2 = app.TaxEngine(self.db, 2025)
+        eng2 = app.TransactionEngine(self.db, 2025)
         eng2.run()
         sale = eng2.tt[0]
         self.assertEqual(sale['Cost Basis'], 0.0)
         self.assertEqual(sale['Proceeds'], 3500.0)
 
-# --- 3. US TAX & LOSS TESTS (Core Pillars) ---
+# --- 3. US Transaction & LOSS TESTS (Core Pillars) ---
 
 
 class TestUSLosses(unittest.TestCase):
@@ -250,13 +250,13 @@ class TestUSLosses(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'3'})
         self.db.save_trade({'id':'4', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'ETH', 'amount':1.0, 'price_usd':11000.0, 'fee':0, 'batch_id':'4'})
         self.db.commit()
-        eng1 = app.TaxEngine(self.db, 2022)
+        eng1 = app.TransactionEngine(self.db, 2022)
         eng1.run()
         eng1.export()
-        eng2 = app.TaxEngine(self.db, 2023)
+        eng2 = app.TransactionEngine(self.db, 2023)
         eng2.run()
         eng2.export()
-        report_path = app.OUTPUT_DIR / "Year_2023" / "US_TAX_LOSS_ANALYSIS.csv"
+        report_path = app.OUTPUT_DIR / "Year_2023" / "US_transaction_LOSS_ANALYSIS.csv"
         self.assertTrue(report_path.exists())
         df = pd.read_csv(report_path)
         prior_st = float(df[df['Item'] == 'Prior Year Short-Term Carryover']['Value'].iloc[0])
@@ -270,7 +270,7 @@ class TestUSLosses(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-01-10', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2023-01-15', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
         ws_report = app.OUTPUT_DIR / "Year_2023" / "WASH_SALE_REPORT.csv"
@@ -282,10 +282,10 @@ class TestUSLosses(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-12-25', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2024-01-05', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
-        tt_report = app.OUTPUT_DIR / "Year_2023" / "GENERIC_TAX_CAP_GAINS.csv"
+        tt_report = app.OUTPUT_DIR / "Year_2023" / "CAP_GAINS.csv"
         df = pd.read_csv(tt_report)
         row = df.iloc[0]
         # Proceeds 10k. Cost Basis 10k (Adjusted from 20k to match proceeds).
@@ -293,7 +293,7 @@ class TestUSLosses(unittest.TestCase):
         self.assertEqual(row['Cost Basis'], 10000.0)
         self.assertIn("WASH SALE", row['Description'])
 
-# --- 4. COMPREHENSIVE US TAX LAW COMPLIANCE ---
+# --- 4. COMPREHENSIVE US Transaction LAW COMPLIANCE ---
 
 
 class TestUSComprehensiveCompliance(unittest.TestCase):
@@ -314,11 +314,11 @@ class TestUSComprehensiveCompliance(unittest.TestCase):
         self.db.close()
         shutil.rmtree(self.test_dir)
         app.BASE_DIR = self.orig_base
-    def test_gas_fees_are_taxable_events(self):
+    def test_gas_fees_are_transactionable_events(self):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'TRANSFER_FEE', 'action':'SELL', 'coin':'ETH', 'amount':0.01, 'price_usd':2000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         sale = engine.tt[0]
         self.assertIn("(Fee)", sale['Description'])
@@ -327,16 +327,16 @@ class TestUSComprehensiveCompliance(unittest.TestCase):
     def test_income_classification(self):
         self.db.save_trade({'id':'1', 'date':'2023-03-01', 'source':'M', 'action':'INCOME', 'coin':'BTC', 'amount':0.1, 'price_usd':20000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(len(engine.inc), 1)
         self.assertEqual(engine.inc[0]['USD'], 2000.0)
         self.assertEqual(len(engine.tt), 0)
-    def test_crypto_to_crypto_taxability(self):
+    def test_crypto_to_crypto_transactionability(self):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'SWAP', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(engine.tt[0]['Proceeds'], 15000.0)
         self.assertEqual(engine.tt[0]['Cost Basis'], 10000.0)
@@ -344,7 +344,7 @@ class TestUSComprehensiveCompliance(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':0.5, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'SPEND', 'action':'SPEND', 'coin':'BTC', 'amount':0.5, 'price_usd':12000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(engine.tt[0]['Proceeds'], 6000.0)
         self.assertEqual(engine.tt[0]['Cost Basis'], 5000.0)
@@ -374,18 +374,18 @@ class TestLendingLoss(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'LOSS', 'coin':'BTC', 'amount':1.0, 'price_usd':0.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(len(engine.tt), 1)
         row = engine.tt[0]
         self.assertIn("LOSS", row['Description'])
         self.assertEqual(row['Proceeds'], 0.0)
         self.assertEqual(row['Cost Basis'], 10000.0)
-    def test_borrow_repay_nontaxable(self):
+    def test_borrow_repay_nonReportable(self):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'DEPOSIT', 'coin':'ETH', 'amount':1.0, 'price_usd':0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-02-01', 'source':'M', 'action':'WITHDRAWAL', 'coin':'ETH', 'amount':1.0, 'price_usd':0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         self.assertEqual(len(engine.tt), 0)
         self.assertEqual(len(engine.inc), 0)
@@ -414,7 +414,7 @@ class TestHoldingPeriodCalculations(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-12-31', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should be short-term
@@ -426,7 +426,7 @@ class TestHoldingPeriodCalculations(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-01-02', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should be long-term
@@ -439,7 +439,7 @@ class TestHoldingPeriodCalculations(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2024-02-29', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2024)
+        engine = app.TransactionEngine(self.db, 2024)
         try:
             engine.run()
             self.assertTrue(True)
@@ -471,7 +471,7 @@ class TestPartialSales(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.5, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(engine.tt[0]['Proceeds'], 7500.0)
@@ -484,7 +484,7 @@ class TestPartialSales(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.5, 'price_usd':20000.0, 'fee':0, 'batch_id':'3'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(len(engine.tt), 2)
@@ -495,7 +495,7 @@ class TestPartialSales(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':0.3, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should have 0.7 BTC remaining
@@ -557,7 +557,7 @@ class TestWashSalePreBuyWindow(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should detect wash sale from BOTH pre-buy (Jan 15) and post-buy (Feb 10)
@@ -586,7 +586,7 @@ class TestWashSalePreBuyWindow(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should detect wash sale (30 days is inclusive)
@@ -609,7 +609,7 @@ class TestWashSalePreBuyWindow(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # No wash sale because buy is >30 days before and no post-buy
@@ -644,7 +644,7 @@ class TestWashSalePreBuyWindow(unittest.TestCase):
         
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Should detect wash sale with combined replacement of 1.0 BTC (0.5 pre + 0.5 post)
@@ -684,26 +684,26 @@ class TestRiskyOptionWarnings(unittest.TestCase):
     def test_warn_on_hifo(self):
         app.GLOBAL_CONFIG.setdefault('accounting', {})
         app.GLOBAL_CONFIG['accounting']['method'] = 'HIFO'
-        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
-            _ = app.TaxEngine(self.db, 2023)
+        with self.assertLogs('Crypto_Transaction_Engine', level='WARNING') as cm:
+            _ = app.TransactionEngine(self.db, 2023)
             self.assertTrue(any(app.COMPLIANCE_WARNINGS['HIFO'] in m for m in cm.output))
         app.GLOBAL_CONFIG['accounting']['method'] = 'FIFO'
 
     def test_warn_on_disable_strict_broker_mode(self):
         app.GLOBAL_CONFIG.setdefault('compliance', {})
         app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = False
-        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
-            _ = app.TaxEngine(self.db, 2023)
+        with self.assertLogs('Crypto_Transaction_Engine', level='WARNING') as cm:
+            _ = app.TransactionEngine(self.db, 2023)
             self.assertTrue(any(app.COMPLIANCE_WARNINGS['STRICT_BROKER_DISABLED'] in m for m in cm.output))
         app.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
 
     def test_warn_on_constructive_receipt_false(self):
         app.GLOBAL_CONFIG.setdefault('compliance', {})
-        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = False
-        with self.assertLogs('crypto_tax_engine', level='WARNING') as cm:
-            _ = app.TaxEngine(self.db, 2023)
+        app.GLOBAL_CONFIG['compliance']['staking_transactionable_on_receipt'] = False
+        with self.assertLogs('Crypto_Transaction_Engine', level='WARNING') as cm:
+            _ = app.TransactionEngine(self.db, 2023)
             self.assertTrue(any(app.COMPLIANCE_WARNINGS['CONSTRUCTIVE_RECEIPT'] in m for m in cm.output))
-        app.GLOBAL_CONFIG['compliance']['staking_taxable_on_receipt'] = True
+        app.GLOBAL_CONFIG['compliance']['staking_transactionable_on_receipt'] = True
     
     def test_wash_sale_outside_30day_window_not_triggered(self):
         """
@@ -726,7 +726,7 @@ class TestRiskyOptionWarnings(unittest.TestCase):
             self.db.save_trade(t)
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         wash_sales = engine.wash_sale_log
@@ -737,7 +737,7 @@ class TestRiskyOptionWarnings(unittest.TestCase):
         """
         End-to-end test: Verify Decimal precision is maintained through entire calculation chain.
         
-        Chain: Database (TEXT) -> get_all (Decimal) -> TaxEngine (Decimal math) -> output (float for CSV)
+        Chain: Database (TEXT) -> get_all (Decimal) -> TransactionEngine (Decimal math) -> output (float for CSV)
         
         Test: 0.123456789 BTC bought and sold -> should appear as 0.123456789 in all intermediate steps
         """
@@ -766,7 +766,7 @@ class TestRiskyOptionWarnings(unittest.TestCase):
         
         # Verify calculation doesn't introduce float rounding
         # Proceeds = 0.123456789 * 12445.6789 = 1537.041... (but with exact Decimal math)
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # The result should preserve significant digits

@@ -1,13 +1,13 @@
 """
 ================================================================================
-TAX REVIEWER - Audit Risk Detection and Manual Review Assistant
+Transaction REVIEWER - Audit Risk Detection and Manual Review Assistant
 ================================================================================
 
-Post-processing analyzer that scans completed tax calculations for
+Post-processing analyzer that scans completed Transaction calculations for
 potential IRS audit triggers and compliance issues.
 
 Detection Heuristics:
-    1. NFT Collectibles - Missing 28% tax rate classification
+    1. NFT Collectibles - Missing 28% Transaction rate classification
     2. Wash Sales - Substantially identical crypto (BTC/WBTC, ETH/WETH)
     3. Constructive Sales - Offsetting long/short positions
     4. DeFi Complexity - Multi-protocol LP tokens requiring review
@@ -30,7 +30,7 @@ Output Reports:
     - FBAR_HINT.txt - Foreign exchange balance warnings
 
 Integration:
-    - Runs automatically after TaxEngine.export()
+    - Runs automatically after TransactionEngine.export()
     - Accessible via CLI review command
     - Web UI displays warnings in dashboard
     - Feeds into review_fixer.py for guided remediation
@@ -52,12 +52,12 @@ from pathlib import Path
 import logging
 import src.core.engine as app
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 
-class TaxReviewer:
+class TransactionReviewer:
     """
     Post-processing reviewer that applies heuristics to detect:
-    1. NFTs without collectible prefixes (28% tax risk)
+    1. NFTs without collectible prefixes (28% Transaction risk)
     2. Substantially identical wash sales (BTC/WBTC)
     3. Potential constructive sales (offsetting positions)
     4. Complex DeFi transactions needing manual verification
@@ -68,10 +68,10 @@ class TaxReviewer:
     9. Price Anomalies (Total Value Entered as Price) [NEW]
     """
     
-    def __init__(self, db, tax_year, tax_engine=None):
+    def __init__(self, db, transaction_year, transaction_engine=None):
         self.db = db
-        self.year = tax_year
-        self.engine = tax_engine
+        self.year = transaction_year
+        self.engine = transaction_engine
         self.warnings = []
         self.suggestions = []
         
@@ -123,11 +123,11 @@ class TaxReviewer:
         has_full_access = self.engine and hasattr(self.engine, 'tt') and self.engine.tt
         if not has_full_access:
             logger.info("Note: Limited data access. Some advanced checks will be skipped.")
-            logger.info("      For full analysis, ensure tax calculations are run first.")
+            logger.info("      For full analysis, ensure Transaction calculations are run first.")
         
         df = self.db.get_all()
         df['date'] = pd.to_datetime(df['date'], format='mixed', utc=True)
-        # Filter for current tax year
+        # Filter for current Transaction year
         df_year = df[df['date'].dt.year == int(self.year)].copy()
         
         if df_year.empty:
@@ -301,43 +301,43 @@ class TaxReviewer:
         if lp_deposits:
             # Check if conservative mode is enabled
             try:
-                import Crypto_Tax_Engine as app
+                import Crypto_Transaction_Engine as app
                 conservative_mode = bool(app.GLOBAL_CONFIG.get('compliance', {}).get('defi_lp_conservative', True))
             except:
                 conservative_mode = True
             
             if conservative_mode:
-                # Conservative mode: LP deposits converted to SWAP (taxable)
+                # Conservative mode: LP deposits converted to SWAP (Reportable)
                 self.warnings.append({
                     'severity': 'MEDIUM',
                     'category': 'DEFI_LP_DEPOSITS',
                     'title': 'DeFi Liquidity Pool Deposits - Conservative Treatment Applied',
                     'count': len(lp_deposits),
-                    'description': 'IRS COMPLIANCE: The IRS has not explicitly ruled on LP deposit tax treatment. '
+                    'description': 'IRS COMPLIANCE: The IRS has not explicitly ruled on LP deposit Transaction treatment. '
                                   'Your system is using CONSERVATIVE mode (config: defi_lp_conservative=True). '
-                                  'LP deposits are automatically treated as taxable swaps (crypto-to-LP-token exchange). '
-                                  'This is the IRS-safe approach but may result in higher tax liability.',
+                                  'LP deposits are automatically treated as Reportable swaps (crypto-to-LP-token exchange). '
+                                  'This is the IRS-safe approach but may result in higher Transaction liability.',
                     'items': lp_deposits[:10],
-                    'action': 'CURRENT SETTING: Conservative (taxable swaps). '
-                             'ALTERNATIVE: Set defi_lp_conservative=False in config.json to treat as non-taxable deposits (aggressive stance). '
+                    'action': 'CURRENT SETTING: Conservative (Reportable swaps). '
+                             'ALTERNATIVE: Set defi_lp_conservative=False in config.json to treat as non-Reportable deposits (aggressive stance). '
                              'CONSULT: A tax professional if you want to use aggressive treatment. '
                              'NOTE: Conservative treatment protects against IRS challenges.'
                 })
             else:
-                # Aggressive mode: LP deposits remain as DEPOSIT (non-taxable)
+                # Aggressive mode: LP deposits remain as DEPOSIT (non-Reportable)
                 self.warnings.append({
                     'severity': 'HIGH',
                     'category': 'DEFI_LP_DEPOSITS',
-                    'title': 'DeFi Liquidity Pool Deposits - AGGRESSIVE Treatment (Non-Taxable)',
+                    'title': 'DeFi Liquidity Pool Deposits - AGGRESSIVE Treatment (Non-Reportable)',
                     'count': len(lp_deposits),
                     'description': 'IRS COMPLIANCE ISSUE: Your system is using AGGRESSIVE mode (config: defi_lp_conservative=False). '
-                                  'LP deposits are marked as non-taxable DEPOSITS. The IRS has not explicitly ruled on this. '
-                                  'A conservative auditor might argue that receiving an LP token in exchange for ETH is a taxable crypto-to-crypto swap.',
+                                  'LP deposits are marked as non-Reportable DEPOSITS. The IRS has not explicitly ruled on this. '
+                                  'A conservative auditor might argue that receiving an LP token in exchange for ETH is a Reportable crypto-to-crypto swap.',
                     'items': lp_deposits[:10],
-                    'action': 'CURRENT SETTING: Aggressive (non-taxable deposits). '
-                             'RECOMMENDED: Set defi_lp_conservative=True in config.json to use conservative treatment (taxable swaps). '
-                             'CONSULT: A tax professional familiar with DeFi. '
-                             'RISK: If audited, IRS may recharacterize as taxable swap and assess additional taxes + penalties.'
+                    'action': 'CURRENT SETTING: Aggressive (non-Reportable deposits). '
+                             'RECOMMENDED: Set defi_lp_conservative=True in config.json to use conservative treatment (Reportable swaps). '
+                             'CONSULT: A Transaction professional familiar with DeFi. '
+                             'RISK: If audited, IRS may recharacterize as Reportable swap and assess additional Transactions + penalties.'
                 })
         
         # Suggest review for other DeFi complexity
@@ -347,9 +347,9 @@ class TaxReviewer:
                 'category': 'DEFI_COMPLEXITY',
                 'title': 'Complex DeFi Transactions Requiring Review',
                 'count': len(defi_transactions),
-                'description': 'Found DeFi protocol interactions. LP token rewards are taxable as income. Swaps are taxable.',
+                'description': 'Found DeFi protocol interactions. LP token rewards are Reportable as income. Swaps are Reportable.',
                 'items': defi_transactions[:10],
-                'action': 'Verify DeFi transaction handling. LP token receipts from rewards/fees = Income. LP withdrawals = Disposal (taxable gain/loss).'
+                'action': 'Verify DeFi transaction handling. LP token receipts from rewards/fees = Income. LP withdrawals = Disposal (Reportable gain/loss).'
             })
 
 
@@ -376,7 +376,7 @@ class TaxReviewer:
                 'category': 'MISSING_PRICES',
                 'title': 'Missing Price Data',
                 'count': len(missing_prices),
-                'description': 'Found transactions with missing or zero USD prices. This will cause incorrect tax calculations.',
+                'description': 'Found transactions with missing or zero USD prices. This will cause incorrect Transaction calculations.',
                 'items': missing_prices[:10],
                 'action': 'Update price_usd column in CSV or configure price lookups in Setup.py'
             })
@@ -404,10 +404,10 @@ class TaxReviewer:
         """Flag transactions with unusually high fees (> $100 OR > 10% of value)"""
         high_fee_txs = []
         
-        # Check "SPEND" actions (fees) in the tax report (engine.tt)
-        # This requires full engine access with processed tax data
+        # Check "SPEND" actions (fees) in the Transaction report (engine.tt)
+        # This requires full engine access with processed Transaction data
         if not self.engine or not hasattr(self.engine, 'tt') or not self.engine.tt:
-            logger.debug("High fee detection skipped: Tax calculations not available. Run engine.run() first.")
+            logger.debug("High fee detection skipped: Transaction calculations not available. Run engine.run() first.")
             return
         
         try:
@@ -618,7 +618,7 @@ class TaxReviewer:
                 'count': len(price_anomalies),
                 'description': 'Found transactions where the Price Per Unit seems too low relative to the quantity. ' \
                               'Common user error: entering total transaction value ($5,000) into the Price column ' \
-                              'instead of per-unit price ($50,000/BTC). This creates false cost basis and looks like tax evasion to the IRS.',
+                              'instead of per-unit price ($50,000/BTC). This creates false cost basis and looks like Transaction evasion to the IRS.',
                 'items': price_anomalies[:10],
                 'action': 'Review these prices carefully. If incorrect, divide the price by the amount to get true per-unit cost, ' \
                          'then update the Price column in your CSV.'
@@ -728,7 +728,7 @@ class TaxReviewer:
                               'However, guidance may change. If you hold crypto in self-custody (hardware wallet, MetaMask, etc.), the FBAR requirement is uncertain.',
                 'items': self_custody_flagged,
                 'action': 'Recommended: Keep detailed records of max balance reached in each wallet. Monitor FinCEN updates for changes to self-custody guidance. ' \
-                         'Consider consulting a tax professional if your self-custody holdings exceed $10,000.'
+                         'Consider consulting a Transaction professional if your self-custody holdings exceed $10,000.'
             })
 
     def _check_staking_rewards_valuation(self, df):
@@ -803,16 +803,16 @@ class TaxReviewer:
                               'The IRS requires that to use specific lot identification, you must have CONTEMPORANEOUS RECORDS '
                               'identifying which specific lots were sold AT THE TIME OF EACH SALE. '
                               'This software applies HIFO retroactively when you run year-end reports, which generates the records after the fact. '
-                              'While this is common practice in crypto tax software, it is technically aggressive and may be challenged in an audit.',
+                              'While this is common practice in crypto Transaction software, it is technically aggressive and may be challenged in an audit.',
                 'items': [{
                     'method': 'HIFO',
                     'risk': 'IRS may deny specific identification and force FIFO',
-                    'consequence': 'Higher tax liability if FIFO produces larger gains than HIFO'
+                    'consequence': 'Higher Transaction liability if FIFO produces larger gains than HIFO'
                 }],
                 'action': 'STRONGLY RECOMMENDED: Maintain external logs (spreadsheet, notebook, broker confirmations) documenting your intent '
                          'to use specific lot identification AT THE TIME OF EACH SALE. Example: "Sold 0.5 BTC from Jan 15, 2023 lot (cost basis $25,000)". '
                          'ALTERNATIVE: Switch to FIFO (config.json) which is the IRS default and does not require specific identification. '
-                         'RISK: If audited and you cannot prove contemporaneous records, IRS may force FIFO and assess additional taxes + penalties.'
+                         'RISK: If audited and you cannot prove contemporaneous records, IRS may force FIFO and assess additional Transactions + penalties.'
             })
 
     def _generate_report(self):
@@ -834,14 +834,14 @@ class TaxReviewer:
     def _print_report(self, report):
         """Print formatted report to console and log"""
         print("\n" + "="*80)
-        print("TAX REVIEW REPORT - MANUAL VERIFICATION REQUIRED")
+        print("Transaction REVIEW REPORT - MANUAL VERIFICATION REQUIRED")
         print("="*80)
         
         # Check if we had full access
         has_full_access = self.engine and hasattr(self.engine, 'tt') and self.engine.tt
         if not has_full_access:
-            print("\n[!] LIMITED SCAN: Advanced checks skipped (tax calculations not run).")
-            print("   For complete analysis, run tax calculations first.")
+            print("\n[!] LIMITED SCAN: Advanced checks skipped (Transaction calculations not run).")
+            print("   For complete analysis, run Transaction calculations first.")
         
         summary = report['summary']
         print(f"\nTotal Warnings: {summary['total_warnings']}")
@@ -885,7 +885,7 @@ class TaxReviewer:
                 num=len(report['warnings']),
                 s='S' if len(report['warnings']) != 1 else ''
             ))
-            print("Review the warnings above and take corrective action before filing taxes.")
+            print("Review the warnings above and take corrective action before filing Transactions.")
             print("Detailed reports saved to: outputs/Year_{year}/REVIEW_WARNINGS.csv".format(year=self.year))
             print("!"*80)
         
@@ -903,12 +903,12 @@ class TaxReviewer:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # Export JSON
-        json_filename = f"tax_review_{self.year}_{timestamp}.json"
+        json_filename = f"transaction_review_{self.year}_{timestamp}.json"
         json_filepath = output_path / json_filename
         
         report_data = {
             'generated_at': datetime.now().isoformat(),
-            'tax_year': self.year,
+            'transaction_year': self.year,
             'warnings': self.warnings,
             'suggestions': self.suggestions,
             'summary': {

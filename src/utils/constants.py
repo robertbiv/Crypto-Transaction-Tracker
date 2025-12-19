@@ -4,11 +4,11 @@ CONSTANTS - System-Wide Configuration Values
 ================================================================================
 
 Centralized repository for all hardcoded constants used throughout the
-tax calculation engine. Organized by functional category.
+Transaction calculation engine. Organized by functional category.
 
 Constant Categories:
     1. File Paths - Directory and file locations
-    2. Tax Calculation - IRS rules and precision settings
+    2. Transaction Calculation - IRS rules and precision settings
     3. Database - SQLite configuration and safety limits
     4. API - External service rate limits and timeouts
     5. Compliance - Regulatory constants
@@ -16,7 +16,7 @@ Constant Categories:
 
 Key Constants:
     
-    Tax Calculation:
+    Transaction Calculation:
         WASH_SALE_WINDOW_DAYS = 30
             IRS wash sale rule: 30 days before AND after (61-day total)
         
@@ -99,10 +99,10 @@ STATUS_FILE = BASE_DIR / 'configs' / 'status.json'
 CACHED_TOKEN_FILE = BASE_DIR / 'configs' / 'stablecoins_cache.json'
 
 # ==========================================
-# TAX CALCULATION CONSTANTS
+# Transaction CALCULATION CONSTANTS
 # ==========================================
 """
-IRS and regulatory compliance constants for US tax calculations
+IRS and regulatory compliance constants for US Transaction calculations
 """
 WASH_SALE_WINDOW_DAYS = 30  # Days before and after (total 61-day window)
 DECIMAL_PRECISION = 8  # Cryptocurrency precision (satoshi/wei level)
@@ -149,7 +149,7 @@ DEFI_LP_PATTERNS = [
 Default compliance settings - can be overridden in config.json
 """
 STRICT_BROKER_MODE = True  # Enforce broker reporting alignment
-STAKING_TAXABLE_ON_RECEIPT = True  # IRS constructive receipt position
+STAKING_transactionABLE_ON_RECEIPT = True  # IRS constructive receipt position
 DEFI_LP_CONSERVATIVE = True  # Conservative DeFi treatment
 COLLECTIBLE_PREFIXES = {'NFT-', 'ART-'}  # Prefixes for 28% collectible gains
 COLLECTIBLE_TOKENS = {'NFT', 'PUNK', 'BAYC'}  # Token names treated as collectibles
@@ -178,8 +178,8 @@ Warnings displayed when non-standard compliance settings are detected
 COMPLIANCE_WARNINGS = {
     'HIFO': '[CONFIG] Accounting method HIFO selected. Not IRS-recommended and may cause 1099-DA mismatches.',
     'STRICT_BROKER_DISABLED': '[CONFIG] strict_broker_mode disabled. Cross-wallet basis fallback may cause reporting issues.',
-    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_taxable_on_receipt=False. Deferral stance is aggressive.',
-    'DEFI_LP_AGGRESSIVE': '[CONFIG] defi_lp_conservative=False. LP deposits treated as non-taxable. AGGRESSIVE.',
+    'CONSTRUCTIVE_RECEIPT': '[CONFIG] staking_transactionable_on_receipt=False. Deferral stance is aggressive.',
+    'DEFI_LP_AGGRESSIVE': '[CONFIG] defi_lp_conservative=False. LP deposits treated as non-Reportable. AGGRESSIVE.',
 }
 
 # ==========================================

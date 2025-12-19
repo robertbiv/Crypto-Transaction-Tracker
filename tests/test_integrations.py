@@ -6,7 +6,7 @@ TEST: External Service Integrations
 Validates integration with external services and data sources.
 
 Test Coverage:
-    - StakeTax.io CSV integration
+    - StakeActivity.io CSV integration
     - Blockchain explorer APIs
     - Price feed integrations
     - Wallet audit services
@@ -17,7 +17,7 @@ Author: robertbiv
 """
 from test_common import *
 
-class TestStakeTaxCSVIntegration(unittest.TestCase):
+class TestStakeActivityCSVIntegration(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.test_path = Path(self.test_dir)
@@ -25,7 +25,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         app.BASE_DIR = self.test_path
         app.INPUT_DIR = self.test_path / 'inputs'
         app.OUTPUT_DIR = self.test_path / 'outputs'
-        app.DB_FILE = self.test_path / 'staketax.db'
+        app.DB_FILE = self.test_path / 'StakeActivity.db'
         app.KEYS_FILE = self.test_path / 'api_keys.json'
         app.WALLETS_FILE = self.test_path / 'wallets.json'
         app.CONFIG_FILE = self.test_path / 'config.json'
@@ -53,10 +53,10 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         }
         app.save_wallets_file(wallets_config)
         
-        # Create a mock StakeTaxCSVManager to test wallet extraction
+        # Create a mock StakeActivityCSVManager to test wallet extraction
         try:
-            # This would normally be called by StakeTaxCSVManager
-            manager = app.StakeTaxCSVManager(self.db)
+            # This would normally be called by StakeActivityCSVManager
+            manager = app.StakeActivityCSVManager(self.db)
             self.assertTrue(True)  # If no crash, wallet loading worked
         except Exception as e:
             self.fail(f"Wallet extraction crashed: {e}")
@@ -66,7 +66,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         
         # Try to create manager (should not process)
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Manager created but should not run if disabled
             self.assertTrue(True)
         except Exception as e:
@@ -77,14 +77,14 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         app.save_wallets_file(wallets_config)
         
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Should handle gracefully
             self.assertTrue(True)
         except Exception as e:
             # Empty wallet is OK, should log but not crash
             self.assertIsNotNone(e)
-    def test_staketax_csv_deduplication_cross_source(self):
-        """Test: StakeTaxCSV records deduplicate against KRAKEN_LEDGER"""
+    def test_staketransaction_csv_deduplication_cross_source(self):
+        """Test: StakeActivityCSV records deduplicate against KRAKEN_LEDGER"""
         # Insert a KRAKEN_LEDGER income record
         self.db.save_trade({
             'id': 'KRAKEN_STAKE_1',
@@ -99,7 +99,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         })
         self.db.commit()
         
-        # In a real scenario, StakeTaxCSV would generate CSV with same record
+        # In a real scenario, StakeActivityCSV would generate CSV with same record
         # Dedup logic should detect and skip it
         # This test verifies dedup query works
         try:
@@ -110,27 +110,27 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         except Exception as e:
             self.fail(f"Cross-source dedup query failed: {e}")
     def test_empty_csv_file_handling(self):
-        """Test: Empty StakeTaxCSV output is handled gracefully"""
-        csv_path = app.INPUT_DIR / 'staketaxcsv' / 'empty.csv'
+        """Test: Empty StakeActivityCSV output is handled gracefully"""
+        csv_path = app.INPUT_DIR / 'StakeActivityCSV' / 'empty.csv'
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.write_text("")
         
         try:
             # Simulate CSV import with empty file
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Should detect empty and not crash
             self.assertTrue(True)
         except Exception as e:
             self.fail(f"Empty CSV crashed: {e}")
     def test_malformed_csv_columns(self):
         """Test: CSV with missing/wrong columns handled gracefully"""
-        csv_path = app.INPUT_DIR / 'staketaxcsv' / 'malformed.csv'
+        csv_path = app.INPUT_DIR / 'StakeActivityCSV' / 'malformed.csv'
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         # CSV with only 1 column (missing required columns)
         csv_path.write_text("Date\n2023-01-01\n")
         
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Should handle gracefully or skip malformed rows
             self.assertTrue(True)
         except Exception as e:
@@ -138,13 +138,13 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
             self.assertIsNotNone(e)
     def test_invalid_date_in_csv(self):
         """Test: Invalid date strings in CSV are handled"""
-        csv_path = app.INPUT_DIR / 'staketaxcsv' / 'bad_dates.csv'
+        csv_path = app.INPUT_DIR / 'StakeActivityCSV' / 'bad_dates.csv'
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_content = "Date,Coin,Amount,Price\ninvalid-date,ETH,0.1,1500.00\n"
         csv_path.write_text(csv_content)
         
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Should skip invalid date rows
             self.assertTrue(True)
         except Exception as e:
@@ -172,7 +172,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         }
         
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Should only sync specified protocols
             self.assertTrue(True)
         except Exception as e:
@@ -180,7 +180,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
     def test_logging_shows_dedup_statistics(self):
         """Test: Logs show import/dedup/skip statistics"""
         # Create mock CSV with 5 records
-        csv_path = app.INPUT_DIR / 'staketaxcsv' / 'stats_test.csv'
+        csv_path = app.INPUT_DIR / 'StakeActivityCSV' / 'stats_test.csv'
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_content = """Date,Coin,Amount,Price
 2023-01-01,ETH,0.1,1500.00
@@ -194,7 +194,7 @@ class TestStakeTaxCSVIntegration(unittest.TestCase):
         output = StringIO()
         sys.stdout = output
         try:
-            manager = app.StakeTaxCSVManager(self.db)
+            manager = app.StakeActivityCSVManager(self.db)
             # Check that stats are logged
             log_output = output.getvalue()
             # In real implementation, would check for [IMPORT] and summary counts
@@ -227,7 +227,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
         app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
-        manager = app.StakeTaxCSVManager(db)
+        manager = app.StakeActivityCSVManager(db)
         wallets = manager._get_wallets_from_file()
         
         self.assertIn("0x123abc", wallets)
@@ -246,7 +246,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
         app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
-        manager = app.StakeTaxCSVManager(db)
+        manager = app.StakeActivityCSVManager(db)
         wallets = manager._get_wallets_from_file()
         
         self.assertIn("0x123abc", wallets)
@@ -264,7 +264,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
         app.save_wallets_file(wallets_data)
         
         db = app.DatabaseManager()
-        manager = app.StakeTaxCSVManager(db)
+        manager = app.StakeActivityCSVManager(db)
         wallets = manager._get_wallets_from_file()
         
         self.assertEqual(len(wallets), 3)
@@ -288,7 +288,7 @@ class TestWalletFormatCompatibility(unittest.TestCase):
             self.assertEqual(actual_symbol, expected_symbol, 
                            f"{blockchain} should map to {expected_symbol}, got {actual_symbol}")
 
-# --- 13. MULTI-YEAR TAX PROCESSING TESTS ---
+# --- 13. MULTI-YEAR Transaction PROCESSING TESTS ---
 
 
 class TestPriceFetchingAndFallback(unittest.TestCase):
@@ -328,7 +328,7 @@ class TestPriceFetchingAndFallback(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'USDC', 'amount':100.0, 'price_usd':0.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             # Stablecoin should be priced at $1

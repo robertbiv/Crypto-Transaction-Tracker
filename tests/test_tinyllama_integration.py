@@ -10,7 +10,7 @@ Test Coverage:
     - Configuration changes during runtime
     - Feature interactions and dependencies
     - Fraud detection followed by pattern learning
-    - Multi-step tax calculation with AI enhancements
+    - Multi-step Transaction calculation with AI enhancements
 
 Author: Test Suite
 Last Modified: December 2025
@@ -451,8 +451,8 @@ class TestMultiStepWorkflows:
         row = cursor.fetchone()
         assert row[0] == 4  # All 4 transactions stored
     
-    def test_tax_calculation_with_ai_enhancements(self, all_features, integration_db):
-        """Test tax calculation workflow enhanced with AI"""
+    def test_transaction_calculation_with_ai_enhancements(self, all_features, integration_db):
+        """Test Transaction calculation workflow enhanced with AI"""
         conn = integration_db
         
         # Simulate year's worth of transactions

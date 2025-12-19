@@ -1,4 +1,4 @@
-# 🔒 Security Audit Report - Crypto Tax Engine API
+# 🔒 Security Audit Report - Crypto Transaction Tracker API
 
 **Audit Date:** December 18, 2025  
 **Version:** v30 with Advanced AI Features  
@@ -282,7 +282,7 @@ Strict-Transport-Security: max-age=31536000  # Force HTTPS (1 year)
 1. ✅ Review `outputs/logs/audit.log` for suspicious activity
 2. ✅ Keep dependencies updated (`pip install -r requirements.txt --upgrade`)
 3. ✅ Change passwords periodically
-4. ✅ Delete old backups after tax filing (data retention policy)
+4. ✅ Delete old backups after Transaction filing (data retention policy)
 
 ---
 
@@ -301,7 +301,7 @@ If you discover a security vulnerability:
 **Status:** All APIs are properly secured with multi-layer protection.  
 **Risk Level:** LOW (for local deployment)  
 **Compliance:** Follows OWASP security best practices  
-**Recommendation:** Safe for personal tax calculation and record keeping.
+**Recommendation:** Safe for personal Transaction calculation and record keeping.
 
 > **Note:** This software is designed for local use only. If deploying to a production server accessible from the internet, additional hardening is required (real SSL cert, Redis sessions, WAF, etc.).
 

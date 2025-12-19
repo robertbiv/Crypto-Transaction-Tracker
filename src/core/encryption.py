@@ -38,7 +38,7 @@ Compliance:
     - GDPR data protection requirements
     - SOC 2 encryption standards
     - OWASP cryptography guidelines
-    - IRS Publication 1345 (tax preparer data security)
+    - IRS Publication 1345 (Transaction preparer data security)
 
 Author: robertbiv
 Last Modified: December 2025
@@ -72,7 +72,7 @@ from src.utils.constants import (
     WALLETS_FILE
 )
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 
 
 # ====================================================================================
@@ -363,7 +363,7 @@ def get_api_key_cipher():
         try:
             with open(DB_SALT_FILE, 'rb') as f:
                 salt = f.read()
-            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            password = os.environ.get('CRYPTO_TRANSACTION_PASSWORD')
             if password:
                 key = DatabaseEncryption.derive_fernet_key(password, salt, 'api_keys')
                 return Fernet(key)
@@ -380,7 +380,7 @@ def get_wallet_cipher():
         try:
             with open(DB_SALT_FILE, 'rb') as f:
                 salt = f.read()
-            password = os.environ.get('CRYPTO_TAX_PASSWORD')
+            password = os.environ.get('CRYPTO_TRANSACTION_PASSWORD')
             if password:
                 key = DatabaseEncryption.derive_fernet_key(password, salt, 'wallets')
                 return Fernet(key)

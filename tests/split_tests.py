@@ -6,7 +6,7 @@ TEST UTILITY: Test File Splitter
 Utility script to organize and split monolithic test files into logical modules.
 
 Original monolithic test file (unit_test.py) was split into organized categories:
-    - test_core_compliance.py: US tax law compliance tests
+    - test_core_compliance.py: US Transaction law compliance tests
     - test_data_processing.py: CSV ingestion and normalization
     - test_integrations.py: External API and blockchain integration
     - test_defi_features.py: DeFi protocol support
@@ -39,7 +39,7 @@ with open('unit_test.py', 'r', encoding='utf-8') as f:
 # Test class groupings
 test_groups = {
     'test_core_compliance.py': {
-        'description': 'Core US Tax Compliance Tests',
+        'description': 'Core US Transaction Compliance Tests',
         'classes': [
             'TestAdvancedUSCompliance',
             'TestUSLosses',
@@ -64,7 +64,7 @@ test_groups = {
     'test_integrations.py': {
         'description': 'External Integration Tests',
         'classes': [
-            'TestStakeTaxCSVIntegration',
+            'TestStakeActivityCSVIntegration',
             'TestWalletFormatCompatibility',
             'TestPriceFetchingAndFallback',
             'TestPriceCacheAndFetcher',
@@ -98,7 +98,7 @@ test_groups = {
         'description': 'Migration and Multi-Year Processing Tests',
         'classes': [
             'TestMigration2025',
-            'TestMultiYearTaxProcessing',
+            'TestMultiYearProcessing',
             'TestMultiYearMigrations',
             'TestMigrationInventoryLoading',
             'TestPriorYearDataLoading',
@@ -119,10 +119,10 @@ test_groups = {
         ]
     },
     'test_reviewer_and_fixer.py': {
-        'description': 'Tax Reviewer and Interactive Fixer Tests',
+        'description': 'Transaction Reviewer and Interactive Fixer Tests',
         'classes': [
-            'TestTaxReviewerHeuristics',
-            'TestTaxReviewerAdvanced',
+            'TestTransactionReviewerHeuristics',
+            'TestTransactionReviewerAdvanced',
             'TestInteractiveReviewFixer',
             'TestInteractiveFixerTransactions',
             'TestInteractiveReviewFixerComprehensive',

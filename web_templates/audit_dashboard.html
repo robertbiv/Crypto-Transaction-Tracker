@@ -358,7 +358,7 @@
         <!-- Header -->
         <div class="header">
             <h1>🔍 Precision Audit Log Dashboard</h1>
-            <p>Real-time monitoring of fraud detection, fee analysis, and tax compliance events</p>
+            <p>Real-time monitoring of fraud detection, fee analysis, and Transaction compliance events</p>
             
             <div class="header-controls">
                 <div class="control-group">
@@ -391,8 +391,8 @@
                 <div class="stat-badge">High Fee Detection</div>
             </div>
             <div class="card stat-card">
-                <div class="stat-label">📊 Tax Impact</div>
-                <div class="stat-number" id="taxImpact">$0</div>
+                <div class="stat-label">📊 Transaction Impact</div>
+                <div class="stat-number" id="transactionImpact">$0</div>
                 <div class="stat-badge">Total Impact</div>
             </div>
         </div>
@@ -476,7 +476,7 @@
             document.getElementById('totalEvents').textContent = dashboard.summary.total_events;
             document.getElementById('fraudAlerts').textContent = dashboard.summary.fraud_alerts;
             document.getElementById('feeAlerts').textContent = dashboard.summary.fee_alerts;
-            document.getElementById('taxImpact').textContent = `$${parseFloat(dashboard.summary.tax_impact).toFixed(2)}`;
+            document.getElementById('transactionImpact').textContent = `$${parseFloat(dashboard.summary.transaction_impact).toFixed(2)}`;
 
             // Update charts
             updateEventTypeChart(dashboard.events_by_type);

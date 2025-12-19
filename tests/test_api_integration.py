@@ -41,7 +41,7 @@ class TestCCXTIntegration(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.db_path = Path(self.test_dir) / 'test_transactions.db'
         # Patch the global DB_FILE in the app module
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.db_path)
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.db_path)
         self.db_patcher.start()
         # Patch RUN_CONTEXT to allow price fetching
         self.original_context = app.RUN_CONTEXT

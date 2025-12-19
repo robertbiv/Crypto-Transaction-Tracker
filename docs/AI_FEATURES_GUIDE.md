@@ -2,7 +2,7 @@
 
 ## Overview
 
-This crypto tax engine includes advanced AI/ML features that enhance accuracy, detect fraud, learn your trading patterns, and provide intelligent insights. All AI models run **locally on your machine** - no data is sent to external servers.
+This Crypto Transaction Tracker includes advanced AI/ML features that enhance accuracy, detect fraud, learn your trading patterns, and provide intelligent insights. All AI models run **locally on your machine** - no data is sent to external servers.
 
 ---
 
@@ -86,7 +86,7 @@ Edit [config.json](../configs/config.json) → `anomaly_detection` section:
 
 ### What It Does
 Identifies potentially fraudulent or risky trading patterns:
-- **Wash Sales**: Buying and selling the same asset within 30 days to trigger tax losses
+- **Wash Sales**: Buying and selling the same asset within 30 days to trigger Transaction losses
 - **Pump & Dump**: Unusual price spikes followed by rapid dumps
 - **Suspicious Patterns**: High-frequency trading with minimal profit (potential money laundering)
 - **Round-Trip Trades**: Same-day buy/sell of identical amounts (self-trading)
@@ -103,7 +103,7 @@ Identifies potentially fraudulent or risky trading patterns:
 1. **Review the Transaction Chain**: Check all related transactions in the alert
 2. **Verify Legitimacy**: Was this intentional arbitrage or an accidental wash sale?
 3. **Correct if Needed**: If legitimate, document the business purpose; if fraudulent, remove
-4. **Consult a Tax Professional**: For wash sales, you may need to adjust cost basis
+4. **Consult a Transaction Professional**: For wash sales, you may need to adjust cost basis
 
 **Example Fraud Alert:**
 ```
@@ -203,7 +203,7 @@ BTC -> USD | Sent: 0.5 | Received: 33750
 ```
 
 **Benefits:**
-- **Better Reports**: Tax forms are more readable
+- **Better Reports**: Transaction forms are more readable
 - **Audit Trail**: Clear explanations for unusual transactions
 - **Quick Review**: Understand at-a-glance what happened
 

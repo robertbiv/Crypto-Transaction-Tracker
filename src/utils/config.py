@@ -7,7 +7,7 @@ Centralized configuration loader with validation and hot-reload support.
 
 Configuration Categories:
     1. General - Application behavior (audits, backups)
-    2. Accounting - Tax calculation methods (FIFO/HIFO/LIFO)
+    2. Accounting - Transaction calculation methods (FIFO/HIFO/LIFO)
     3. Compliance - IRS regulations (wash sales, broker mode)
     4. API - External service settings (retries, timeouts)
 
@@ -21,8 +21,8 @@ Key Settings:
         - True: Isolate broker lots for 1099-DA alignment (RECOMMENDED)
         - False: Allow cross-wallet basis (may cause discrepancies)
     
-    compliance.staking_taxable_on_receipt:
-        - True: Tax staking rewards at receipt (conservative)
+    compliance.staking_transactionable_on_receipt:
+        - True: Transaction staking rewards at receipt (conservative)
         - False: Defer until sale (aggressive, IRS may challenge)
     
     compliance.wash_sale_rule:
@@ -30,8 +30,8 @@ Key Settings:
         - True: Future law simulation (30-day rule)
     
     compliance.defi_lp_conservative:
-        - True: LP deposits = taxable swaps (conservative)
-        - False: LP deposits = non-taxable (aggressive)
+        - True: LP deposits = Reportable swaps (conservative)
+        - False: LP deposits = non-Reportable (aggressive)
 
 File Location:
     configs/config.json
@@ -59,7 +59,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 
 
 def load_config():
@@ -86,7 +86,7 @@ def load_config():
                 "COINBASE", "KRAKEN", "GEMINI", "BINANCE",
                 "ROBINHOOD", "ETORO"
             ],
-            "staking_taxable_on_receipt": True,
+            "staking_transactionable_on_receipt": True,
             "defi_lp_conservative": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"],

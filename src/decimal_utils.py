@@ -12,7 +12,7 @@ SATOSHI = Decimal('0.00000001')
 # USD/fiat precision (cents)
 USD_PRECISION = Decimal('0.01')
 
-# Fee/tax percentage precision (basis points = 0.01%)
+# Fee/Transaction percentage precision (basis points = 0.01%)
 BASIS_POINT = Decimal('0.0001')
 
 # Large transaction threshold (for structuring detection)
@@ -20,12 +20,12 @@ STRUCTURING_THRESHOLD = Decimal('10000.00')
 
 
 # ============================================================================
-# TAX COMPLIANCE ROUNDING (IRS ROUND_HALF_UP)
+# Transaction COMPLIANCE ROUNDING (IRS ROUND_HALF_UP)
 # ============================================================================
 
-def set_tax_rounding_context() -> None:
+def set_transaction_rounding_context() -> None:
     """
-    Set global Decimal context for tax calculations.
+    Set global Decimal context for transaction calculations.
     Uses ROUND_HALF_UP (0.5 always rounds up) per IRS requirements.
     Call this once at application startup.
     """
@@ -34,8 +34,8 @@ def set_tax_rounding_context() -> None:
     ctx.prec = 28  # Support up to 28 significant digits
 
 
-# Initialize tax rounding on module load
-set_tax_rounding_context()
+# Initialize Transaction rounding on module load
+set_transaction_rounding_context()
 
 
 # ============================================================================
@@ -46,7 +46,7 @@ def to_decimal(value: Any, default: Decimal = Decimal(0)) -> Decimal:
     """
     Safely coerce any value to a Decimal, preserving precision for financial calculations.
     
-    This function is critical for accurate crypto tax calculations. It ensures:
+    This function is critical for accurate crypto transaction calculations. It ensures:
     - No float precision loss (e.g., 0.1 + 0.2 = 0.3 exact)
     - Consistent handling of edge cases (None, invalid strings, etc.)
     - Satoshi-level precision preserved (0.00000001 BTC)

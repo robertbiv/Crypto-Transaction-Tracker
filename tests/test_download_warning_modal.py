@@ -5,7 +5,7 @@
 #
 # Module: tests/test_download_warning_modal.py
 # Description: Tests for download warning modal and confirmation flow
-#              Ensures users must acknowledge before downloading tax reports
+#              Ensures users must acknowledge before downloading Transaction reports
 # Features:
 #   - Modal displays on download button click
 #   - Both checkboxes required for download
@@ -50,13 +50,13 @@ class TestDownloadWarningModal:
         assert 'consultCheckbox' in content
     
     def test_modal_has_warning_text(self):
-        """Modal should include warning about consulting tax professional"""
+        """Modal should include warning about consulting Transaction professional"""
         html_file = Path('web_templates/reports.html')
         content = html_file.read_bytes().decode('utf-8', errors='ignore')
         
         # Check for key warning elements
         assert 'qualified tax professional' in content.lower()
-        assert 'CPA' in content or 'tax attorney' in content or 'enrolled agent' in content
+        assert 'CPA' in content or 'Transaction attorney' in content or 'enrolled agent' in content
     
     def test_modal_styling_included(self):
         """Modal should have CSS styling"""

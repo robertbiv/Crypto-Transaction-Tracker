@@ -1,5 +1,5 @@
 """
-Advanced ML Features for Crypto Tax Engine
+Advanced ML Features for Crypto Transaction Tracker
 Includes: Fraud Detection, Smart Descriptions, DeFi Classification, AML, Pattern Learning
 """
 
@@ -124,7 +124,7 @@ class FraudDetector:
                                         amount=str(tx.get('amount', 0)),
                                         alert_type='PUMP_DUMP',
                                         calculated_gain=str(gain.quantize(Decimal('0.01'))),
-                                        tax_impact=str((gain * Decimal('0.25')).quantize(Decimal('0.01')))
+                                        transaction_impact=str((gain * Decimal('0.25')).quantize(Decimal('0.01')))
                                     )
                                 except Exception:
                                     pass
@@ -170,7 +170,7 @@ class FraudDetector:
                             amount=str(amount),
                             alert_type='SUSPICIOUS_VOLUME',
                             calculated_gain='0.00',
-                            tax_impact='0.00'
+                            transaction_impact='0.00'
                         )
                     except Exception:
                         pass

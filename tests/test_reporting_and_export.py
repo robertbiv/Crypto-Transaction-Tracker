@@ -3,7 +3,7 @@
 TEST: Report Generation and Export
 ================================================================================
 
-Validates tax report generation and file export functionality.
+Validates Transaction report generation and file export functionality.
 
 Test Coverage:
     - Export CSV format (Form 8949)
@@ -11,7 +11,7 @@ Test Coverage:
     - 1099-DA reconciliation format
     - Wash sale reports
     - Holdings snapshots (EOY)
-    - Tax loss carryover analysis
+    - Transaction loss carryover analysis
     - Report accuracy validation
 
 Author: robertbiv
@@ -25,13 +25,13 @@ class TestReportVerification(unittest.TestCase):
         self.test_path = Path(self.test_dir)
         
         # Patch globals
-        self.base_patcher = patch('Crypto_Tax_Engine.BASE_DIR', self.test_path)
-        self.input_patcher = patch('Crypto_Tax_Engine.INPUT_DIR', self.test_path / 'inputs')
-        self.output_patcher = patch('Crypto_Tax_Engine.OUTPUT_DIR', self.test_path / 'outputs')
-        self.db_patcher = patch('Crypto_Tax_Engine.DB_FILE', self.test_path / 'report_test.db')
-        self.keys_patcher = patch('Crypto_Tax_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
-        self.wallets_patcher = patch('Crypto_Tax_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
-        self.config_patcher = patch('Crypto_Tax_Engine.CONFIG_FILE', self.test_path / 'config.json')
+        self.base_patcher = patch('Crypto_Transaction_Engine.BASE_DIR', self.test_path)
+        self.input_patcher = patch('Crypto_Transaction_Engine.INPUT_DIR', self.test_path / 'inputs')
+        self.output_patcher = patch('Crypto_Transaction_Engine.OUTPUT_DIR', self.test_path / 'outputs')
+        self.db_patcher = patch('Crypto_Transaction_Engine.DB_FILE', self.test_path / 'report_test.db')
+        self.keys_patcher = patch('Crypto_Transaction_Engine.KEYS_FILE', self.test_path / 'api_keys.json')
+        self.wallets_patcher = patch('Crypto_Transaction_Engine.WALLETS_FILE', self.test_path / 'wallets.json')
+        self.config_patcher = patch('Crypto_Transaction_Engine.CONFIG_FILE', self.test_path / 'config.json')
         
         self.base_patcher.start()
         self.input_patcher.start()
@@ -65,10 +65,10 @@ class TestReportVerification(unittest.TestCase):
         shadow.sell('BTC', 0.5, 20000.0, datetime(2023, 3, 1))
         self.db.save_trade({'id': '3', 'date': '2023-03-01', 'source': 'M', 'action': 'SELL', 'coin': 'BTC', 'amount': 0.5, 'price_usd': 20000.0, 'fee': 0, 'batch_id': '3'})
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
-        tt_file = app.OUTPUT_DIR / "Year_2023" / "GENERIC_TAX_CAP_GAINS.csv"
+        tt_file = app.OUTPUT_DIR / "Year_2023" / "CAP_GAINS.csv"
         self.assertTrue(tt_file.exists())
         df_tt = pd.read_csv(tt_file)
         net_gain = df_tt['Proceeds'].sum() - df_tt['Cost Basis'].sum()
@@ -109,7 +109,7 @@ class TestReportGenerationAndExport(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC,TEST', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         try:
             engine.run()
             engine.export()
@@ -123,7 +123,7 @@ class TestReportGenerationAndExport(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         try:
             engine.export()
@@ -137,7 +137,7 @@ class TestReportGenerationAndExport(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'INCOME', 'coin':'ETH', 'amount':1.0, 'price_usd':1500.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         try:
             engine.export()
@@ -152,7 +152,7 @@ class TestReportGenerationAndExport(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1000.0, 'price_usd':80000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         try:
             engine.export()
@@ -185,7 +185,7 @@ class TestExportInternals(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
         
@@ -193,17 +193,17 @@ class TestExportInternals(unittest.TestCase):
         self.assertTrue(year_folder.exists())
     
     def test_export_generates_csv_files(self):
-        """Test: Export generates TAX_REPORT.csv and other outputs"""
+        """Test: Export generates transaction_REPORT.csv and other outputs"""
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'M', 'action':'BUY', 'coin':'BTC', 'amount':1.0, 'price_usd':10000.0, 'fee':0, 'batch_id':'1'})
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'M', 'action':'SELL', 'coin':'BTC', 'amount':1.0, 'price_usd':15000.0, 'fee':0, 'batch_id':'2'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         engine.export()
         
-        tax_report = app.OUTPUT_DIR / 'Year_2023' / 'TAX_REPORT.csv'
-        self.assertTrue(tax_report.exists())
+        transaction_report = app.OUTPUT_DIR / 'Year_2023' / 'transaction_REPORT.csv'
+        self.assertTrue(transaction_report.exists())
 
 # --- 35. AUDITOR FBAR & REPORTING TESTS ---
 
@@ -460,7 +460,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_flags_foreign_exchange_over_10k(self):
         """Test: Foreign exchange accounts >$10,000 trigger FBAR warning"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Binance account with total value exceeding $10,000
         self.db.save_trade({
@@ -476,7 +476,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # Should flag FBAR requirement for foreign exchange
@@ -487,7 +487,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_does_not_flag_domestic_exchanges(self):
         """Test: Domestic exchanges (Coinbase, Kraken) don't trigger FBAR"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Coinbase account with large amount (should NOT trigger FBAR)
         self.db.save_trade({
@@ -516,7 +516,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # Should NOT flag FBAR for domestic exchanges
@@ -525,7 +525,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_binance_us_not_flagged(self):
         """Test: Binance.US (US-registered) should NOT trigger FBAR"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Binance.US with $15,000 (should NOT flag - it's domestic)
         self.db.save_trade({
@@ -541,7 +541,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # BINANCE.US should NOT trigger FBAR (US-registered entity)
@@ -550,7 +550,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_threshold_exactly_10k(self):
         """Test: FBAR does NOT trigger at exactly $10,000 threshold"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # OKX with exactly $10,000
         self.db.save_trade({
@@ -566,7 +566,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # Exactly $10,000 should NOT trigger (must be > $10,000)
@@ -575,7 +575,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_aggregate_multiple_exchanges_below_threshold_individually(self):
         """Test: FBAR CRITICAL RULE - Aggregate of multiple exchanges below individual threshold but above $10k combined"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # This is the critical scenario: $6,000 on Binance + $5,000 on KuCoin = $11,000 total
         # Old (wrong) logic: Neither flagged individually (both < $10k). Result: No FBAR warning - FAILURE TO FILE
@@ -605,7 +605,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # MUST flag - aggregate is $11,000 (> $10,000)
@@ -625,7 +625,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_threshold_10k_plus_one(self):
         """Test: FBAR triggers at $10,001 (just above threshold)"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # KuCoin with $10,001
         self.db.save_trade({
@@ -641,7 +641,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # $10,001 should trigger FBAR
@@ -650,7 +650,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_flags_self_custody_uncertainty(self):
         """Test: Self-custody wallets generate FBAR uncertainty suggestion"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Hardware wallet with significant holdings
         self.db.save_trade({
@@ -666,7 +666,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         # Should suggest FBAR uncertainty for self-custody
@@ -676,7 +676,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_multiple_foreign_exchanges(self):
         """Test: Multiple foreign exchanges tracked separately"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Binance: $15,000
         self.db.save_trade({
@@ -718,7 +718,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
@@ -729,7 +729,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_recognizes_crypto_dot_com(self):
         """Test: Crypto.com properly identified as foreign exchange"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         self.db.save_trade({
             'id': 'crypto_1',
@@ -744,7 +744,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
@@ -752,7 +752,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_aggregates_same_exchange_multiple_coins(self):
         """Test: Same exchange with multiple coins aggregates to one FBAR flag"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Bybit: Multiple purchases totaling >$10k
         self.db.save_trade({
@@ -792,7 +792,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
@@ -803,7 +803,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_only_counts_buy_and_income(self):
         """Test: FBAR doesn't count SELL or WITHDRAW transactions"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         # Gate.io: Deposit $15,000
         self.db.save_trade({
@@ -832,7 +832,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']
@@ -841,7 +841,7 @@ class TestFBARCompliance2025(unittest.TestCase):
     
     def test_fbar_text_mentions_april_15_deadline(self):
         """Test: FBAR warning includes filing deadline information"""
-        from Tax_Reviewer import TaxReviewer
+        from Transaction_Reviewer import TransactionReviewer
         
         self.db.save_trade({
             'id': 'binance_1',
@@ -856,7 +856,7 @@ class TestFBARCompliance2025(unittest.TestCase):
         })
         self.db.commit()
         
-        reviewer = TaxReviewer(self.db, 2025)
+        reviewer = TransactionReviewer(self.db, 2025)
         report = reviewer.run_review()
         
         fbar_warnings = [w for w in report['warnings'] if w['category'] == 'FBAR_FOREIGN_EXCHANGES']

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Configuration - Crypto Tax Generator{% endblock %}
+{% block title %}Configuration - Crypto Transaction Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -76,9 +76,9 @@
     
     <!-- General Settings Panel -->
     <div id="generalPanel" class="config-panel active">
-        <h3 class="card-title">Tax Configuration</h3>
+        <h3 class="card-title">Transaction Configuration</h3>
         <p style="margin-bottom: 16px; color: var(--md-sys-color-on-surface-variant);">
-            Configure tax calculation settings. Changes take effect after restarting calculations.
+            Configure Transaction calculation settings. Changes take effect after restarting calculations.
         </p>
         
         <form id="generalConfigForm">
@@ -94,10 +94,10 @@
                 </div>
             </div>
 
-            <h4 style="margin-top: 20px;">Tax Year</h4>
+            <h4 style="margin-top: 20px;">Transaction Year</h4>
             <div class="form-group">
-                <label class="form-label" for="tax_year">Target Tax Year</label>
-                <input type="number" id="tax_year" class="form-input" placeholder="e.g. 2025 (Leave empty for Auto-Current Year)">
+                <label class="form-label" for="transaction_year">Target Transaction Year</label>
+                <input type="number" id="transaction_year" class="form-input" placeholder="e.g. 2025 (Leave empty for Auto-Current Year)">
                 <small style="color: var(--md-sys-color-on-surface-variant);">
                     If set, the system will always run for this specific year. If empty, it will automatically use the current calendar year.
                 </small>
@@ -158,10 +158,10 @@
             </div>
             <div class="form-group">
                 <label class="form-label">
-                    <input type="checkbox" id="staking_taxable_on_receipt"> Staking taxable on receipt
+                    <input type="checkbox" id="staking_transactionable_on_receipt"> Staking Reportable on receipt
                 </label>
-                <div id="warning_staking_taxable_on_receipt" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
-                    ⚠️ Disabling taxable receipt for staking is aggressive and may be challenged.
+                <div id="warning_staking_transactionable_on_receipt" class="warning-text" style="display:none; color: var(--md-sys-color-error); font-size: 12px; margin-left: 24px;">
+                    ⚠️ Disabling Reportable receipt for staking is aggressive and may be challenged.
                 </div>
             </div>
             
@@ -567,8 +567,8 @@
         if (strictBroker) toggle('warning_strict_broker_mode', !strictBroker.checked);
             
         // Staking
-        const staking = document.getElementById('staking_taxable_on_receipt');
-        if (staking) toggle('warning_staking_taxable_on_receipt', !staking.checked);
+        const staking = document.getElementById('staking_transactionable_on_receipt');
+        if (staking) toggle('warning_staking_transactionable_on_receipt', !staking.checked);
     }
     
     async function loadGeneralConfig() {
@@ -581,7 +581,7 @@
             const setCheck = (id, val) => { const el = document.getElementById(id); if(el) el.checked = val; };
 
             setVal('accounting_method', config.accounting_method || 'HIFO');
-            setVal('tax_year', config.tax_year || '');
+            setVal('transaction_year', config.transaction_year || '');
             
             // New fields
             const longTerm = document.getElementById('long_term_benefit');
@@ -599,7 +599,7 @@
             
             const comp = config.compliance || {};
             setCheck('strict_broker_mode', comp.strict_broker_mode !== false);
-            setCheck('staking_taxable_on_receipt', comp.staking_taxable_on_receipt !== false);
+            setCheck('staking_transactionable_on_receipt', comp.staking_transactionable_on_receipt !== false);
             
             const ml = config.ml_fallback || {};
             const acc = config.accuracy_mode || {};
@@ -635,7 +635,7 @@
             // Attach event listeners dynamically to ensure they work
             const inputs = [
                 'accounting_method', 'run_audit', 'create_db_backups', 
-                'respect_free_tier_limits', 'strict_broker_mode', 'staking_taxable_on_receipt',
+                'respect_free_tier_limits', 'strict_broker_mode', 'staking_transactionable_on_receipt',
                 'ml_fallback_enabled', 'accuracy_mode_enabled'
             ];
             inputs.forEach(id => {
@@ -660,13 +660,13 @@
         e.preventDefault();
         
         try {
-            const taxYearVal = document.getElementById('tax_year').value;
+            const transactionYearVal = document.getElementById('transaction_year').value;
             const strategy = document.querySelector('input[name="ai_strategy"]:checked')?.value || 'none';
             
             // Build config object
             const config = {
                 accounting_method: document.getElementById('accounting_method').value,
-                tax_year: taxYearVal ? parseInt(taxYearVal) : null,
+                transaction_year: transactionYearVal ? parseInt(transactionYearVal) : null,
                 long_term_benefit: document.getElementById('long_term_benefit').checked,
                 include_fees: document.getElementById('include_fees').checked,
                 run_audit: document.getElementById('run_audit').checked,
@@ -677,7 +677,7 @@
                 },
                 compliance: {
                     strict_broker_mode: document.getElementById('strict_broker_mode').checked,
-                    staking_taxable_on_receipt: document.getElementById('staking_taxable_on_receipt').checked
+                    staking_transactionable_on_receipt: document.getElementById('staking_transactionable_on_receipt').checked
                 },
                 ml_fallback: {
                     enabled: strategy === 'ml_only' || strategy === 'accuracy_mode',

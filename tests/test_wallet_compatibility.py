@@ -18,7 +18,7 @@ Author: robertbiv
 from test_common import *
 
 class TestWalletCompatibility(unittest.TestCase):
-    """Test wallet format compatibility between Setup.py and StakeTaxCSV"""
+    """Test wallet format compatibility between Setup.py and staketaxcsv"""
     
     def test_wallet_extraction_nested_format(self):
         """Test extraction of nested format (new - from updated Setup.py)"""

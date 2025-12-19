@@ -12,5 +12,5 @@ EXPECTED WARNINGS / ANOMALIES:
 - Zero Price: Engine will attempt to fetch price for JUNK
 - WASH SALE: Loss on WASH sale should be disallowed
 
-Note: These values are the 'Golden Master' results verified against the Crypto Tax Engine.
+Note: These values are the 'Golden Master' results verified against the Crypto Transaction Tracker.
 The generator script's internal calculation was an approximation; these are the actual engine results.

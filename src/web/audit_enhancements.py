@@ -428,7 +428,7 @@ class PDFReportGenerator:
                 ['Total Events', str(summary.get('total_events', 0))],
                 ['Fraud Alerts', str(summary.get('fraud_alerts', 0))],
                 ['Fee Alerts', str(summary.get('fee_alerts', 0))],
-                ['Tax Alerts', str(summary.get('tax_alerts', 0))],
+                ['Transaction Alerts', str(summary.get('transaction_alerts', 0))],
             ]
             
             summary_table = Table(summary_data)

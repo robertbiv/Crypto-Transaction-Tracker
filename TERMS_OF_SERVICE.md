@@ -1,10 +1,10 @@
-# Terms of Service - Crypto Tax Automation Engine
+# Terms of Service - Crypto Transaction Tracker
 
-**Last Updated: December 16, 2025**
+**Last Updated: December 19, 2025**
 
 ## TL;DR
 
-This is a personal tool I built to track my own crypto taxes. It's provided AS-IS with **no warranty**. I'm not a tax professional. You must review all outputs with a qualified tax professional before filing. This tool can make mistakes. **I take no liability for errors, data loss, or audit penalties.** Use locally only. Use Read-Only API tokens for security. See requirements.txt for dependencies.
+This is a personal, self-hosted tool I built to track and review my own crypto activity. It's provided AS-IS with **no warranty**. I'm not a financial, accounting, or legal professional. You must review all outputs with a qualified advisor before acting on them. This tool can make mistakes. **I take no liability for errors, data loss, or regulatory consequences.** Use locally only. Use Read-Only API tokens for security. See requirements.txt for dependencies.
 
 ---
 
@@ -22,15 +22,15 @@ The author makes no warranty that:
 - Any defects will be corrected
 - The Program is free of harmful code or malware
 
-## 2. NO TAX ADVICE; NOT A PROFESSIONAL SERVICE
+## 2. NO FINANCIAL, ACCOUNTING, OR LEGAL ADVICE; NOT A PROFESSIONAL SERVICE
 
-The author is **not a tax professional, tax attorney, or accountant**. The Program was built for personal transaction tracking and does not constitute professional tax advice.
+The author is **not a financial advisor, accountant, attorney, or compliance professional**. The Program was built for personal transaction tracking and does not constitute professional advice or services of any kind.
 
-The Program is designed to follow 2025 US tax guidelines (IRS Publication 544) but is **not guaranteed to be accurate, complete, or correct**.
+The Program may surface reports and analytics, but they are **not guaranteed to be accurate, complete, or correct**, and they are **not designed to be used as-is for regulatory filings or submissions**.
 
-**You must independently verify all outputs and consult a qualified tax professional (CPA, tax attorney, or IRS-enrolled agent) before filing any tax return.**
+**You must independently verify all outputs and consult qualified professionals before making financial, accounting, or legal decisions.**
 
-Cryptocurrency tax law is complex and subject to interpretation. The IRS has provided limited guidance. This Program cannot address all edge cases or changes in tax law.
+Digital asset regulation is complex and evolving. This Program cannot address all edge cases or changes in law.
 
 ## 3. LIMITATION OF LIABILITY
 
@@ -38,7 +38,7 @@ Cryptocurrency tax law is complex and subject to interpretation. The IRS has pro
 - Direct, indirect, incidental, special, exemplary, or consequential damages
 - Loss of profits, revenue, data, use, or other intangible losses
 - Damage to data or property
-- Tax liabilities, penalties, interest, or back taxes
+- Transaction liabilities, penalties, interest, or back Transactions
 - Audit costs or legal fees
 - Any damages arising from use or inability to use the Program
 
@@ -51,7 +51,7 @@ You assume all risk of loss associated with using this Program, including:
 - Incorrect cost basis or gain/loss computations
 - Undetected duplicates or data corruption
 - Incorrect price data or exchange rate errors
-- Tax misstatements or non-compliance
+- Transaction misstatements or non-compliance
 - Audit exposure or penalties from the IRS
 - Data loss or security breaches
 
@@ -99,13 +99,13 @@ The Program may:
 - Generate incomplete or malformed reports
 - Fail to fetch prices or other data
 
-**You must manually review all CSV outputs before using them for tax purposes.**
+**You must manually review all CSV outputs before using them for any financial, accounting, or compliance purpose.**
 
 ## 9. THIRD-PARTY SERVICES
 
 The Program uses third-party APIs and services:
 - CCXT (exchange data)
-- StakeTaxCSV (staking rewards)
+- staketaxcsv (staking rewards)
 - Moralis (blockchain data)
 - Blockchair (blockchain data)
 - CoinGecko (stablecoin lists, token addresses)
@@ -136,7 +136,7 @@ The Program uses the following major dependencies (for the complete, up-to-date 
 | **bcrypt** | 5.0.0 | Password hashing for web UI authentication | Apache-2.0 | https://github.com/pyca/bcrypt |
 | **Flask** | 3.1.2 | Web framework for self-hosted UI and API | BSD-3 | https://flask.palletsprojects.com |
 | **PyJWT** | 2.10.1 | JSON Web Token support for session management | MIT | https://pyjwt.readthedocs.io |
-| **APScheduler** | 3.10.4 | Task scheduling for automated tax processing runs | MIT | https://apscheduler.readthedocs.io |
+| **APScheduler** | 3.10.4 | Task scheduling for automated Transaction processing runs | MIT | https://apscheduler.readthedocs.io |
 | **pytest** | 9.0.2 | Testing framework for validation suite | MIT | https://pytest.org |
 | **coincurve** | 21.0.0 | Bitcoin/Ethereum elliptic curve library for key handling | MIT | https://github.com/ofek/coincurve |
 | **beautifulsoup4** | 4.14.3 | HTML/XML parsing for web scraping fallbacks | MIT | https://www.crummy.com/software/BeautifulSoup |
@@ -156,22 +156,22 @@ The Program is provided without any support, updates, or service level agreement
 ## 12. COMPLIANCE RESPONSIBILITY
 
 You are solely responsible for:
-- Complying with all applicable tax laws and regulations
-- Accurate tax reporting to the IRS or other authorities
-- Paying all taxes owed
-- Responding to IRS inquiries or audits
-- Hiring professional representation if audited
+- Complying with all applicable laws and regulations
+- Ensuring accuracy of any reports or filings you create
+- Paying any amounts owed to authorities or counterparties
+- Responding to any regulator inquiries or audits
+- Hiring professional representation if audited or investigated
 
-**If you use this Program and file incorrect or incomplete taxes, you are responsible for resulting penalties, interest, or legal consequences.**
+**If you use this Program and submit incorrect or incomplete information anywhere, you are responsible for resulting penalties, interest, or legal consequences.**
 
 ## 13. CONFIGURATION AND SETTINGS
 
-Certain configuration options are marked "Not Recommended" because they increase audit risk or diverge from IRS guidance:
+Certain configuration options are marked "Not Recommended" because they increase reconciliation risk or diverge from conservative reporting practices:
 - **HIFO accounting** requires specific identification (not supported by this Program)
-- **Constructive receipt deferrals** for staking are aggressive tax positions
-- **Strict broker mode disabled** can cause 1099-DA/Form 8949 mismatches
+- **Constructive receipt deferrals** for staking are aggressive positions
+- **Strict broker mode disabled** can cause mismatches with exchange-provided statements
 
-**Using non-recommended settings increases your audit exposure. The author assumes no responsibility for using these settings.**
+**Using non-recommended settings increases your exposure to errors. The author assumes no responsibility for using these settings.**
 
 ## 14. NO WARRANTY OF PERFORMANCE
 

@@ -5,7 +5,7 @@ TEST UTILITY: Stress Test Verification
 
 Verification script for stress test data processing and accuracy.
 
-Runs the full tax engine against generated stress test data to validate:
+Runs the full Transaction engine against generated stress test data to validate:
     - Correct processing of large transaction volumes (500+ transactions)
     - FIFO basis tracking accuracy across multiple exchanges
     - Income calculation correctness (staking, airdrops)
@@ -17,7 +17,7 @@ Runs the full tax engine against generated stress test data to validate:
 Process:
     1. Backs up existing database
     2. Copies stress test CSV files to inputs/
-    3. Runs tax engine with strict_broker_mode enabled
+    3. Runs Transaction engine with strict_broker_mode enabled
     4. Validates output against expected statistics
     5. Checks for anomaly detection warnings
 
@@ -38,8 +38,8 @@ from decimal import Decimal
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import src.core.engine as crypto_tax_engine
-from src.core.engine import DatabaseManager, Ingestor, TaxEngine, initialize_folders, INPUT_DIR, DB_FILE, OUTPUT_DIR
+import src.core.engine as Crypto_Transaction_Engine
+from src.core.engine import DatabaseManager, Ingestor, TransactionEngine, initialize_folders, INPUT_DIR, DB_FILE, OUTPUT_DIR
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,8 +55,8 @@ def run_verification():
     t0 = time.time()
     
     # Enable strict broker mode (Recommended Config)
-    crypto_tax_engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
-    crypto_tax_engine.STRICT_BROKER_MODE = True
+    Crypto_Transaction_Engine.GLOBAL_CONFIG['compliance']['strict_broker_mode'] = True
+    Crypto_Transaction_Engine.STRICT_BROKER_MODE = True
     logger.info("Enabled strict_broker_mode (Recommended Config).")
     logger.info(f"[TIMING] Setup environment: {time.time() - t0:.2f}s")
 
@@ -103,16 +103,16 @@ def run_verification():
         # Run for each year in the generated data (2023, 2024)
         for year in ['2023', '2024']:
             t_year = time.time()
-            logger.info(f"Running Tax Engine for {year}...")
-            engine = TaxEngine(db, year)
+            logger.info(f"Running Transaction Engine for {year}...")
+            engine = TransactionEngine(db, year)
             engine.run()
-            logger.info(f"[TIMING] TaxEngine.run() {year}: {time.time() - t_year:.2f}s")
+            logger.info(f"[TIMING] TransactionEngine.run() {year}: {time.time() - t_year:.2f}s")
             t_export = time.time()
             engine.export()
-            logger.info(f"[TIMING] TaxEngine.export() {year}: {time.time() - t_export:.2f}s")
+            logger.info(f"[TIMING] TransactionEngine.export() {year}: {time.time() - t_export:.2f}s")
             # Accumulate results
             year_dir = OUTPUT_DIR / f"Year_{year}"
-            cap_gains_file = year_dir / "GENERIC_TAX_CAP_GAINS.csv"
+            cap_gains_file = year_dir / "CAP_GAINS.csv"
             income_file = year_dir / "INCOME_REPORT.csv"
             if cap_gains_file.exists():
                 df_cg = pd.read_csv(cap_gains_file)

@@ -30,7 +30,7 @@ REQUIRED_DIRS = [BASE_DIR/'inputs', BASE_DIR/'processed_archive', BASE_DIR/'outp
 KEYS_FILE = BASE_DIR/'api_keys.json'
 WALLETS_FILE = BASE_DIR/'wallets.json'
 CONFIG_FILE = BASE_DIR / 'configs' / 'config.json'
-REQUIRED_SCRIPTS = ["Crypto_Tax_Engine.py", "Auto_Runner.py"] 
+REQUIRED_SCRIPTS = ["Crypto_Transaction_Engine.py", "Auto_Runner.py"] 
 REQUIRED_PACKAGES = {"pandas":"pandas", "ccxt":"ccxt", "yfinance":"yfinance", "requests":"requests"}
 
 class DualLogger(object):
@@ -94,7 +94,7 @@ def validate_json(fp, default):
     print(f"   [CREATED] {fp.name}")
 
 def main():
-    print("--- SETUP (V30: US Tax Compliance + HIFO Support) ---\n")
+    print("--- SETUP (V30: US Transaction Compliance + HIFO Support) ---\n")
     check_dependencies()
     check_folders()
     
@@ -237,16 +237,16 @@ def main():
             "compress_older_than_days": 30
         },
         "compliance": {
-            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_taxable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. defi_lp_conservative (Recommended=True) treats LP deposits as taxable swaps (conservative); setting False marks them as non-taxable deposits (aggressive, IRS may challenge). collectibles can be flagged via prefixes/tokens.",
+            "_INSTRUCTIONS": "2025 IRS compliance controls. strict_broker_mode (Recommended=True) prevents basis borrowing across wallets for custodial sources (1099-DA alignment). broker_sources is the list of custodial sources. staking_transactionable_on_receipt (Recommended=True) controls constructive receipt for staking/mining; setting False is aggressive and may be challenged. defi_lp_conservative (Recommended=True) treats LP deposits as Reportable swaps (conservative); setting False marks them as non-Reportable deposits (aggressive, IRS may challenge). collectibles can be flagged via prefixes/tokens.",
             "strict_broker_mode": True,
             "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-            "staking_taxable_on_receipt": True,
+            "staking_transactionable_on_receipt": True,
             "defi_lp_conservative": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"]
         },
         "staking": {
-            "_INSTRUCTIONS": "StakeTax CSV auto-import. Set enabled=True to auto-generate staking reward CSVs from all wallets in wallets.json, import into DB, and archive. Requires StakeTax CLI installed (pip install staketaxcsv). Supports all major staking protocols.",
+            "_INSTRUCTIONS": "staketaxcsv auto-import. Set enabled=True to auto-generate staking reward CSVs from all wallets in wallets.json, import into DB, and archive. Requires staketaxcsv CLI installed (pip install staketaxcsv). Supports all major staking protocols.",
             "enabled": False,
             "protocols_to_sync": ["all"]
         },

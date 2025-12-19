@@ -120,7 +120,7 @@ def inject_anomalies():
     add_transaction(tx_zero)
     expected_warnings.append("Zero Price: Engine will attempt to fetch price for JUNK")
 
-    # 3. Wash Sale (Tax Event)
+    # 3. Wash Sale (Transaction Event)
     # Buy WASH at 100, Sell at 50 (Loss), Buy again within 30 days
     d1 = (START_DATE + timedelta(days=100)).replace(microsecond=0)
     d2 = (d1 + timedelta(days=5)).replace(microsecond=0)
@@ -193,11 +193,11 @@ def process_income(coin, amount, price, date, type='STAKING'):
         'fee_coin': 'USD'
     }
 
-def calculate_tax_results(txs):
+def calculate_transaction_results(txs):
     """
-    Re-implements the tax engine logic (FIFO + Wash Sales) to generate accurate expected stats.
+    Re-implements the Transaction engine logic (FIFO + Wash Sales) to generate accurate expected stats.
     """
-    print("Calculating Expected Stats with Tax Logic (FIFO + Wash Sales)...")
+    print("Calculating Expected Stats with Transaction Logic (FIFO + Wash Sales)...")
     
     # Reset stats
     stats = {
@@ -385,7 +385,7 @@ def generate_data():
                     amount_buy = (val_usd / price_buy).quantize(Decimal('0.0001'))
                     
                     if amount_buy > 0:
-                        # Process Sell side (Taxable)
+                        # Process Sell side (Reportable)
                         process_sell(coin_sell, amount_sell, price_sell, current_date, fee=Decimal('2.00'))
                         # Process Buy side
                         process_buy(coin_buy, amount_buy, price_buy, current_date)
@@ -409,8 +409,8 @@ def generate_data():
     # Inject Anomalies
     inject_anomalies()
 
-    # Calculate Expected Stats using Tax Logic
-    final_stats = calculate_tax_results(transactions)
+    # Calculate Expected Stats using Transaction Logic
+    final_stats = calculate_transaction_results(transactions)
     expected_stats.update(final_stats)
 
     # Distribute to files

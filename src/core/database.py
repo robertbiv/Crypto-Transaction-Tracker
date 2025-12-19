@@ -28,7 +28,7 @@ Features:
     - Query optimization for large datasets
 
 Integration:
-    - Used by TaxEngine for tax calculations
+    - Used by TransactionEngine for Transaction calculations
     - Used by Ingestor for data import
     - Used by Web UI for transaction management
     - Test-friendly with monkeypatchable paths
@@ -70,7 +70,7 @@ DB_FILE = _resolve_db_file()
 BASE_DIR = _BASE_DIR
 from src.utils.config import load_config
 
-logger = logging.getLogger("crypto_tax_engine")
+logger = logging.getLogger("Crypto_Transaction_Engine")
 
 # Load global config
 GLOBAL_CONFIG = load_config()
@@ -371,12 +371,12 @@ class DatabaseManager:
         try:
             t_copy = dict(t)
             
-            # CONSERVATIVE DEFI LP TREATMENT: Convert LP deposits to taxable swaps
+            # CONSERVATIVE DEFI LP TREATMENT: Convert LP deposits to Reportable swaps
             if DEFI_LP_CONSERVATIVE:
                 action = str(t_copy.get('action', '')).upper()
                 coin = str(t_copy.get('coin', ''))
                 if action in ['DEPOSIT', 'BUY'] and is_defi_lp_token(coin):
-                    # Convert DEPOSIT -> SWAP to treat as taxable event
+                    # Convert DEPOSIT -> SWAP to treat as Reportable event
                     t_copy['action'] = 'SWAP'
                     logger.debug(f"[CONSERVATIVE] Converted LP DEPOSIT to SWAP: {coin}")
             

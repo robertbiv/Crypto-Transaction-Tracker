@@ -1,5 +1,5 @@
 """
-Integration tests for real tax scenarios.
+Integration tests for real Transaction scenarios.
 Tests edge cases and multi-leg trades with Decimal precision.
 """
 
@@ -9,8 +9,8 @@ from src.decimal_utils import to_decimal, USD_PRECISION, SATOSHI
 from src.transaction_validator import TransactionValidator
 
 
-class TestRealTaxScenarios:
-    """Integration tests simulating realistic tax scenarios."""
+class TestRealTransactionScenarios:
+    """Integration tests simulating realistic Transaction scenarios."""
     
     def test_wash_sale_with_fractional_amounts(self):
         """Test wash sale detection with fractional BTC and satoshi precision."""
@@ -127,7 +127,7 @@ class TestRealTaxScenarios:
         eth_capital_gain = (eth_proceeds - eth_cost_basis).quantize(USD_PRECISION)
         assert eth_capital_gain == Decimal('850.00')
         
-        # Total tax effect
+        # Total Transaction effect
         total_gain = (btc_capital_gain + eth_capital_gain).quantize(USD_PRECISION)
         assert total_gain == Decimal('1350.00')
     

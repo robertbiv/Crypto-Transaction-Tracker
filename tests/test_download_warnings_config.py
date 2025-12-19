@@ -168,8 +168,8 @@ class TestDownloadWarningsBanner:
         assert 'alert-danger' in content or 'alert' in content
         assert 'warning' in content.lower()
     
-    def test_banner_reminds_about_tax_professional(self):
-        """Banner should remind about consulting tax professional"""
+    def test_banner_reminds_about_transaction_professional(self):
+        """Banner should remind about consulting Transaction professional"""
         html_file = Path('web_templates/reports.html')
         content = html_file.read_bytes().decode('utf-8', errors='ignore')
         

@@ -47,7 +47,7 @@ def pytest_configure(config):
     os.environ['PYTEST_RUNNING'] = '1'
     
     # Create temp directory
-    _TEST_PROJECT_DIR = Path(tempfile.mkdtemp(prefix="crypto_taxes_test_"))
+    _TEST_PROJECT_DIR = Path(tempfile.mkdtemp(prefix="crypto_transactiones_test_"))
     
     # Load .gitignore patterns
     gitignore_patterns = set()
@@ -139,7 +139,7 @@ def pytest_configure(config):
         "compliance": {
             "strict_broker_mode": True,
             "broker_sources": ["COINBASE", "KRAKEN", "GEMINI", "BINANCE", "ROBINHOOD", "ETORO"],
-            "staking_taxable_on_receipt": True,
+            "staking_transactionable_on_receipt": True,
             "defi_lp_conservative": True,
             "collectible_prefixes": ["NFT-", "ART-"],
             "collectible_tokens": ["NFT", "PUNK", "BAYC"]

@@ -13,7 +13,7 @@ Features:
     - Graceful shutdown handling
 
 The web UI provides:
-    - Authenticated access to all tax engine features
+    - Authenticated access to all Transaction engine features
     - Interactive file upload and management
     - Real-time calculation progress tracking
     - Report viewing and download
@@ -40,7 +40,7 @@ def main():
     # and in CLI tools via check_and_prompt_tos()
     web_server = Path(__file__).parent / 'src' / 'web' / 'server.py'
     
-    print("Starting Crypto Tax Generator Web UI...")
+    print("Starting Crypto Transaction Tracker Web UI...")
     print("=" * 60)
     
     try:

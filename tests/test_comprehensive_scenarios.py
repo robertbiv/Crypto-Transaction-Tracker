@@ -8,13 +8,13 @@ Validates complex cryptocurrency transaction scenarios and edge cases.
 Test Coverage:
     1. Liquidity Pools (LPs)
         - Impermanent loss realization
-        - Entry/exit taxable events
+        - Entry/exit Reportable events
         - Cost basis tracking through swaps
     
     2. Staking
         - Liquid staking (ETH -> stETH)
         - Staking rewards as income
-        - Taxable events vs non-taxable deposits
+        - Reportable events vs non-Reportable deposits
     
     3. Cross-Wallet Transfers
         - Basis preservation across sources
@@ -34,8 +34,8 @@ Test Coverage:
 Test Methodology:
     - Isolated test database per test
     - Monkeypatched paths for isolation
-    - Real TaxEngine calculations (integration tests)
-    - Assertion of expected tax treatment
+    - Real TransactionEngine calculations (integration tests)
+    - Assertion of expected Transaction treatment
 
 Author: robertbiv
 Last Modified: December 2025
@@ -69,14 +69,14 @@ class TestComprehensiveScenarios(unittest.TestCase):
     def test_lp_impermanent_loss_realization(self):
         """
         Test LP lifecycle:
-        1. Swap ETH -> LP Token (Taxable Event)
+        1. Swap ETH -> LP Token (Reportable Event)
         2. Hold (Price changes)
-        3. Swap LP Token -> ETH + USDC (Taxable Event, realizing impermanent loss)
+        3. Swap LP Token -> ETH + USDC (Reportable Event, realizing impermanent loss)
         """
         # Buy 2 ETH @ 2000
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'WALLET', 'action':'BUY', 'coin':'ETH', 'amount':2.0, 'price_usd':2000.0, 'fee':0, 'batch_id':'1'})
         
-        # Enter LP: Swap 2 ETH for 100 UNI-V2 (Taxable Dispostion of ETH)
+        # Enter LP: Swap 2 ETH for 100 UNI-V2 (Reportable Dispostion of ETH)
         # ETH Price is now 2500. Gain = (2500 - 2000) * 2 = 1000
         self.db.save_trade({'id':'2', 'date':'2023-02-01', 'source':'WALLET', 'action':'SELL', 'coin':'ETH', 'amount':2.0, 'price_usd':2500.0, 'fee':0, 'batch_id':'2'})
         self.db.save_trade({'id':'3', 'date':'2023-02-01', 'source':'WALLET', 'action':'BUY', 'coin':'UNI-V2', 'amount':100.0, 'price_usd':50.0, 'fee':0, 'batch_id':'2'}) # Cost Basis 5000
@@ -89,7 +89,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'6', 'date':'2023-06-01', 'source':'WALLET', 'action':'BUY', 'coin':'USDC', 'amount':2000.0, 'price_usd':1.0, 'fee':0, 'batch_id':'3'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Verify ETH Gain
@@ -107,7 +107,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
     # ==========================================
     def test_liquid_staking_swap(self):
         """
-        Test ETH -> stETH swap (Taxable) vs Locked Staking (Non-taxable deposit)
+        Test ETH -> stETH swap (Reportable) vs Locked Staking (Non-Reportable deposit)
         """
         # Buy 1 ETH @ 1000
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'WALLET', 'action':'BUY', 'coin':'ETH', 'amount':1.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
@@ -117,7 +117,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-06-01', 'source':'WALLET', 'action':'BUY', 'coin':'stETH', 'amount':1.0, 'price_usd':2000.0, 'fee':0, 'batch_id':'2'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         sale = engine.tt[0]
@@ -130,7 +130,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'1', 'date':'2023-03-01', 'source':'STAKING', 'action':'INCOME', 'coin':'SOL', 'amount':1.0, 'price_usd':50.0, 'fee':0, 'batch_id':'1'})
         self.db.commit()
         
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(len(engine.inc), 1)
@@ -139,11 +139,11 @@ class TestComprehensiveScenarios(unittest.TestCase):
     # ==========================================
     # 3. TRANSFERS & BASIS TRACKING
     # ==========================================
-    def test_transfer_fee_taxability(self):
+    def test_transfer_fee_transactionability(self):
         """
         Transfer 1 ETH. Fee is 0.01 ETH.
-        The transfer itself is not taxable.
-        The fee IS a taxable disposition of 0.01 ETH.
+        The transfer itself is not Reportable.
+        The fee IS a Reportable disposition of 0.01 ETH.
         """
         # Buy 2 ETH @ 1000
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'WALLET_A', 'action':'BUY', 'coin':'ETH', 'amount':2.0, 'price_usd':1000.0, 'fee':0, 'batch_id':'1'})
@@ -155,7 +155,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'WALLET_A', 'destination':'WALLET_B', 'action':'TRANSFER', 'coin':'ETH', 'amount':1.0, 'price_usd':2000.0, 'fee':0.01, 'batch_id':'2'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         self.assertEqual(len(engine.tt), 1)
@@ -170,7 +170,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
     def test_stablecoin_swap_friction(self):
         """
         Swap USDC -> USDT.
-        Technically a taxable event, usually near-zero gain/loss.
+        Technically a Reportable event, usually near-zero gain/loss.
         """
         # Buy 1000 USDC @ 1.00
         self.db.save_trade({'id':'1', 'date':'2023-01-01', 'source':'WALLET', 'action':'BUY', 'coin':'USDC', 'amount':1000.0, 'price_usd':1.0, 'fee':0, 'batch_id':'1'})
@@ -180,7 +180,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'3', 'date':'2023-01-02', 'source':'WALLET', 'action':'BUY', 'coin':'USDT', 'amount':1000.0, 'price_usd':1.001, 'fee':0, 'batch_id':'2'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         sale = engine.tt[0]
@@ -202,7 +202,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'WALLET', 'action':'SELL', 'coin':'BTC', 'amount':0.00000001, 'price_usd':60000.0, 'fee':0, 'batch_id':'2'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         sale = engine.tt[0]
@@ -220,7 +220,7 @@ class TestComprehensiveScenarios(unittest.TestCase):
         self.db.save_trade({'id':'2', 'date':'2023-06-01', 'source':'WALLET', 'action':'SELL', 'coin':'UNI', 'amount':100.0, 'price_usd':10.0, 'fee':0, 'batch_id':'2'})
         
         self.db.commit()
-        engine = app.TaxEngine(self.db, 2023)
+        engine = app.TransactionEngine(self.db, 2023)
         engine.run()
         
         # Income: 500

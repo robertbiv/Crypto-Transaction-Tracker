@@ -1,4 +1,4 @@
-# Crypto Tax Generator - Coding Standards
+# Crypto Transaction Tracker - Coding Standards
 
 ## Documentation Style Guide
 
@@ -29,7 +29,7 @@ Last Modified: [Month Year]
 ```python
 """
 ================================================================================
-TAX ENGINE - Core Tax Calculation Engine
+    TRACKER ENGINE - Core Activity Processing Engine
 ================================================================================
 
 Brief overview of the module.
@@ -143,16 +143,16 @@ def calculate_capital_gains(sales: pd.DataFrame, method: str = 'FIFO') -> dict:
 ### Class Documentation
 
 ```python
-class TaxEngine:
+class TransactionEngine:
     """
-    Main tax calculation engine for cryptocurrency transactions.
+    Main Transaction calculation engine for cryptocurrency transactions.
     
-    This class orchestrates the entire tax calculation workflow including:
+    This class orchestrates the entire Transaction calculation workflow including:
     data ingestion, price fetching, basis tracking, and report generation.
     
     Attributes:
         db (DatabaseManager): Transaction database connection
-        year (int): Tax year being processed
+        year (int): Transaction year being processed
         holdings_by_source (dict): Cost basis lots organized by wallet/exchange
         tt (list): Transaction table for Export export
         inc (list): Income events (staking, mining, airdrops)
@@ -164,7 +164,7 @@ class TaxEngine:
         - compliance.wash_sale_rule: Enable/disable wash sale detection
     
     Example:
-        >>> engine = TaxEngine(db, year=2024)
+        >>> engine = TransactionEngine(db, year=2024)
         >>> engine.run()
         >>> engine.export()
     """
@@ -198,7 +198,7 @@ Use separator comments for major code sections:
 
 ```python
 # ==========================================
-# TAX CALCULATION LOGIC
+# Transaction CALCULATION LOGIC
 # ==========================================
 
 # ==========================================
@@ -239,7 +239,7 @@ from datetime import datetime
 
 def process_trades(
     trades: List[Dict[str, Union[str, float, int]]],
-    tax_year: int,
+    transaction_year: int,
     method: str = 'FIFO'
 ) -> Dict[str, List[Decimal]]:
     """Process trade transactions and calculate gains."""
@@ -292,7 +292,7 @@ def old_function():
 ## Best Practices
 
 1. **Write comments for future you**: Assume you'll revisit code after 6 months
-2. **Reference regulations**: Link to IRS publications when implementing tax rules
+2. **Reference regulations**: Link to IRS publications when implementing Transaction rules
 3. **Explain non-obvious choices**: Document why you chose a specific approach
 4. **Keep comments updated**: When changing code, update related comments
 5. **Use TODO markers**: `# TODO: Implement wash sale detection for 2026`

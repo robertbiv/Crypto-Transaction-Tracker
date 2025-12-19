@@ -3,13 +3,13 @@
 CORE MODULE - Core Business Logic
 ================================================================================
 
-Central package for tax calculation engine and data management.
+Central package for Transaction calculation engine and data management.
 
 Exported Classes:
     DatabaseManager - SQLite transaction database operations
     DatabaseEncryption - Two-layer encryption for database protection
-    TaxEngine - Main tax calculation engine (via engine.py)
-    TaxReviewer - Audit risk detection (via reviewer.py)
+    TransactionEngine - Main Transaction calculation engine (via engine.py)
+    TransactionReviewer - Audit risk detection (via reviewer.py)
 
 Exported Functions:
     Encryption helpers:
@@ -20,7 +20,7 @@ Exported Functions:
         - get_api_key_cipher, get_wallet_cipher
 
 Usage:
-    from src.core import DatabaseManager, TaxEngine
+    from src.core import DatabaseManager, TransactionEngine
     from src.core.encryption import encrypt_api_keys
 
 Author: robertbiv
