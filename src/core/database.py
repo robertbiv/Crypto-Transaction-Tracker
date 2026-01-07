@@ -106,7 +106,8 @@ def to_decimal(value):
         return Decimal('0')
     try:
         return Decimal(str(value))
-    except:
+    except (ValueError, TypeError, InvalidOperation) as e:
+        logger.warning(f"Invalid decimal value '{value}': {e}")
         return Decimal('0')
 
 
@@ -170,7 +171,7 @@ class DatabaseManager:
                 self.db_file = Path(DB_FILE)
 
         self._ensure_integrity()
-        self.conn = sqlite3.connect(str(self.db_file))
+        self.conn = sqlite3.connect(str(self.db_file), check_same_thread=False)
         self.cursor = self.conn.cursor()
         self._init_tables()
 
@@ -227,6 +228,14 @@ class DatabaseManager:
             conn.execute("PRAGMA integrity_check")
             conn.close()
         except Exception as e:
+            # If database is locked, do not attempt recovery here (Windows file lock)
+            if isinstance(e, sqlite3.OperationalError) and 'locked' in str(e).lower():
+                try:
+                    if conn:
+                        conn.close()
+                except Exception:
+                    pass
+                return
             try:
                 if conn:
                     conn.close()
@@ -322,21 +331,27 @@ class DatabaseManager:
         Initialize database tables with current schema.
         Runs migrations if existing table has old schema.
         """
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (
-            id TEXT PRIMARY KEY,
-            date TEXT,
-            source TEXT,
-            destination TEXT,
-            action TEXT,
-            coin TEXT,
-            amount TEXT,
-            price_usd TEXT,
-            fee TEXT,
-            fee_coin TEXT,
-            batch_id TEXT
-        )''')
-        self.conn.commit()
-        self._migrate_to_text_precision()
+        try:
+            self.cursor.execute('''CREATE TABLE IF NOT EXISTS trades (
+                id TEXT PRIMARY KEY,
+                date TEXT,
+                source TEXT,
+                destination TEXT,
+                action TEXT,
+                coin TEXT,
+                amount TEXT,
+                price_usd TEXT,
+                fee TEXT,
+                fee_coin TEXT,
+                batch_id TEXT
+            )''')
+            self.conn.commit()
+            self._migrate_to_text_precision()
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e).lower():
+                # Defer table initialization; operations will surface lock appropriately
+                return
+            raise
 
     def get_last_timestamp(self, source):
         """
@@ -411,6 +426,81 @@ class DatabaseManager:
     def commit(self):
         """Commit pending transactions to database."""
         self.conn.commit()
+
+    # --- Convenience methods used by tests ---
+    def add_transaction(self, t):
+        """Add a transaction and commit, returning its ID."""
+        tx = dict(t)
+        if 'id' not in tx or not tx['id']:
+            import uuid
+            tx['id'] = str(uuid.uuid4())
+        # Perform insert on a dedicated connection to allow concurrent threads
+        try:
+            conn = sqlite3.connect(str(self.db_file), check_same_thread=False)
+            cursor = conn.cursor()
+            # Normalize numeric fields to strings for TEXT storage
+            for field in ['amount', 'price_usd', 'fee']:
+                val = tx.get(field, "0")
+                tx[field] = str(to_decimal(val)) if val is not None else "0"
+            if 'destination' not in tx:
+                tx['destination'] = None
+            if 'fee_coin' not in tx:
+                tx['fee_coin'] = None
+            cols = ['id', 'date', 'source', 'destination', 'action', 'coin', 'amount', 'price_usd', 'fee', 'fee_coin']
+            values = [tx.get(col) for col in cols]
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO trades (id, date, source, destination, action, coin, amount, price_usd, fee, fee_coin)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                """,
+                values
+            )
+            conn.commit()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return tx['id']
+
+    def get_transaction(self, tx_id):
+        """Fetch a single transaction as a dict with numeric fields as floats."""
+        row = self.cursor.execute("SELECT * FROM trades WHERE id=?", (tx_id,)).fetchone()
+        if not row:
+            return None
+        cols = [desc[0] for desc in self.cursor.description]
+        rec = {cols[i]: row[i] for i in range(len(cols))}
+        for fld in ['amount', 'price_usd', 'fee']:
+            if rec.get(fld) is not None:
+                try:
+                    rec[fld] = float(rec[fld])
+                except Exception:
+                    rec[fld] = 0.0
+        return rec
+
+    def get_all_transactions(self):
+        """Fetch all transactions as list of dicts."""
+        conn = sqlite3.connect(str(self.db_file), check_same_thread=False)
+        try:
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT * FROM trades ORDER BY date ASC").fetchall()
+            cols = [desc[0] for desc in cursor.description]
+            out = []
+            for r in rows:
+                rec = {cols[i]: r[i] for i in range(len(cols))}
+                for fld in ['amount', 'price_usd', 'fee']:
+                    if rec.get(fld) is not None:
+                        try:
+                            rec[fld] = float(rec[fld])
+                        except Exception:
+                            rec[fld] = 0.0
+                out.append(rec)
+            return out
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
     
     def get_all(self):
         """

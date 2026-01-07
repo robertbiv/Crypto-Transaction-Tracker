@@ -459,7 +459,8 @@ def get_status():
     try:
         with open(STATUS_FILE, 'r') as f:
             return json.load(f)
-    except:
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+        logger.debug(f"Could not load status file: {e}")
         return default_status
 
 def update_status(key, value):

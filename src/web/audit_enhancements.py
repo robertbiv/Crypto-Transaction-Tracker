@@ -49,6 +49,22 @@ class AuditAnomalyDetector:
         self.anomalies = []
         self.tampering_score = 0.0
         self.last_baseline_update = None
+        self._audit_log = []
+        
+    def _write_to_audit_log_file(self, entry: Dict):
+        """Write audit log entry to persistent file storage"""
+        from src.utils.constants import BASE_DIR
+        import json
+        
+        log_dir = BASE_DIR / 'outputs' / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / 'audit_log.jsonl'
+        
+        try:
+            with open(log_file, 'a') as f:
+                f.write(json.dumps(entry) + '\\n')
+        except Exception as e:
+            logger.warning(f"Could not write to audit log file: {e}")
     
     def calculate_baseline(self, audit_logs: List[Dict]) -> Dict:
         """Calculate baseline patterns from audit logs for detection method calls"""
@@ -162,10 +178,28 @@ class AuditAnomalyDetector:
     
     def _get_historical_logs(self, days_back: int) -> List[Dict]:
         """Retrieve historical audit logs from past N days"""
-        # In production, integrate with database query
-        # For now, return empty list as placeholder
-        # TODO: Integrate with actual audit log storage
-        return []
+        from src.utils.constants import BASE_DIR
+        from datetime import datetime, timedelta
+        
+        # Read from persistent audit log file
+        log_file = BASE_DIR / 'outputs' / 'logs' / 'audit_log.jsonl'
+        if not log_file.exists():
+            return []
+        
+        cutoff_time = datetime.now() - timedelta(days=days_back)
+        historical_logs = []
+        
+        try:
+            with open(log_file, 'r') as f:
+                for line in f:
+                    entry = json.loads(line.strip())
+                    entry_time = datetime.fromtimestamp(entry.get('timestamp', 0))
+                    if entry_time >= cutoff_time:
+                        historical_logs.append(entry)
+        except Exception as e:
+            logger.warning(f\"Could not read historical audit logs: {e}\")
+        
+        return historical_logs
     
     def _calculate_baseline_drift(self, new_baseline: Dict) -> float:
         """
