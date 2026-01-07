@@ -4,6 +4,61 @@ Personal, self-hosted tooling to aggregate and review your crypto activity with 
 
 **Privacy & Safety First:** Local-only by design—do **not** expose it to the internet. No telemetry. API keys and wallet data are stored encrypted at rest, but host security, access control, and backups are your responsibility.
 
+## **🐳 Docker Deployment (NAS Ready)**
+
+**NEW:** Multi-architecture Docker support for NAS devices!
+- 🏗️ **Multi-Platform**: Supports both ARM64 (aarch64) and x86_64 (AMD64)
+- 📦 **Easy Deploy**: One-command setup with docker-compose
+- 🔄 **Auto-Restart**: Container automatically restarts on failure
+- 💾 **Persistent Data**: All configs and outputs saved to volumes
+- 🏥 **Health Checks**: Built-in monitoring and health endpoints
+- 🎯 **NAS Optimized**: Works on Synology, QNAP, Asustor, **UGREEN**, and more
+
+**Quick Start (Docker):**
+
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
+services:
+  crypto-tracker:
+    image: robertbiv/crypto-tracker:latest
+    container_name: crypto-transaction-tracker
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./crypto-configs:/app/configs
+      - ./crypto-inputs:/app/inputs
+      - ./crypto-outputs:/app/outputs
+      - ./crypto-archive:/app/processed_archive
+      - ./crypto-certs:/app/certs
+    environment:
+      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+```
+
+Then run:
+```bash
+docker-compose up -d
+# Access at https://YOUR_NAS_IP:5000
+```
+
+**NAS Deployment Guides:**
+- 🟠 **UGREEN, Synology, QNAP & More** → [docs/NAS_DEPLOYMENT.md](docs/NAS_DEPLOYMENT.md)
+
+Or see [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for general Docker setup.
+
+**Supported Platforms:**
+- **ARM**: Synology DS220+/920+, QNAP TS-x53D, Raspberry Pi 4/5
+- **x86**: Most Intel/AMD NAS devices (Synology, QNAP, Asustor)
+
+See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for 5-minute setup or [DOCKER.md](DOCKER.md) for complete documentation.
+
 ## **🌐 Web UI**
 
 **NEW:** Self-hosted web interface with Material Design 3!

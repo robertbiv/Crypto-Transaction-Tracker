@@ -1,0 +1,198 @@
+# Production Docker Compose Configuration
+# Enhanced security, monitoring, and features for NAS deployment
+#
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  crypto-tracker:
+    image: robertbiv/crypto-tracker:latest
+    container_name: crypto-transaction-tracker
+    restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "5000:5000"
+    
+    # Environment variables
+    environment:
+      # Timezone
+      - TZ=UTC
+      
+      # Python settings
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      
+      # Flask settings (optional)
+      - FLASK_ENV=production
+      - LOG_LEVEL=INFO
+      
+      # Add your API keys here (or use docker secrets)
+      # - BINANCE_API_KEY=your_key_here
+      # - BINANCE_SECRET_KEY=your_secret_here
+    
+    # Secrets (more secure than environment variables)
+    # Uncomment and create secret files if needed
+    # secrets:
+    #   - binance_api_key
+    #   - binance_secret_key
+    
+    # Volume mappings for NAS
+    volumes:
+      # Configuration persistence
+      - ./configs:/app/configs
+      
+      # Input files
+      - ./inputs:/app/inputs
+      
+      # Output files and logs
+      - ./outputs:/app/outputs
+      
+      # Processed archive
+      - ./processed_archive:/app/processed_archive
+      
+      # SSL certificates
+      - ./certs:/app/certs
+      
+      # Temporary files (use tmpfs for performance)
+      - tmpfs-data:/tmp
+    
+    # Tmpfs mounts for performance
+    tmpfs:
+      - /tmp:size=512M,mode=1777
+      - /var/tmp:size=128M,mode=1777
+    
+    # Resource limits (adjust for your NAS)
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      
+      # Restart policy
+      restart_policy:
+        condition: unless-stopped
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Network
+    networks:
+      - crypto-net
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Capability drops (enhanced security)
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    
+    # Read-only root filesystem (with exceptions)
+    # Uncomment for maximum security
+    # read_only: true
+    
+    # User override (optional - run as specific UID)
+    # user: "1000:1000"
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        compress: "true"
+    
+    # Labels for organization
+    labels:
+      - "com.crypto-tracker.description=Crypto Transaction Tracker"
+      - "com.crypto-tracker.version=1.0"
+      - "com.crypto-tracker.vendor=robertbiv"
+    
+    # Dependencies (if you add database, redis, etc.)
+    # depends_on:
+    #   - postgres
+    #   - redis
+
+  # Optional: Add a monitoring sidecar
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: crypto-tracker-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --interval 86400 crypto-transaction-tracker
+  #   networks:
+  #     - crypto-net
+
+  # Optional: Add log aggregation
+  # logrotate:
+  #   image: blacklabelops/logrotate
+  #   container_name: crypto-tracker-logrotate
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./outputs/logs:/logs
+  #   environment:
+  #     - LOGS_DIRECTORIES=/logs
+  #     - LOGROTATE_SIZE=100M
+  #     - LOGROTATE_COPIES=5
+  #   networks:
+  #     - crypto-net
+
+# Networks
+networks:
+  crypto-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-crypto
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.driver.mtu: 1500
+
+# Named volumes (alternative to bind mounts)
+volumes:
+  tmpfs-data:
+    driver: local
+  
+  # Uncomment to use named volumes instead of bind mounts
+  # crypto-configs:
+  #   driver: local
+  # crypto-inputs:
+  #   driver: local
+  # crypto-outputs:
+  #   driver: local
+  # crypto-archive:
+  #   driver: local
+  # crypto-certs:
+  #   driver: local
+
+# Secrets (for sensitive data)
+# Create secret files first:
+#   echo "your_api_key" | docker secret create binance_api_key -
+# secrets:
+#   binance_api_key:
+#     external: true
+#   binance_secret_key:
+#     external: true

@@ -4081,6 +4081,21 @@ def api_reset_program():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Simple health check endpoint for Docker/monitoring (no auth required)"""
+    try:
+        # Basic health check - just verify app is running
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 503
+
 @app.route('/api/system-health', methods=['GET'])
 @login_required
 @web_security_required

@@ -1,0 +1,126 @@
+# GitHub Actions Workflow for Multi-Architecture Docker Builds
+# 
+# This workflow automatically builds Docker images for multiple architectures
+# when you push to main or create a release.
+#
+# To use:
+# 1. Copy this file to .github/workflows/docker-build.yml
+# 2. Enable GitHub Actions in your repository
+# 3. (Optional) Set up Docker Hub secrets:
+#    - DOCKERHUB_USERNAME
+#    - DOCKERHUB_TOKEN
+#
+# The workflow will:
+# - Build for linux/amd64 and linux/arm64
+# - Push to GitHub Container Registry (ghcr.io)
+# - Optionally push to Docker Hub
+# - Tag with version and 'latest'
+
+name: Docker Multi-Arch Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:latest
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional: Log in to Docker Hub
+      # - name: Log in to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=Crypto Transaction Tracker
+            org.opencontainers.image.description=Multi-architecture crypto transaction tracking tool
+            org.opencontainers.image.vendor=robertbiv
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Image digest
+        run: echo ${{ steps.build.outputs.digest }}
+
+      # Optional: Test the image
+      - name: Test image (amd64)
+        if: github.event_name != 'pull_request'
+        run: |
+          docker run --rm --platform linux/amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            python --version
+
+      # Optional: Scan for vulnerabilities
+      # - name: Run Trivy vulnerability scanner
+      #   uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      #     format: 'sarif'
+      #     output: 'trivy-results.sarif'
+      
+      # - name: Upload Trivy results to GitHub Security
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   with:
+      #     sarif_file: 'trivy-results.sarif'

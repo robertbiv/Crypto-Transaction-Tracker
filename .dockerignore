@@ -1,0 +1,63 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (build-time only)
+*.md
+!README.md
+
+# Test data
+test_results.txt
+tests/
+
+# Outputs (should be in volumes)
+outputs/*
+!outputs/.gitkeep
+processed_archive/*
+!processed_archive/.gitkeep
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Docker files (don't include in image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Scripts (optional - keep if needed)
+scripts/extract_samples.py
+scripts/analyze_model_performance.py
