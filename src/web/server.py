@@ -108,6 +108,11 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
+# Ensure project root is on sys.path so 'src' package imports resolve when run as a script
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, g
 from flask_cors import CORS
 from flask_limiter import Limiter
