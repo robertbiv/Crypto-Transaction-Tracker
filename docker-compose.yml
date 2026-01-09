@@ -53,6 +53,11 @@ services:
     # Network mode
     network_mode: bridge
     
+    # User mapping - set to match your host user ID
+    # Find your UID with: id -u
+    # Default 1000 works for most single-user systems
+    user: "1000:1000"
+    
     # Security options
     security_opt:
       - no-new-privileges:true

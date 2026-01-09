@@ -49,6 +49,10 @@ RUN pip install -r requirements-ml.txt || \
 # Copy application code
 COPY . .
 
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/inputs \
     /app/outputs \
@@ -58,14 +62,10 @@ RUN mkdir -p /app/inputs \
     /app/certs \
     /app/web_static \
     /app/web_templates && \
-    chmod -R 755 /app
+    chmod -R 777 /app
 
-# Create a non-root user for security
-RUN useradd -m -u 1000 cryptotracker && \
-    chown -R cryptotracker:cryptotracker /app
-
-# Switch to non-root user
-USER cryptotracker
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Expose port for web UI
 EXPOSE 5000
