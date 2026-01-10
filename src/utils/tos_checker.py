@@ -51,9 +51,20 @@ def reset_tos_acceptance():
         TOS_MARKER_FILE.unlink()
 
 
+def is_interactive():
+    """
+    Check if stdin is available (interactive terminal).
+    
+    Returns False in non-interactive environments like Docker, systemd services, etc.
+    """
+    return sys.stdin and sys.stdin.isatty()
+
+
 def prompt_tos_acceptance():
     """
     Display ToS to user and prompt for acceptance.
+    
+    In non-interactive environments (Docker, CI/CD), auto-accepts ToS.
     
     Returns:
         True if user accepts, False/exits if user declines.
@@ -62,6 +73,17 @@ def prompt_tos_acceptance():
     if not tos_content:
         print("Cannot display ToS. Exiting.")
         sys.exit(1)
+    
+    # In non-interactive environments (Docker, systemd, etc.), auto-accept
+    if not is_interactive():
+        print("\n" + "="*80)
+        print("Running in non-interactive mode (Docker/CI/CD)")
+        print("="*80)
+        print("\nReading TERMS_OF_SERVICE.md - By starting this container,")
+        print("you acknowledge that you have read and accept the Terms of Service.")
+        print("See TERMS_OF_SERVICE.md for full details.\n")
+        mark_tos_accepted()
+        return True
     
     print("\n" + "="*80)
     print("TERMS OF SERVICE - PLEASE READ CAREFULLY")
