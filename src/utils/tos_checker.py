@@ -18,9 +18,10 @@ import sys
 from pathlib import Path
 
 
-# ToS acceptance marker file
-TOS_MARKER_FILE = Path("configs/.tos_accepted")
-TOS_FILE = Path("TERMS_OF_SERVICE.md")
+# Resolve paths relative to project root to avoid cwd issues in containers
+BASE_DIR = Path(__file__).resolve().parents[2]
+TOS_MARKER_FILE = BASE_DIR / "configs" / ".tos_accepted"
+TOS_FILE = BASE_DIR / "TERMS_OF_SERVICE.md"
 
 
 def read_tos():
